@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ..ui.start_bar import DEFAULT_START_BAR_TOOLS, StartBar, StartBarTool
 from .modules import LauncherModule
 
 
@@ -113,6 +114,15 @@ class ModuleWindow(QMainWindow):
         layout.addWidget(self._build_page_bar())
         layout.addWidget(self._build_status_bar())
 
+    def get_start_bar_tools(self) -> tuple[StartBarTool, ...]:
+        """Return tools for the current module's Start Bar.
+
+        Module workspaces can override this method to provide their own tools
+        without editing the shared mother window.
+        """
+
+        return DEFAULT_START_BAR_TOOLS
+
     def _build_top_bar(self) -> QWidget:
         bar = QWidget()
         bar.setObjectName("TopBar")
@@ -183,23 +193,7 @@ class ModuleWindow(QMainWindow):
         return bar
 
     def _build_start_bar(self) -> QWidget:
-        bar = QWidget()
-        bar.setObjectName("StartBar")
-        bar.setFixedHeight(58)
-        layout = QHBoxLayout(bar)
-        layout.setContentsMargins(14, 8, 14, 8)
-        layout.setSpacing(9)
-
-        # Start Bar rule: every future tool button must use the same button
-        # pattern, explicit tooltip, project icon style, and Properties mapping.
-        tools = ("Select", "Line", "Vector", "Angle", "Text", "Grid", "Snap", "Zoom")
-        for label in tools:
-            button = QPushButton(label)
-            button.setObjectName("ToolButton")
-            button.setToolTip(label)
-            layout.addWidget(button)
-        layout.addStretch(1)
-        return bar
+        return StartBar(self.get_start_bar_tools())
 
     def _build_workspace(self) -> QWidget:
         area = QWidget()
@@ -216,11 +210,7 @@ class ModuleWindow(QMainWindow):
         canvas_shell.setObjectName("CanvasShell")
         canvas_layout = QVBoxLayout(canvas_shell)
         canvas_layout.setContentsMargins(12, 12, 12, 12)
-        canvas_layout.setSpacing(8)
-
-        title = QLabel("Engineering Design Workspace")
-        title.setObjectName("CanvasTitle")
-        canvas_layout.addWidget(title)
+        canvas_layout.setSpacing(0)
 
         canvas = GridCanvas()
         canvas.setObjectName("GridCanvas")
