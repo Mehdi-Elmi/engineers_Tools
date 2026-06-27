@@ -7,7 +7,7 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
-from PySide6.QtCore import QFileInfo, QPoint, QPointF, QRectF, QSize, QStandardPaths, Qt
+from PySide6.QtCore import QFileInfo, QPoint, QRectF, QSize, QStandardPaths, Qt
 from PySide6.QtGui import QAction, QColor, QIcon, QKeySequence, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap, QPolygonF, QRegion, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -48,6 +48,13 @@ OFFICE_FILE_FILTERS: tuple[tuple[str, tuple[str, ...], str], ...] = (
 )
 
 
+@dataclass(frozen=True)
+class FileDialogResult:
+    path: Path
+    filter_name: str
+    options: dict[str, bool] | None = None
+
+
 def _option_icon(checked: bool) -> QIcon:
     pixmap = QPixmap(26, 26)
     pixmap.fill(Qt.GlobalColor.transparent)
@@ -64,15 +71,8 @@ def _option_icon(checked: bool) -> QIcon:
     return QIcon(pixmap)
 
 
-@dataclass(frozen=True)
-class FileDialogResult:
-    path: Path
-    filter_name: str
-    options: dict[str, bool] | None = None
-
-
 class ProjectFileDialog(QDialog):
-    """Rounded file picker with project styling and Windows-like behavior."""
+    """Rounded file picker with compact selection and project-styled menus."""
 
     _pending_file_action: tuple[str, Path] | None = None
 
@@ -110,10 +110,7 @@ class ProjectFileDialog(QDialog):
         layout.addWidget(self._build_body(), 1)
         layout.addWidget(self._build_footer())
 
-        self._delete_shortcut = QShortcut(QKeySequence(Qt.Key_Delete), self)
-        self._delete_shortcut.setContext(Qt.WindowShortcut)
-        self._delete_shortcut.activated.connect(self._delete_current_file)
-
+        self._install_shortcuts()
         self._navigate_to(self._current_dir, add_history=True)
         if self.mode in {"save", "export"}:
             self._set_default_file_name(force=True)
@@ -137,6 +134,17 @@ class ProjectFileDialog(QDialog):
     def get_export_file(cls, parent: QWidget | None = None, start_dir: Path | None = None) -> FileDialogResult | None:
         dialog = cls("export", parent, start_dir, "office")
         return dialog.selected_result if dialog.exec() == QDialog.Accepted else None
+
+    def _install_shortcuts(self) -> None:
+        for sequence, callback in (
+            ("Ctrl+C", self._copy_current_file),
+            ("Ctrl+X", self._cut_current_file),
+            ("Ctrl+V", self._paste_file_action),
+            ("Delete", self._delete_current_file),
+        ):
+            shortcut = QShortcut(QKeySequence(sequence), self)
+            shortcut.setContext(Qt.WindowShortcut)
+            shortcut.activated.connect(callback)
 
     def _dialog_title(self) -> str:
         return {"open": "Open", "save": "Save As", "import": "Import", "export": "Export"}.get(self.mode, "Open")
@@ -197,6 +205,9 @@ class ProjectFileDialog(QDialog):
         self._up_button = self._build_nav_button("up", "Up")
         self._up_button.clicked.connect(self._go_up)
         layout.addWidget(self._up_button)
+        self._new_folder_button = self._build_nav_button("folder", "New Folder")
+        self._new_folder_button.clicked.connect(self._create_new_folder)
+        layout.addWidget(self._new_folder_button)
         self._path_label = QLabel("")
         self._path_label.setObjectName("FilePathLabel")
         layout.addWidget(self._path_label, 1)
@@ -225,15 +236,25 @@ class ProjectFileDialog(QDialog):
         painter.fillPath(base, gradient)
         painter.setPen(QPen(QColor("#ffffff"), 0.9))
         painter.drawPath(base)
-        painter.setPen(QPen(QColor("#132238"), 1.0))
+        painter.setPen(QPen(QColor("#132238"), 1.0, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
         painter.setBrush(QColor("#132238"))
         if direction == "back":
             points = QPolygonF([QPointF(8, 12), QPointF(17, 6), QPointF(17, 10), QPointF(23, 10), QPointF(23, 14), QPointF(17, 14), QPointF(17, 18)])
+            painter.drawPolygon(points)
         elif direction == "forward":
             points = QPolygonF([QPointF(22, 12), QPointF(13, 6), QPointF(13, 10), QPointF(7, 10), QPointF(7, 14), QPointF(13, 14), QPointF(13, 18)])
-        else:
+            painter.drawPolygon(points)
+        elif direction == "up":
             points = QPolygonF([QPointF(15, 6), QPointF(23, 14), QPointF(19, 14), QPointF(19, 19), QPointF(11, 19), QPointF(11, 14), QPointF(7, 14)])
-        painter.drawPolygon(points)
+            painter.drawPolygon(points)
+        else:
+            painter.setBrush(QColor("#ffd36e"))
+            painter.setPen(QPen(QColor("#7e5b10"), 1.4, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+            painter.drawRoundedRect(QRectF(7, 9, 17, 11), 2, 2)
+            painter.drawPolygon(QPolygonF([QPointF(8, 9), QPointF(13, 6), QPointF(18, 9)]))
+            painter.setPen(QPen(QColor("#132238"), 1.8, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+            painter.drawLine(QPointF(15, 11), QPointF(15, 18))
+            painter.drawLine(QPointF(11.5, 14.5), QPointF(18.5, 14.5))
         painter.end()
         return QIcon(pixmap)
 
@@ -246,29 +267,37 @@ class ProjectFileDialog(QDialog):
         self._places = QListWidget()
         self._places.setObjectName("PlacesList")
         self._places.setFixedWidth(170)
-        self._places.setFocusPolicy(Qt.NoFocus)
-        self._places.setSelectionMode(QAbstractItemView.SingleSelection)
-        self._places.setStyleSheet("QListWidget#PlacesList { outline:0; } QListWidget#PlacesList::item:selected { background:transparent; color:#1f3148; border:0; } QListWidget#PlacesList::item:focus { outline:0; border:0; }")
+        self._prepare_list_widget(self._places)
         self._populate_places()
         self._places.itemClicked.connect(self._place_clicked)
         layout.addWidget(self._places)
+
         self._files = QListWidget()
         self._files.setObjectName("FilesList")
-        self._files.setViewMode(QListView.ListMode)
-        self._files.setSelectionMode(QAbstractItemView.SingleSelection)
-        self._files.setResizeMode(QListView.Adjust)
-        self._files.setMovement(QListView.Static)
-        self._files.setWrapping(False)
-        self._files.setSpacing(2)
-        self._files.setIconSize(QSize(24, 24))
-        self._files.setFocusPolicy(Qt.NoFocus)
-        self._files.setStyleSheet("QListWidget#FilesList { outline:0; } QListWidget#FilesList::item:selected { background:transparent; color:#1f3148; border:0; } QListWidget#FilesList::item:focus { outline:0; border:0; }")
+        self._prepare_list_widget(self._files)
         self._files.setContextMenuPolicy(Qt.CustomContextMenu)
         self._files.customContextMenuRequested.connect(self._show_files_context_menu)
         self._files.itemDoubleClicked.connect(self._file_double_clicked)
         self._files.itemClicked.connect(self._file_clicked)
         layout.addWidget(self._files, 1)
         return body
+
+    def _prepare_list_widget(self, widget: QListWidget) -> None:
+        widget.setViewMode(QListView.ListMode)
+        widget.setSelectionMode(QAbstractItemView.SingleSelection)
+        widget.setResizeMode(QListView.Adjust)
+        widget.setMovement(QListView.Static)
+        widget.setWrapping(False)
+        widget.setSpacing(2)
+        widget.setIconSize(QSize(24, 24))
+        widget.setFocusPolicy(Qt.NoFocus)
+        widget.setStyleSheet(
+            f"QListWidget#{widget.objectName()} {{ outline:0; }}"
+            f"QListWidget#{widget.objectName()}::item {{ background:transparent; border:0; }}"
+            f"QListWidget#{widget.objectName()}::item:selected {{ background:transparent; color:#1f3148; border:0; }}"
+            f"QListWidget#{widget.objectName()}::item:hover {{ background:transparent; color:#1f3148; border:0; }}"
+            f"QListWidget#{widget.objectName()}::item:focus {{ outline:0; border:0; }}"
+        )
 
     def _build_footer(self) -> QWidget:
         footer = QWidget()
@@ -277,15 +306,11 @@ class ProjectFileDialog(QDialog):
         layout.setContentsMargins(12, 6, 12, 12)
         layout.setHorizontalSpacing(8)
         layout.setVerticalSpacing(8)
-        file_name_label = QLabel("File Name:")
-        file_name_label.setObjectName("FileFieldLabel")
-        layout.addWidget(file_name_label, 0, 0)
+        layout.addWidget(self._field_label("File Name:"), 0, 0)
         self._file_name = QLineEdit()
         self._file_name.setObjectName("FileNameInput")
         layout.addWidget(self._file_name, 0, 1)
-        type_label = QLabel("File Type:")
-        type_label.setObjectName("FileFieldLabel")
-        layout.addWidget(type_label, 1, 0)
+        layout.addWidget(self._field_label("File Type:"), 1, 0)
         self._file_type = QComboBox()
         self._file_type.setObjectName("FileTypeCombo")
         for name, suffixes, default_suffix in self._filters():
@@ -305,6 +330,11 @@ class ProjectFileDialog(QDialog):
         cancel.clicked.connect(self.reject)
         layout.addWidget(cancel, 1, 2)
         return footer
+
+    def _field_label(self, text: str) -> QLabel:
+        label = QLabel(text)
+        label.setObjectName("FileFieldLabel")
+        return label
 
     def _build_save_options_row(self) -> QWidget:
         row = QWidget()
@@ -363,8 +393,7 @@ class ProjectFileDialog(QDialog):
         item.setData(Qt.UserRole, data)
         item.setSizeHint(QSize(self._place_item_width(label), 30))
         self._places.addItem(item)
-        row = self._build_compact_item_widget(label, icon, "PlaceItemRow", self._place_item_width(label))
-        self._places.setItemWidget(item, row)
+        self._places.setItemWidget(item, self._build_compact_item_widget(label, icon, "PlaceItemRow", self._place_item_width(label)))
 
     def _drive_paths(self) -> list[tuple[str, Path]]:
         if os.name != "nt":
@@ -424,8 +453,8 @@ class ProjectFileDialog(QDialog):
         item.setData(Qt.UserRole, str(path))
         item.setSizeHint(self._file_item_size(label))
         self._files.addItem(item)
-        row = self._build_compact_item_widget(label, self._icon_provider.icon(QFileInfo(str(path))), "FileItemRow", self._file_item_size(label).width())
-        self._files.setItemWidget(item, row)
+        width = self._file_item_size(label).width()
+        self._files.setItemWidget(item, self._build_compact_item_widget(label, self._icon_provider.icon(QFileInfo(str(path))), "FileItemRow", width))
 
     def _build_compact_item_widget(self, label: str, icon: QIcon, object_name: str, width: int) -> QWidget:
         row = QWidget()
@@ -433,8 +462,8 @@ class ProjectFileDialog(QDialog):
         row.setProperty("selected", False)
         row.setFixedSize(width, 28)
         layout = QHBoxLayout(row)
-        layout.setContentsMargins(4, 2, 5, 2)
-        layout.setSpacing(5)
+        layout.setContentsMargins(3, 2, 4, 2)
+        layout.setSpacing(4)
         icon_label = QLabel()
         icon_label.setFixedSize(22, 22)
         icon_label.setPixmap(icon.pixmap(22, 22))
@@ -445,7 +474,7 @@ class ProjectFileDialog(QDialog):
         text.setStyleSheet("background:transparent; color:#1f3148; font-style:normal; font-weight:700; border:0;")
         layout.addWidget(text)
         row.setStyleSheet(
-            f"QWidget#{object_name} {{background:transparent; border:0; border-radius:6px;}}"
+            f"QWidget#{object_name} {{background:transparent; border:0; border-radius:5px;}}"
             f"QWidget#{object_name}[selected=\"true\"] {{background:#cfe7ff; border:0;}}"
             f"QWidget#{object_name}:hover {{background:#fff3d4; border:0;}}"
         )
@@ -469,10 +498,10 @@ class ProjectFileDialog(QDialog):
             widget.update()
 
     def _file_item_size(self, name: str) -> QSize:
-        return QSize(max(44, min(520, self.fontMetrics().horizontalAdvance(name) + 35)), 30)
+        return QSize(max(34, min(520, self.fontMetrics().horizontalAdvance(name) + 31)), 30)
 
     def _place_item_width(self, name: str) -> int:
-        return max(44, min(150, self.fontMetrics().horizontalAdvance(name) + 35))
+        return max(34, min(150, self.fontMetrics().horizontalAdvance(name) + 31))
 
     def _file_type_changed(self, _index: int) -> None:
         if self.mode in {"save", "export"} and (not self._file_name.text().strip() or self._file_name.text().startswith("EngineerTools")):
@@ -540,6 +569,31 @@ class ProjectFileDialog(QDialog):
             self._files.setCurrentItem(item)
             self._sync_file_selection(item)
         selected_path = Path(item.data(Qt.UserRole)) if item is not None else self._selected_file_path()
+        menu = self._build_context_menu()
+        new_folder_action = QAction("New Folder", self)
+        copy_action = QAction("Copy", self)
+        cut_action = QAction("Cut", self)
+        paste_action = QAction("Paste", self)
+        delete_action = QAction("Delete", self)
+        copy_action.setEnabled(selected_path is not None and selected_path.exists())
+        cut_action.setEnabled(selected_path is not None and selected_path.exists())
+        delete_action.setEnabled(selected_path is not None and selected_path.exists())
+        paste_action.setEnabled(ProjectFileDialog._pending_file_action is not None)
+        new_folder_action.triggered.connect(self._create_new_folder)
+        copy_action.triggered.connect(self._copy_current_file)
+        cut_action.triggered.connect(self._cut_current_file)
+        paste_action.triggered.connect(self._paste_file_action)
+        delete_action.triggered.connect(self._delete_current_file)
+        menu.addAction(new_folder_action)
+        menu.addSeparator()
+        menu.addAction(copy_action)
+        menu.addAction(cut_action)
+        menu.addAction(paste_action)
+        menu.addSeparator()
+        menu.addAction(delete_action)
+        menu.exec(self._files.mapToGlobal(position))
+
+    def _build_context_menu(self) -> QMenu:
         menu = QMenu(self)
         menu.setObjectName("ProjectContextMenu")
         menu.setStyleSheet(
@@ -549,28 +603,17 @@ class ProjectFileDialog(QDialog):
             "QMenu#ProjectContextMenu::item:disabled {color:#8a98a8; background:rgba(238,244,250,130); border-left-color:#b8c5d4;}"
             "QMenu#ProjectContextMenu::separator {height:1px; background:#b8c5d4; margin:5px 8px;}"
         )
-        copy_action = QAction("Copy", self)
-        cut_action = QAction("Cut", self)
-        paste_action = QAction("Paste", self)
-        delete_action = QAction("Delete", self)
-        copy_action.setEnabled(selected_path is not None and selected_path.exists())
-        cut_action.setEnabled(selected_path is not None and selected_path.exists())
-        delete_action.setEnabled(selected_path is not None and selected_path.exists())
-        paste_action.setEnabled(ProjectFileDialog._pending_file_action is not None)
-        copy_action.triggered.connect(lambda checked=False, path=selected_path: self._remember_file_action("copy", path))
-        cut_action.triggered.connect(lambda checked=False, path=selected_path: self._remember_file_action("cut", path))
-        paste_action.triggered.connect(self._paste_file_action)
-        delete_action.triggered.connect(lambda checked=False, path=selected_path: self._delete_file_action(path))
-        menu.addAction(copy_action)
-        menu.addAction(cut_action)
-        menu.addAction(paste_action)
-        menu.addSeparator()
-        menu.addAction(delete_action)
-        menu.exec(self._files.mapToGlobal(position))
+        return menu
 
     def _remember_file_action(self, action: str, path: Path | None) -> None:
         if path is not None and path.exists():
             ProjectFileDialog._pending_file_action = (action, path)
+
+    def _copy_current_file(self) -> None:
+        self._remember_file_action("copy", self._selected_file_path())
+
+    def _cut_current_file(self) -> None:
+        self._remember_file_action("cut", self._selected_file_path())
 
     def _paste_file_action(self) -> None:
         pending = ProjectFileDialog._pending_file_action
@@ -592,6 +635,7 @@ class ProjectFileDialog(QDialog):
         except OSError:
             return
         self._refresh_files()
+        self._select_path(destination)
 
     def _delete_current_file(self) -> None:
         self._delete_file_action(self._selected_file_path())
@@ -608,6 +652,27 @@ class ProjectFileDialog(QDialog):
             return
         self._file_name.clear()
         self._refresh_files()
+
+    def _create_new_folder(self) -> None:
+        target = self._make_unique_path(self._current_dir / "New Folder")
+        try:
+            target.mkdir(parents=False, exist_ok=False)
+        except OSError:
+            return
+        self._refresh_files()
+        self._select_path(target)
+
+    def _select_path(self, path: Path) -> None:
+        wanted = str(path)
+        for row_index in range(self._files.count()):
+            item = self._files.item(row_index)
+            if str(item.data(Qt.UserRole)) == wanted:
+                self._files.setCurrentItem(item)
+                self._sync_file_selection(item)
+                self._files.scrollToItem(item)
+                if path.is_file():
+                    self._file_name.setText(path.name)
+                return
 
     def _go_back(self) -> None:
         if self._history_index <= 0:
@@ -672,10 +737,6 @@ class ProjectFileDialog(QDialog):
     def keyPressEvent(self, event) -> None:  # noqa: N802
         if event.key() == Qt.Key_Backspace and not self._file_name.hasFocus():
             self._go_back()
-            event.accept()
-            return
-        if event.key() == Qt.Key_Delete:
-            self._delete_current_file()
             event.accept()
             return
         super().keyPressEvent(event)
