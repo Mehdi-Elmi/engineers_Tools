@@ -77,7 +77,7 @@ class EngineeringDesignWorkspace(ModuleWindow):
         self._zoom_input.setFixedSize(92, 26)
         self._zoom_input.setStyleSheet(
             "QDoubleSpinBox#ZoomInput {"
-            "background:#eef4fb; border:1px solid #9fb0c5; border-radius:8px;"
+            "background:#fff9de; border:1px solid #b38621; border-radius:8px;"
             "color:#132238; font-size:11px; font-style:normal; font-weight:700; padding:2px 6px;"
             "selection-background-color:#43d3bd; }"
         )
@@ -89,7 +89,6 @@ class EngineeringDesignWorkspace(ModuleWindow):
         arrows_layout = QVBoxLayout(arrows)
         arrows_layout.setContentsMargins(0, 0, 0, 0)
         arrows_layout.setSpacing(2)
-
         up_button = self._build_zoom_arrow_button("up")
         down_button = self._build_zoom_arrow_button("down")
         up_button.clicked.connect(lambda: self._zoom_input.stepUp())
@@ -108,10 +107,10 @@ class EngineeringDesignWorkspace(ModuleWindow):
         button.setToolTip("Zoom in" if direction == "up" else "Zoom out")
         button.setStyleSheet(
             "QPushButton#ZoomArrowButton {"
-            "background:qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #ffffff, stop:1 #c9d8e8);"
-            "border:1px solid #9fb0c5; border-radius:4px; padding:0px; }"
-            "QPushButton#ZoomArrowButton:hover { background:#dff6ff; border-color:#2f7df6; }"
-            "QPushButton#ZoomArrowButton:pressed { background:#b8c9dc; padding-top:1px; }"
+            "background:qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #fff9de, stop:1 #ffc35a);"
+            "border:1px solid #7e5b10; border-radius:4px; padding:0px; }"
+            "QPushButton#ZoomArrowButton:hover { background:#ff8a35; border-color:#ffffff; }"
+            "QPushButton#ZoomArrowButton:pressed { background:#d46a16; padding-top:1px; }"
         )
         return button
 
@@ -120,7 +119,7 @@ class EngineeringDesignWorkspace(ModuleWindow):
         pixmap.fill(Qt.GlobalColor.transparent)
         painter = QPainter(pixmap)
         painter.setRenderHint(QPainter.Antialiasing, True)
-        painter.setPen(QPen(QColor("#ffffff"), 0.8))
+        painter.setPen(QPen(QColor("#ffffff"), 0.9))
         painter.setBrush(QColor("#132238"))
         if direction == "up":
             points = QPolygonF([QPointF(11, 1), QPointF(20, 9), QPointF(2, 9)])
