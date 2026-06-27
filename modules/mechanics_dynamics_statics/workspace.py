@@ -11,7 +11,7 @@ from PySide6.QtWidgets import QAbstractSpinBox, QDoubleSpinBox, QHBoxLayout, QLa
 from src.engineers_tools.app.module_window import MenuItemSpec, ModuleWindow
 from src.engineers_tools.app.modules import LauncherModule
 
-ENGINEERING_WORKSPACE_UI_MARKER = "ENGINEERING_WORKSPACE_VIEW_STARTBAR_2026_06_27_A"
+ENGINEERING_WORKSPACE_UI_MARKER = "ENGINEERING_WORKSPACE_VIEW_STARTBAR_2026_06_27_B"
 
 
 class EngineeringDesignWorkspace(ModuleWindow):
@@ -66,18 +66,24 @@ class EngineeringDesignWorkspace(ModuleWindow):
         self._zoom_input.setStyleSheet(
             "QDoubleSpinBox#ZoomInput {"
             "background:#ffffff; border:1px solid #8fb3dc; border-radius:8px;"
-            "color:#132238; font-size:11px; padding:2px 18px 2px 6px;"
+            "color:#132238; font-size:11px; padding:2px 20px 2px 6px;"
             "selection-background-color:#43d3bd; }"
             "QDoubleSpinBox#ZoomInput::up-button {"
-            "subcontrol-origin:border; subcontrol-position:top right; width:17px;"
-            "border-left:1px solid #8fb3dc; border-top-right-radius:7px;"
-            "background:qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #ffffff, stop:1 #bfe1ff); }"
+            "subcontrol-origin:border; subcontrol-position:top right; width:18px;"
+            "border-left:1px solid #ffffff; border-top-right-radius:7px;"
+            "background:qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #2f7df6, stop:1 #0f365f); }"
             "QDoubleSpinBox#ZoomInput::down-button {"
-            "subcontrol-origin:border; subcontrol-position:bottom right; width:17px;"
-            "border-left:1px solid #8fb3dc; border-bottom-right-radius:7px;"
-            "background:qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #d8efff, stop:1 #7aaee8); }"
+            "subcontrol-origin:border; subcontrol-position:bottom right; width:18px;"
+            "border-left:1px solid #ffffff; border-bottom-right-radius:7px;"
+            "background:qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #1f5f99, stop:1 #132238); }"
+            "QDoubleSpinBox#ZoomInput::up-arrow {"
+            "image:none; width:0px; height:0px; border-left:5px solid transparent;"
+            "border-right:5px solid transparent; border-bottom:7px solid #ffffff; }"
+            "QDoubleSpinBox#ZoomInput::down-arrow {"
+            "image:none; width:0px; height:0px; border-left:5px solid transparent;"
+            "border-right:5px solid transparent; border-top:7px solid #ffffff; }"
             "QDoubleSpinBox#ZoomInput::up-button:hover, QDoubleSpinBox#ZoomInput::down-button:hover {"
-            "background:#fff0c7; border-left:1px solid #ff8a35; }"
+            "background:#ff8a35; border-left:1px solid #ffffff; }"
         )
         self._zoom_input.valueChanged.connect(self._set_zoom)
         layout.addWidget(self._zoom_input)
