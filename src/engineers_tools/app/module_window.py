@@ -1,14 +1,15 @@
 """Shared engineering workspace window.
 
-This window is the mother pattern for project workspaces. Menu dialogs must use
-project-styled windows. Native file dialogs may only be used behind those windows
-for reliable filesystem operations.
+This window is the mother pattern for project workspaces. Menu dropdowns must use
+project-styled rounded surfaces. Native file dialogs may only be used behind
+those project surfaces for reliable filesystem operations.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
 
 from PySide6.QtCore import QPoint, QPointF, QRect, QRectF, QSize, Qt, Signal
 from PySide6.QtGui import QColor, QIcon, QKeySequence, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap, QPolygonF, QShortcut
@@ -109,16 +110,15 @@ class ProjectDialog(QDialog):
 
 
 class ProjectMenuDialog(QDialog):
-    """Rounded project-styled menu dialog used by the Command Bar."""
+    """Rounded dropdown menu used by the Command Bar."""
 
     def __init__(self, title: str, items: tuple[MenuItemSpec, ...], parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setObjectName("ProjectMenuDialog")
         self.setWindowTitle(title)
-        self.setWindowFlag(Qt.FramelessWindowHint)
+        self.setWindowFlags(Qt.Popup | Qt.FramelessWindowHint)
         self.setAttribute(Qt.WA_TranslucentBackground)
-        self.setModal(True)
-        self.setMinimumWidth(340)
+        self.setMinimumWidth(280)
 
         shell = QWidget()
         shell.setObjectName("ProjectMenuShell")
@@ -127,25 +127,12 @@ class ProjectMenuDialog(QDialog):
         root.addWidget(shell)
 
         layout = QVBoxLayout(shell)
-        layout.setContentsMargins(14, 12, 14, 14)
-        layout.setSpacing(8)
-
-        header = QWidget()
-        header.setObjectName("MenuDialogHeader")
-        header_layout = QHBoxLayout(header)
-        header_layout.setContentsMargins(12, 0, 8, 0)
-        header_layout.setSpacing(8)
+        layout.setContentsMargins(10, 9, 10, 10)
+        layout.setSpacing(6)
 
         heading = QLabel(title)
-        heading.setObjectName("MenuDialogTitle")
-        header_layout.addWidget(heading, 1)
-
-        close = QPushButton("×")
-        close.setObjectName("MenuDialogClose")
-        close.setFixedSize(28, 26)
-        close.clicked.connect(self.reject)
-        header_layout.addWidget(close)
-        layout.addWidget(header)
+        heading.setObjectName("MenuDropdownTitle")
+        layout.addWidget(heading)
 
         if not items:
             empty = QLabel("No tools defined yet.")
@@ -156,7 +143,7 @@ class ProjectMenuDialog(QDialog):
             button_text = self._build_button_text(item)
             button = QPushButton(button_text)
             button.setObjectName("MenuItemButton")
-            button.setMinimumHeight(34)
+            button.setMinimumHeight(32)
             if item.handler is not None:
                 button.clicked.connect(self._wrap_handler(item.handler))
             layout.addWidget(button)
@@ -223,14 +210,10 @@ class ModuleWindow(QMainWindow):
         bar.setObjectName("TopBar")
         bar.setFixedHeight(46)
         layout = QHBoxLayout(bar)
-        layout.setContentsMargins(16, 0, 10, 0)
+        layout.setContentsMargins(12, 0, 10, 0)
         layout.setSpacing(10)
 
-        mark = QLabel("AT")
-        mark.setObjectName("WindowMark")
-        mark.setFixedSize(36, 36)
-        mark.setAlignment(Qt.AlignCenter)
-        layout.addWidget(mark)
+        layout.addWidget(self._build_window_mark())
 
         title = QLabel(self.module.title)
         title.setObjectName("WindowTitle")
@@ -256,6 +239,33 @@ class ModuleWindow(QMainWindow):
         layout.addWidget(close)
         return bar
 
+    def _build_window_mark(self) -> QLabel:
+        mark = QLabel("AT")
+        mark.setObjectName("WindowMark")
+        mark.setFixedSize(42, 36)
+        mark.setAlignment(Qt.AlignCenter)
+
+        logo_path = self._find_logo_path()
+        if logo_path is None:
+            return mark
+
+        pixmap = QPixmap(str(logo_path))
+        if pixmap.isNull():
+            return mark
+
+        mark.setText("")
+        mark.setObjectName("WindowLogoMark")
+        mark.setPixmap(pixmap.scaled(36, 32, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        return mark
+
+    def _find_logo_path(self) -> Path | None:
+        logo_dir = Path(__file__).resolve().parents[3] / "logo"
+        if not logo_dir.exists():
+            return None
+        allowed_suffixes = {".png", ".jpg", ".jpeg", ".bmp", ".webp"}
+        candidates = sorted(path for path in logo_dir.iterdir() if path.is_file() and path.suffix.lower() in allowed_suffixes)
+        return candidates[0] if candidates else None
+
     def _build_command_bar(self) -> QWidget:
         bar = QWidget()
         bar.setObjectName("CommandBar")
@@ -267,13 +277,13 @@ class ModuleWindow(QMainWindow):
         home = QPushButton()
         home.setObjectName("HomeButton")
         home.setToolTip("Back to launcher")
-        home.setFixedSize(50, 32)
+        home.setFixedSize(54, 32)
         home.setIcon(self._build_home_icon())
-        home.setIconSize(QSize(31, 27))
+        home.setIconSize(QSize(36, 28))
         home.clicked.connect(self.back_requested.emit)
         layout.addWidget(home)
 
-        menu_map: tuple[tuple[str, Callable[[], None]], ...] = (
+        menu_map: tuple[tuple[str, Callable[[QWidget], None]], ...] = (
             ("File", self._show_file_menu),
             ("Edit", self._show_edit_menu),
             ("View", self._show_view_menu),
@@ -285,7 +295,7 @@ class ModuleWindow(QMainWindow):
             button = QPushButton(label)
             button.setObjectName("MenuButton")
             button.setFixedHeight(28)
-            button.clicked.connect(handler)
+            button.clicked.connect(lambda checked=False, source=button, action=handler: action(source))
             layout.addWidget(button)
 
         layout.addStretch(1)
@@ -387,7 +397,7 @@ class ModuleWindow(QMainWindow):
             ("Ctrl+C", self._copy),
             ("Ctrl+V", self._paste),
             ("Delete", self._delete),
-            ("Ctrl+R", self._repeat_last_tool),
+            ("Ctrl+R", self._repeat_last_tools),
             ("Ctrl+A", self._select_all),
             ("Ctrl+G", self._group),
             ("Ctrl+Shift+G", self._ungroup),
@@ -396,11 +406,21 @@ class ModuleWindow(QMainWindow):
             shortcut = QShortcut(QKeySequence(sequence), self)
             shortcut.activated.connect(handler)
 
-    def _show_menu(self, title: str, items: tuple[MenuItemSpec, ...]) -> None:
+    def _show_menu(self, title: str, items: tuple[MenuItemSpec, ...], anchor: QWidget) -> None:
         dialog = ProjectMenuDialog(title, items, self)
+        dialog.adjustSize()
+        position = anchor.mapToGlobal(QPoint(0, anchor.height() + 3))
+        screen = anchor.screen()
+        if screen is not None:
+            available = screen.availableGeometry()
+            if position.x() + dialog.width() > available.right():
+                position.setX(max(available.left(), available.right() - dialog.width()))
+            if position.y() + dialog.height() > available.bottom():
+                position.setY(anchor.mapToGlobal(QPoint(0, -dialog.height() - 3)).y())
+        dialog.move(position)
         dialog.exec()
 
-    def _show_file_menu(self) -> None:
+    def _show_file_menu(self, anchor: QWidget) -> None:
         self._show_menu(
             "File",
             (
@@ -414,9 +434,10 @@ class ModuleWindow(QMainWindow):
                 MenuItemSpec("Export", self._export_file),
                 MenuItemSpec("Properties", self._file_properties),
             ),
+            anchor,
         )
 
-    def _show_edit_menu(self) -> None:
+    def _show_edit_menu(self, anchor: QWidget) -> None:
         self._show_menu(
             "Edit",
             (
@@ -426,15 +447,16 @@ class ModuleWindow(QMainWindow):
                 MenuItemSpec("Copy", self._copy, "Ctrl+C"),
                 MenuItemSpec("Paste", self._paste, "Ctrl+V"),
                 MenuItemSpec("Delete", self._delete, "Del"),
-                MenuItemSpec("Repeat Last Tool", self._repeat_last_tool, "Ctrl+R"),
+                MenuItemSpec("Repeat Last Tools", self._repeat_last_tools, "Ctrl+R"),
                 MenuItemSpec("Select All", self._select_all, "Ctrl+A"),
                 MenuItemSpec("Group", self._group, "Ctrl+G"),
                 MenuItemSpec("Ungroup", self._ungroup, "Ctrl+Shift+G"),
                 MenuItemSpec("Move", self._move),
             ),
+            anchor,
         )
 
-    def _show_view_menu(self) -> None:
+    def _show_view_menu(self, anchor: QWidget) -> None:
         self._show_menu(
             "View",
             (
@@ -443,16 +465,17 @@ class ModuleWindow(QMainWindow):
                 MenuItemSpec("Ruler", self._toggle_ruler, checkable=True, checked=self._view_state["ruler"]),
                 MenuItemSpec("Snap", self._toggle_snap, checkable=True, checked=self._view_state["snap"]),
             ),
+            anchor,
         )
 
-    def _show_insert_menu(self) -> None:
-        self._show_menu("Insert", (MenuItemSpec("Image", self._insert_image), MenuItemSpec("Text", self._insert_text)))
+    def _show_insert_menu(self, anchor: QWidget) -> None:
+        self._show_menu("Insert", (MenuItemSpec("Image", self._insert_image), MenuItemSpec("Text", self._insert_text)), anchor)
 
-    def _show_draw_menu(self) -> None:
-        self._show_menu("Draw", ())
+    def _show_draw_menu(self, anchor: QWidget) -> None:
+        self._show_menu("Draw", (), anchor)
 
-    def _show_help_menu(self) -> None:
-        self._show_menu("Help", (MenuItemSpec("Shortcuts", self._show_shortcuts), MenuItemSpec("About", self._show_about)))
+    def _show_help_menu(self, anchor: QWidget) -> None:
+        self._show_menu("Help", (MenuItemSpec("Shortcuts", self._show_shortcuts), MenuItemSpec("About", self._show_about)), anchor)
 
     def _new_file(self) -> None:
         self._set_status("New file created")
@@ -518,8 +541,8 @@ class ModuleWindow(QMainWindow):
     def _delete(self) -> None:
         self._set_status("Delete")
 
-    def _repeat_last_tool(self) -> None:
-        self._set_status("Repeat Last Tool")
+    def _repeat_last_tools(self) -> None:
+        self._set_status("Repeat Last Tools")
 
     def _select_all(self) -> None:
         self._run_focus_command("selectAll")
@@ -601,51 +624,37 @@ class ModuleWindow(QMainWindow):
             self._maximize_button.setToolTip("Maximize")
 
     def _build_home_icon(self) -> QIcon:
-        pixmap = QPixmap(42, 34)
+        pixmap = QPixmap(46, 34)
         pixmap.fill(Qt.transparent)
         painter = QPainter(pixmap)
         painter.setRenderHint(QPainter.Antialiasing, True)
 
-        shadow = QPainterPath()
-        shadow.addRoundedRect(QRectF(5.5, 6.5, 31.0, 24.0), 9.0, 9.0)
-        painter.fillPath(shadow, QColor(4, 13, 26, 80))
-
         base = QPainterPath()
-        base.addRoundedRect(QRectF(4.0, 4.0, 32.0, 24.8), 8.0, 8.0)
-        base_gradient = QLinearGradient(4, 4, 36, 29)
+        base.addRoundedRect(QRectF(5.0, 4.5, 36.0, 25.0), 9.0, 9.0)
+        base_gradient = QLinearGradient(5, 4, 41, 30)
         base_gradient.setColorAt(0.0, QColor("#ffffff"))
-        base_gradient.setColorAt(0.42, QColor("#e8f2ff"))
-        base_gradient.setColorAt(1.0, QColor("#5b83b8"))
+        base_gradient.setColorAt(0.46, QColor("#dbeaff"))
+        base_gradient.setColorAt(1.0, QColor("#4e76aa"))
         painter.fillPath(base, base_gradient)
         painter.setPen(QPen(QColor("#ffffff"), 1.2))
         painter.drawPath(base)
 
-        roof_shadow = QPolygonF([QPointF(10.0, 17.8), QPointF(21.0, 8.6), QPointF(32.0, 17.8), QPointF(28.6, 20.7), QPointF(21.0, 14.4), QPointF(13.4, 20.7)])
-        painter.setPen(Qt.NoPen)
-        painter.setBrush(QColor(13, 30, 54, 78))
-        painter.drawPolygon(roof_shadow)
-
-        roof = QPolygonF([QPointF(9.0, 16.0), QPointF(21.0, 6.2), QPointF(33.0, 16.0), QPointF(29.8, 18.9), QPointF(21.0, 11.6), QPointF(12.2, 18.9)])
-        roof_gradient = QLinearGradient(9, 6, 33, 19)
-        roof_gradient.setColorAt(0.0, QColor("#ffffff"))
-        roof_gradient.setColorAt(0.48, QColor("#9fc7f7"))
-        roof_gradient.setColorAt(1.0, QColor("#234a7e"))
-        painter.setPen(QPen(QColor("#ffffff"), 1.25))
-        painter.setBrush(roof_gradient)
+        roof = QPolygonF([QPointF(11.0, 16.7), QPointF(23.0, 7.0), QPointF(35.0, 16.7), QPointF(31.8, 19.6), QPointF(23.0, 12.5), QPointF(14.2, 19.6)])
+        painter.setPen(QPen(QColor("#ffffff"), 1.35))
+        painter.setBrush(QColor("#1f416f"))
         painter.drawPolygon(roof)
 
-        body_gradient = QLinearGradient(13, 15, 29, 28)
+        body = QPainterPath()
+        body.addRoundedRect(QRectF(15.0, 16.0, 16.0, 10.8), 2.8, 2.8)
+        body_gradient = QLinearGradient(15, 16, 31, 27)
         body_gradient.setColorAt(0.0, QColor("#ffffff"))
-        body_gradient.setColorAt(0.48, QColor("#98c1f2"))
-        body_gradient.setColorAt(1.0, QColor("#1f416f"))
-        painter.setBrush(body_gradient)
-        painter.drawRoundedRect(QRectF(13.0, 15.6, 16.0, 10.8), 2.8, 2.8)
-
+        body_gradient.setColorAt(0.42, QColor("#86b7f2"))
+        body_gradient.setColorAt(1.0, QColor("#18355d"))
+        painter.fillPath(body, body_gradient)
         painter.setPen(QPen(QColor("#ffffff"), 1.2))
-        painter.drawRoundedRect(QRectF(19.0, 19.0, 4.0, 7.1), 1.1, 1.1)
-        painter.drawLine(QPointF(15.5, 18.3), QPointF(26.5, 18.3))
-        painter.setPen(QPen(QColor(255, 255, 255, 155), 1.0))
-        painter.drawLine(QPointF(12.2, 8.6), QPointF(28.4, 8.6))
+        painter.drawPath(body)
+        painter.drawRoundedRect(QRectF(21.0, 19.5, 4.0, 7.0), 1.0, 1.0)
+        painter.drawLine(QPointF(17.6, 18.7), QPointF(28.4, 18.7))
         painter.end()
         return QIcon(pixmap)
 
