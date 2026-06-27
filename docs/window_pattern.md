@@ -25,6 +25,16 @@ Mehdi-Elmi/engineers_Tools
 - `PageBar`: مدیریت صفحه‌ها.
 - `StatusBar`: مختصات، zoom، unit و وضعیت tool select.
 
+## قانون Minimize و Maximize
+
+پنجره‌های ماژول frameless هستند، بنابراین maximize نباید فقط با `showMaximized()` ساده انجام شود. قانون فعلی:
+
+- minimize باید از متد `_minimize_window()` استفاده کند.
+- maximize باید دستی با `screen.availableGeometry()` انجام شود.
+- هندسه قبلی پنجره باید در `_normal_geometry` ذخیره شود.
+- restore باید پنجره را به همان هندسه قبلی برگرداند.
+- وقتی پنجره maximize دستی است، drag با موس نباید پنجره را جابه‌جا کند.
+
 ## قانون Start Bar
 
 `StartBar` باید مستقل از پنجره مادر نگهداری شود:
