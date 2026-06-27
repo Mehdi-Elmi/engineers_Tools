@@ -6,6 +6,7 @@ set "BRANCH=main"
 set "TOKEN_FILE=%USERPROFILE%\Desktop\token.txt"
 set "FALLBACK_TOKEN_FILE=%USERPROFILE%\Desktop\testdoctoken.txt"
 set "INSTALL_DIR=%LOCALAPPDATA%\EngineerTools"
+set "LEGACY_INSTALL_DIR=%LOCALAPPDATA%\EngineersTools"
 set "COMMIT_STAMP=%INSTALL_DIR%\.install_commit"
 set "ZIP_FILE=%TEMP%\engineer_tools.zip"
 set "EXTRACT_DIR=%TEMP%\engineer_tools_extract"
@@ -44,8 +45,11 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "[System.IO.File]::WriteAllText($env:REMOTE_SHA_FILE,$remoteSha,[System.Text.Encoding]::UTF8);" ^
   "$localSha=''; if(Test-Path $env:COMMIT_STAMP){ $localSha=[System.IO.File]::ReadAllText($env:COMMIT_STAMP,[System.Text.Encoding]::UTF8).Trim() }" ^
   "$runFile=Join-Path $env:INSTALL_DIR 'run_engineers_tools.cmd';" ^
+  "$readmeFile=Join-Path $env:INSTALL_DIR 'README.md';" ^
+  "$repoOk=(Test-Path $readmeFile) -and ((Get-Content $readmeFile -Raw) -match 'Mehdi-Elmi/engineers_Tools');" ^
+  "$runnerOk=(Test-Path $runFile) -and ((Get-Content $runFile -Raw) -match 'EXPECTED_APP_ROOT');" ^
   "$force=$env:FORCE_UPDATE -eq '1';" ^
-  "if((Test-Path $runFile) -and -not $force -and $localSha -eq $remoteSha){ [System.IO.File]::WriteAllText($env:UPDATE_STATUS_FILE,'UP_TO_DATE',[System.Text.Encoding]::ASCII) } else { [System.IO.File]::WriteAllText($env:UPDATE_STATUS_FILE,'NEED_UPDATE',[System.Text.Encoding]::ASCII) }"
+  "if((Test-Path $runFile) -and $repoOk -and $runnerOk -and -not $force -and $localSha -eq $remoteSha){ [System.IO.File]::WriteAllText($env:UPDATE_STATUS_FILE,'UP_TO_DATE',[System.Text.Encoding]::ASCII) } else { [System.IO.File]::WriteAllText($env:UPDATE_STATUS_FILE,'NEED_UPDATE',[System.Text.Encoding]::ASCII) }"
 
 if errorlevel 1 (
     echo Version check failed.
@@ -109,6 +113,18 @@ if %ROBOCOPY_CODE% GEQ 8 (
 )
 
 for /d /r "%INSTALL_DIR%" %%D in (__pycache__) do if exist "%%D" rmdir /s /q "%%D" >nul 2>nul
+
+if /I not "%LEGACY_INSTALL_DIR%"=="%INSTALL_DIR%" (
+    if not exist "%LEGACY_INSTALL_DIR%" mkdir "%LEGACY_INSTALL_DIR%" >nul 2>nul
+    > "%LEGACY_INSTALL_DIR%\run_engineers_tools.cmd" echo @echo off
+    >> "%LEGACY_INSTALL_DIR%\run_engineers_tools.cmd" echo echo Legacy path detected. Redirecting to %%LOCALAPPDATA%%\EngineerTools...
+    >> "%LEGACY_INSTALL_DIR%\run_engineers_tools.cmd" echo call "%%LOCALAPPDATA%%\EngineerTools\run_engineers_tools.cmd"
+    >> "%LEGACY_INSTALL_DIR%\run_engineers_tools.cmd" echo exit /b %%ERRORLEVEL%%
+    > "%LEGACY_INSTALL_DIR%\install_from_github.cmd" echo @echo off
+    >> "%LEGACY_INSTALL_DIR%\install_from_github.cmd" echo echo Legacy path detected. Redirecting to %%LOCALAPPDATA%%\EngineerTools installer source...
+    >> "%LEGACY_INSTALL_DIR%\install_from_github.cmd" echo call "%%LOCALAPPDATA%%\EngineerTools\install_from_github.cmd"
+    >> "%LEGACY_INSTALL_DIR%\install_from_github.cmd" echo exit /b %%ERRORLEVEL%%
+)
 
 set "APP_MODULE_DIR=%INSTALL_DIR%\src\engineers_tools\app"
 set "MECH_DIR=%INSTALL_DIR%\modules\mechanics_dynamics_statics"
@@ -181,6 +197,14 @@ if errorlevel 1 (
     exit /b 1
 )
 
+findstr /C:"EXPECTED_APP_ROOT" "%INSTALL_DIR%\run_engineers_tools.cmd" >nul
+if errorlevel 1 (
+    echo Installation verification failed.
+    echo run_engineers_tools.cmd does not lock the active install path.
+    pause
+    exit /b 1
+)
+
 if exist "%REMOTE_SHA_FILE%" copy /y "%REMOTE_SHA_FILE%" "%COMMIT_STAMP%" >nul
 
 echo Installation completed.
@@ -189,6 +213,7 @@ if exist "%COMMIT_STAMP%" (
     echo Installed commit: !INSTALLED_COMMIT!
 )
 echo Verified repository: %REPO%
+echo Verified install path: %INSTALL_DIR%
 echo Verified entry: %MECH_DIR%\module_entry.py
 echo Verified workspace: %MECH_DIR%\workspace.py
 echo Verified shared window: %APP_MODULE_DIR%\module_window.py
