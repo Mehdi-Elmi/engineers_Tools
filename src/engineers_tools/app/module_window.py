@@ -98,6 +98,7 @@ class ModuleWindow(QMainWindow):
         self.resize(1180, 760)
         self._drag_position: QPoint | None = None
         self._normal_geometry: QRect | None = None
+        self._is_manually_maximized = False
         self._maximize_button: QPushButton | None = None
 
         root = QWidget()
@@ -144,7 +145,7 @@ class ModuleWindow(QMainWindow):
         minimize = QPushButton("-")
         minimize.setObjectName("WindowButton")
         minimize.setFixedSize(34, 30)
-        minimize.clicked.connect(self.showMinimized)
+        minimize.clicked.connect(self._minimize_window)
         layout.addWidget(minimize)
 
         maximize = QPushButton("[]")
@@ -276,19 +277,34 @@ class ModuleWindow(QMainWindow):
         dialog = ProjectDialog("File", self)
         dialog.exec()
 
+    def _minimize_window(self) -> None:
+        self.setWindowState(self.windowState() | Qt.WindowMinimized)
+        self.showMinimized()
+
     def _toggle_maximize(self) -> None:
-        if self.isMaximized():
-            self.showNormal()
-            if self._normal_geometry is not None:
-                self.setGeometry(self._normal_geometry)
-            if self._maximize_button is not None:
-                self._maximize_button.setText("[]")
+        if self._is_manually_maximized:
+            self._restore_from_maximize()
             return
 
         self._normal_geometry = self.geometry()
-        self.showMaximized()
+        screen = self.windowHandle().screen() if self.windowHandle() is not None else self.screen()
+        if screen is not None:
+            self.setGeometry(screen.availableGeometry())
+        else:
+            self.showMaximized()
+        self._is_manually_maximized = True
         if self._maximize_button is not None:
             self._maximize_button.setText("[ ]")
+            self._maximize_button.setToolTip("Restore")
+
+    def _restore_from_maximize(self) -> None:
+        self.showNormal()
+        if self._normal_geometry is not None:
+            self.setGeometry(self._normal_geometry)
+        self._is_manually_maximized = False
+        if self._maximize_button is not None:
+            self._maximize_button.setText("[]")
+            self._maximize_button.setToolTip("Maximize")
 
     def mousePressEvent(self, event) -> None:  # noqa: N802
         if event.button() == Qt.LeftButton and event.position().y() <= 46:
@@ -296,7 +312,7 @@ class ModuleWindow(QMainWindow):
             event.accept()
 
     def mouseMoveEvent(self, event) -> None:  # noqa: N802
-        if self._drag_position is not None and event.buttons() & Qt.LeftButton and not self.isMaximized():
+        if self._drag_position is not None and event.buttons() & Qt.LeftButton and not self._is_manually_maximized:
             self.move(event.globalPosition().toPoint() - self._drag_position)
             event.accept()
 
