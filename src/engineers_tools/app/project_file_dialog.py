@@ -1,8 +1,4 @@
-"""Project-styled file dialogs for Engineer Tools.
-
-The UI follows the project window language while using the local filesystem
-through Python and Qt models. It intentionally avoids native QFileDialog visuals.
-"""
+"""Project-styled file dialogs for Engineer Tools."""
 
 from __future__ import annotations
 
@@ -26,7 +22,6 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-
 
 PROJECT_FILE_FILTERS: tuple[tuple[str, tuple[str, ...], str], ...] = (
     ("Engineer Tools", (".etools", ".etool"), ".etools"),
@@ -67,6 +62,7 @@ class ProjectFileDialog(QDialog):
         self._history_index = -1
         self._icon_provider = QFileIconProvider()
         self._current_dir = self._resolve_start_dir(start_dir)
+        self._drag_position: QPoint | None = None
 
         title = self._dialog_title()
         self.setObjectName("ProjectFileDialog")
@@ -82,7 +78,6 @@ class ProjectFileDialog(QDialog):
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.addWidget(shell)
-
         layout = QVBoxLayout(shell)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
@@ -125,11 +120,9 @@ class ProjectFileDialog(QDialog):
         layout.setContentsMargins(14, 0, 10, 0)
         layout.setSpacing(10)
         layout.addWidget(self._build_window_mark())
-
         label = QLabel(title)
         label.setObjectName("FileDialogTitle")
         layout.addWidget(label, 1)
-
         close = QPushButton("×")
         close.setObjectName("CloseButton")
         close.setFixedSize(34, 28)
@@ -167,19 +160,15 @@ class ProjectFileDialog(QDialog):
         layout = QHBoxLayout(bar)
         layout.setContentsMargins(12, 6, 12, 6)
         layout.setSpacing(8)
-
         self._back_button = self._build_nav_button("back", "Back")
         self._back_button.clicked.connect(self._go_back)
         layout.addWidget(self._back_button)
-
         self._forward_button = self._build_nav_button("forward", "Forward")
         self._forward_button.clicked.connect(self._go_forward)
         layout.addWidget(self._forward_button)
-
         self._up_button = self._build_nav_button("up", "Up")
         self._up_button.clicked.connect(self._go_up)
         layout.addWidget(self._up_button)
-
         self._path_label = QLabel("")
         self._path_label.setObjectName("FilePathLabel")
         layout.addWidget(self._path_label, 1)
@@ -189,24 +178,33 @@ class ProjectFileDialog(QDialog):
         button = QPushButton()
         button.setObjectName("FileNavButton")
         button.setToolTip(tooltip)
-        button.setFixedSize(34, 28)
+        button.setFixedSize(38, 30)
         button.setIcon(self._build_nav_icon(direction))
-        button.setIconSize(QSize(24, 22))
+        button.setIconSize(QSize(28, 24))
         return button
 
     def _build_nav_icon(self, direction: str) -> QIcon:
-        pixmap = QPixmap(26, 22)
+        pixmap = QPixmap(30, 24)
         pixmap.fill(Qt.GlobalColor.transparent)
         painter = QPainter(pixmap)
         painter.setRenderHint(QPainter.Antialiasing, True)
-        painter.setPen(QPen(QColor("#ffffff"), 1.0))
+        base = QPainterPath()
+        base.addRoundedRect(QRectF(3, 3, 24, 18), 7, 7)
+        gradient = QLinearGradient(3, 3, 27, 21)
+        gradient.setColorAt(0.0, QColor("#ffffff"))
+        gradient.setColorAt(0.48, QColor("#fff1bf"))
+        gradient.setColorAt(1.0, QColor("#ff8a35"))
+        painter.fillPath(base, gradient)
+        painter.setPen(QPen(QColor("#ffffff"), 0.9))
+        painter.drawPath(base)
+        painter.setPen(QPen(QColor("#132238"), 1.0))
         painter.setBrush(QColor("#132238"))
         if direction == "back":
-            points = QPolygonF([QPointF(7, 11), QPointF(16, 4), QPointF(16, 8), QPointF(22, 8), QPointF(22, 14), QPointF(16, 14), QPointF(16, 18)])
+            points = QPolygonF([QPointF(8, 12), QPointF(17, 6), QPointF(17, 10), QPointF(23, 10), QPointF(23, 14), QPointF(17, 14), QPointF(17, 18)])
         elif direction == "forward":
-            points = QPolygonF([QPointF(19, 11), QPointF(10, 4), QPointF(10, 8), QPointF(4, 8), QPointF(4, 14), QPointF(10, 14), QPointF(10, 18)])
+            points = QPolygonF([QPointF(22, 12), QPointF(13, 6), QPointF(13, 10), QPointF(7, 10), QPointF(7, 14), QPointF(13, 14), QPointF(13, 18)])
         else:
-            points = QPolygonF([QPointF(13, 4), QPointF(21, 12), QPointF(17, 12), QPointF(17, 18), QPointF(9, 18), QPointF(9, 12), QPointF(5, 12)])
+            points = QPolygonF([QPointF(15, 6), QPointF(23, 14), QPointF(19, 14), QPointF(19, 19), QPointF(11, 19), QPointF(11, 14), QPointF(7, 14)])
         painter.drawPolygon(points)
         painter.end()
         return QIcon(pixmap)
@@ -217,14 +215,12 @@ class ProjectFileDialog(QDialog):
         layout = QHBoxLayout(body)
         layout.setContentsMargins(12, 12, 12, 8)
         layout.setSpacing(10)
-
         self._places = QListWidget()
         self._places.setObjectName("PlacesList")
         self._places.setFixedWidth(170)
         self._populate_places()
         self._places.itemClicked.connect(self._place_clicked)
         layout.addWidget(self._places)
-
         self._files = QListWidget()
         self._files.setObjectName("FilesList")
         self._files.setIconSize(QSize(22, 22))
@@ -240,35 +236,29 @@ class ProjectFileDialog(QDialog):
         layout.setContentsMargins(12, 6, 12, 12)
         layout.setHorizontalSpacing(8)
         layout.setVerticalSpacing(8)
-
         file_name_label = QLabel("File Name:")
         file_name_label.setObjectName("FileFieldLabel")
         layout.addWidget(file_name_label, 0, 0)
-
         self._file_name = QLineEdit()
         self._file_name.setObjectName("FileNameInput")
         layout.addWidget(self._file_name, 0, 1)
-
         type_label = QLabel("File Type:")
         type_label.setObjectName("FileFieldLabel")
         layout.addWidget(type_label, 1, 0)
-
         self._file_type = QComboBox()
         self._file_type.setObjectName("FileTypeCombo")
-        for name, suffixes, _default_suffix in self._filters():
+        for name, suffixes, default_suffix in self._filters():
             suffix_text = " ".join(f"*{suffix}" for suffix in suffixes)
-            self._file_type.addItem(f"{name} ({suffix_text})", (name, suffixes, _default_suffix))
+            self._file_type.addItem(f"{name} ({suffix_text})", (name, suffixes, default_suffix))
         self._file_type.currentIndexChanged.connect(self._file_type_changed)
         layout.addWidget(self._file_type, 1, 1)
-
         action_label = {"open": "Open", "save": "Save", "import": "Import", "export": "Export"}.get(self.mode, "Open")
         action = QPushButton(action_label)
-        action.setObjectName("ConfirmButton")
+        action.setObjectName("PrimaryDialogButton")
         action.clicked.connect(self._accept_selection)
         layout.addWidget(action, 0, 2)
-
         cancel = QPushButton("Cancel")
-        cancel.setObjectName("ConfirmButton")
+        cancel.setObjectName("SecondaryDialogButton")
         cancel.clicked.connect(self.reject)
         layout.addWidget(cancel, 1, 2)
         return footer
@@ -289,14 +279,13 @@ class ProjectFileDialog(QDialog):
     def _places_paths(self) -> list[tuple[str, Path]]:
         paths: list[tuple[str, Path]] = []
         home = Path.home()
-        standard_locations = (
+        paths.append(("Home", home))
+        for label, standard_location, fallback in (
             ("Desktop", QStandardPaths.DesktopLocation, home / "Desktop"),
             ("Downloads", QStandardPaths.DownloadLocation, home / "Downloads"),
             ("Documents", QStandardPaths.DocumentsLocation, home / "Documents"),
             ("Pictures", QStandardPaths.PicturesLocation, home / "Pictures"),
-        )
-        paths.append(("Home", home))
-        for label, standard_location, fallback in standard_locations:
+        ):
             location = QStandardPaths.writableLocation(standard_location)
             path = Path(location) if location else fallback
             if path.exists():
@@ -320,9 +309,7 @@ class ProjectFileDialog(QDialog):
         if start_dir is not None and start_dir.exists():
             return start_dir if start_dir.is_dir() else start_dir.parent
         documents = QStandardPaths.writableLocation(QStandardPaths.DocumentsLocation)
-        if documents:
-            return Path(documents)
-        return Path.home()
+        return Path(documents) if documents else Path.home()
 
     def _navigate_to(self, path: Path, add_history: bool = False) -> None:
         if not path.exists() or not path.is_dir():
@@ -468,3 +455,21 @@ class ProjectFileDialog(QDialog):
         path = QPainterPath()
         path.addRoundedRect(QRectF(0, 0, self.width(), self.height()), 16, 16)
         self.setMask(QRegion(path.toFillPolygon().toPolygon()))
+
+    def mousePressEvent(self, event) -> None:  # noqa: N802
+        if event.button() == Qt.LeftButton and event.position().y() <= 44:
+            self._drag_position = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event) -> None:  # noqa: N802
+        if self._drag_position is not None and event.buttons() & Qt.LeftButton:
+            self.move(event.globalPosition().toPoint() - self._drag_position)
+            event.accept()
+            return
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event) -> None:  # noqa: N802
+        self._drag_position = None
+        super().mouseReleaseEvent(event)
