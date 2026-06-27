@@ -1,0 +1,64 @@
+# دستور انتقال به چت بعدی
+
+متن زیر را در شروع چت جدید بده:
+
+```text
+پروژه روی GitHub در ریپازیتوری Mehdi-Elmi/engineers_Tools است.
+مسیر قبلی Mehdi-Elmi/engineers_Toolses مسیر توسعه فعال نیست.
+
+قبل از هر تغییر این فایل‌ها را بخوان:
+README.md
+docs/window_pattern.md
+docs/prompt_handoff.md
+modules/mechanics_dynamics_statics/README.md
+
+قانون اصلی:
+فعلاً فقط پروژه Engineering Design Tools فعال است.
+برای پروژه‌های دیگر فایل یا پنجره جدا نساز مگر اینکه کاربر صریحاً دستور بدهد.
+
+فایل نصب:
+install_from_github.cmd
+
+فایل اجرا:
+run_engineers_tools.cmd
+
+مسیر نصب ویندوز:
+%LOCALAPPDATA%\EngineerTools
+
+مسیر توکن:
+%USERPROFILE%\Desktop\token.txt
+fallback:
+%USERPROFILE%\Desktop\testdoctoken.txt
+
+لانچر:
+src/engineers_tools/app/launcher_window.py
+
+کنترلر:
+src/engineers_tools/app/controller.py
+
+رجیستری ماژول‌ها:
+src/engineers_tools/app/modules.py
+
+پنجره مادر:
+src/engineers_tools/app/module_window.py
+
+مسیر فعال Engineering Design Tools:
+modules/mechanics_dynamics_statics/module_entry.py
+modules/mechanics_dynamics_statics/workspace.py
+
+entry point فعال:
+modules.mechanics_dynamics_statics.module_entry:create_window
+
+قانون طراحی:
+UI انگلیسی باشد.
+گزارش فارسی RTL باشد.
+هر پنجره جدید ادامه docs/window_pattern.md باشد.
+File/Open/Save باید پنجره ظاهری خود پروژه را داشته باشد و فقط پشت پرده از QFileDialog استفاده کند.
+Start Bar محل ابزارهای سریع است.
+Properties باید بر اساس ابزار یا آبجکت انتخاب‌شده تغییر کند.
+Select باید در کل پروژه یک رفتار واحد داشته باشد.
+
+قانون نصب:
+installer فقط وقتی commit جدید باشد دانلود و کپی کند.
+run_engineers_tools.cmd فقط وقتی .venv وجود ندارد یا requirements.txt تغییر کرده باشد pip install اجرا کند.
+```
