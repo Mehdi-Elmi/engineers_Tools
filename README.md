@@ -103,6 +103,24 @@ modules.mechanics_dynamics_statics.module_entry:create_window
 
 فایل لانچر نباید برای محدودکردن کار فعلی خراب یا تک‌کارت شود. لانچر باید همه کارت‌ها را نگه دارد و فقط مسیر کاری فعلی در پوشه خودش توسعه پیدا کند.
 
+## مسیر مرکزی Main Menu
+
+فایل مادر پنجره، منوهای اصلی، Canvas، Page Bar، Status Bar، File/Edit/View/Insert/Draw/Help و رفتار عمومی پنجره در مسیر مرکزی زیر نگهداری می‌شود:
+
+```text
+src/engineers_tools/app/module_window.py
+```
+
+این فایل جزو هیچ پروژه اختصاصی مثل مکانیک، مدار، فلوچارت یا بارکد نیست. تمام پروژه‌ها باید از همین الگوی مرکزی استفاده کنند و فقط overrideهای اختصاصی خودشان را داخل پوشه `modules/...` بنویسند.
+
+Theme مشترک پروژه در این مسیر است:
+
+```text
+src/engineers_tools/app/theme.py
+```
+
+فایل‌های داخل `modules/mechanics_dynamics_statics` فقط تغییرات اختصاصی `Engineering Design Tools` هستند و نباید جایگزین فایل مادر شوند.
+
 ## قانون Start Bar
 
 Start Bar از پنجره مادر جدا شده و در این فایل نگهداری می‌شود:
