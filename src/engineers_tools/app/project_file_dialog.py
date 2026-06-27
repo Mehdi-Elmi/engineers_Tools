@@ -511,6 +511,32 @@ class ProjectFileDialog(QDialog):
         )
         return row
 
+    def _build_inline_rename_widget(self, item: QListWidgetItem, path: Path) -> QWidget:
+        width = self._file_item_size(path.name).width()
+        row = QWidget()
+        row.setObjectName("FileItemRow")
+        row.setAttribute(Qt.WA_StyledBackground, True)
+        row.setProperty("selected", True)
+        row.setFixedSize(max(width, 150), 28)
+        layout = QHBoxLayout(row)
+        layout.setContentsMargins(3, 2, 4, 2)
+        layout.setSpacing(4)
+        icon_label = QLabel()
+        icon_label.setFixedSize(22, 22)
+        icon_label.setPixmap(self._icon_provider.icon(QFileInfo(str(path))).pixmap(22, 22))
+        icon_label.setStyleSheet("background:transparent; border:0;")
+        layout.addWidget(icon_label)
+        editor = QLineEdit(path.name)
+        editor.setObjectName("InlineRenameInput")
+        editor.setFixedHeight(23)
+        editor.setStyleSheet("QLineEdit#InlineRenameInput {background:#ffffff; border:1px solid #2f7df6; border-radius:5px; color:#132238; font-style:normal; font-weight:800; padding:1px 4px;}")
+        editor.editingFinished.connect(lambda source=editor, row_item=item, original=path: self._finish_inline_rename(row_item, source, original))
+        layout.addWidget(editor, 1)
+        row.setStyleSheet("QWidget#FileItemRow {background:#cfe7ff; border:0; border-radius:5px;}")
+        editor.setFocus(Qt.FocusReason.OtherFocusReason)
+        editor.selectAll()
+        return row
+
     def _sync_file_selection(self, selected_item: QListWidgetItem | None) -> None:
         self._sync_list_selection(self._files, selected_item)
 
@@ -695,6 +721,35 @@ class ProjectFileDialog(QDialog):
             return
         self._refresh_files()
         self._select_path(target)
+        self._start_inline_rename(target)
+
+    def _start_inline_rename(self, path: Path) -> None:
+        wanted = str(path)
+        for row_index in range(self._files.count()):
+            item = self._files.item(row_index)
+            if str(item.data(Qt.UserRole)) == wanted:
+                self._files.setCurrentItem(item)
+                self._sync_file_selection(item)
+                self._files.setItemWidget(item, self._build_inline_rename_widget(item, path))
+                self._files.scrollToItem(item)
+                return
+
+    def _finish_inline_rename(self, item: QListWidgetItem, editor: QLineEdit, original_path: Path) -> None:
+        if editor.property("renameCommitted"):
+            return
+        editor.setProperty("renameCommitted", True)
+        new_name = editor.text().strip() or original_path.name
+        new_name = new_name.replace("/", "").replace("\\", "").strip() or original_path.name
+        destination = original_path.with_name(new_name)
+        if destination != original_path:
+            destination = self._make_unique_path(destination)
+            try:
+                original_path.rename(destination)
+            except OSError as error:
+                _write_dialog_error("rename_folder", error)
+                destination = original_path
+        self._refresh_files()
+        self._select_path(destination)
 
     def _select_path(self, path: Path) -> None:
         wanted = str(path)
