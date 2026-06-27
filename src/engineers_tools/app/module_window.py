@@ -64,10 +64,13 @@ class MenuItemSpec:
 
 
 class GridCanvas(QWidget):
+    mouse_position_changed = Signal(float, float)
+
     def __init__(self) -> None:
         super().__init__()
         self._grid_visible = True
         self._zoom = 1.0
+        self.setMouseTracking(True)
 
     def set_grid_visible(self, visible: bool) -> None:
         self._grid_visible = visible
@@ -76,6 +79,18 @@ class GridCanvas(QWidget):
     def set_zoom(self, zoom_percent: float) -> None:
         self._zoom = max(0.05, zoom_percent / 100.0)
         self.update()
+
+    def _to_canvas_coordinates(self, point: QPointF) -> tuple[float, float]:
+        center_x = self.width() / 2.0
+        center_y = self.height() / 2.0
+        x = ((point.x() - center_x) / self._zoom) + center_x
+        y = ((point.y() - center_y) / self._zoom) + center_y
+        return x, y
+
+    def mouseMoveEvent(self, event) -> None:  # noqa: N802
+        x, y = self._to_canvas_coordinates(event.position())
+        self.mouse_position_changed.emit(x, y)
+        super().mouseMoveEvent(event)
 
     def paintEvent(self, event) -> None:  # noqa: N802
         super().paintEvent(event)
@@ -372,6 +387,7 @@ class ModuleWindow(QMainWindow):
         self._canvas = GridCanvas()
         self._canvas.setObjectName("GridCanvas")
         self._canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self._canvas.mouse_position_changed.connect(self._update_canvas_coordinates)
         canvas_layout.addWidget(self._canvas, 1)
         layout.addWidget(canvas_shell, 1)
 
@@ -676,6 +692,12 @@ class ModuleWindow(QMainWindow):
         if self._canvas is not None:
             self._canvas.set_zoom(value)
         self._set_status(f"Zoom {value:.2f}%")
+
+    def _update_canvas_coordinates(self, x: float, y: float) -> None:
+        for item in self._status_items:
+            if item.text().startswith("X:"):
+                item.setText(f"X: {x:.0f}  Y: {y:.0f}")
+                return
 
     def _set_status(self, text: str) -> None:
         if self._status_items:
