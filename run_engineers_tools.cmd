@@ -9,6 +9,7 @@ set "REQ_STAMP=%VENV_DIR%\requirements.stamp"
 set "NEED_INSTALL=0"
 
 cd /d "%APP_ROOT%"
+set "PYTHONPATH=%APP_ROOT%;%PYTHONPATH%"
 
 if not exist "%PYTHON_EXE%" (
     echo Creating Python virtual environment...
@@ -49,6 +50,22 @@ if "%NEED_INSTALL%"=="1" (
     )
 ) else (
     echo Python environment is ready.
+)
+
+echo App root: %APP_ROOT%
+echo Python: %PYTHON_EXE%
+"%PYTHON_EXE%" -c "import importlib.util as u; mods=('src.engineers_tools.app.module_window','src.engineers_tools.app.project_file_dialog','modules.mechanics_dynamics_statics.module_entry','modules.mechanics_dynamics_statics.workspace'); [print(m + ': ' + str((u.find_spec(m).origin if u.find_spec(m) else 'NOT FOUND'))) for m in mods]"
+if errorlevel 1 (
+    echo Runtime path check failed.
+    pause
+    exit /b 1
+)
+
+"%PYTHON_EXE%" -c "from modules.mechanics_dynamics_statics.workspace import EngineeringDesignWorkspace; from src.engineers_tools.app.module_window import ModuleWindow; from src.engineers_tools.app.project_file_dialog import ProjectFileDialog; print('active workspace class: ' + EngineeringDesignWorkspace.__module__ + '.' + EngineeringDesignWorkspace.__name__); print('shared window class: ' + ModuleWindow.__module__ + '.' + ModuleWindow.__name__); print('file dialog class: ' + ProjectFileDialog.__module__ + '.' + ProjectFileDialog.__name__)"
+if errorlevel 1 (
+    echo Active runtime verification failed.
+    pause
+    exit /b 1
 )
 
 "%PYTHON_EXE%" -m src.engineers_tools.main
