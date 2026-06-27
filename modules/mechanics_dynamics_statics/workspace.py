@@ -1,23 +1,56 @@
-"""Engineering Design Tools workspace.
-
-This file is the active workspace for mechanics, dynamics, statics, robotics,
-and vector design. Future changes for this module must continue this class.
-"""
+"""Engineering Design Tools workspace."""
 
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
-from PySide6.QtCore import QPointF, QRectF, QSize, Qt
-from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap, QPolygonF
-from PySide6.QtWidgets import QAbstractSpinBox, QDoubleSpinBox, QHBoxLayout, QLabel, QPushButton, QSizePolicy, QVBoxLayout, QWidget
+from PySide6.QtCore import QPoint, QPointF, QRectF, QSize, Signal, Qt
+from PySide6.QtGui import QAction, QColor, QIcon, QPainter, QPainterPath, QPen, QPixmap, QPolygonF
+from PySide6.QtWidgets import (
+    QAbstractSpinBox,
+    QCheckBox,
+    QDialog,
+    QDoubleSpinBox,
+    QHBoxLayout,
+    QLabel,
+    QMenu,
+    QPushButton,
+    QSizePolicy,
+    QVBoxLayout,
+    QWidget,
+)
 
-from src.engineers_tools.app.module_window import GridCanvas, MenuItemSpec, ModuleWindow, _paint_rotation_glyph
+from src.engineers_tools.app.module_window import GridCanvas, MenuItemSpec, ModuleWindow
 from src.engineers_tools.app.modules import LauncherModule
 
-ENGINEERING_WORKSPACE_UI_MARKER = "ENGINEERING_WORKSPACE_VIEW_STARTBAR_2026_06_27_D"
+ENGINEERING_WORKSPACE_UI_MARKER = "ENGINEERING_WORKSPACE_VIEW_STARTBAR_2026_06_27_E"
+
+
+def _rotate_vector(vector: QPointF, degrees: float) -> QPointF:
+    radians = math.radians(degrees)
+    cos_a = math.cos(radians)
+    sin_a = math.sin(radians)
+    return QPointF(vector.x() * cos_a - vector.y() * sin_a, vector.x() * sin_a + vector.y() * cos_a)
+
+
+def _paint_rotation_arc(painter: QPainter, center: QPointF, radius: float, color: QColor) -> None:
+    painter.save()
+    painter.setRenderHint(QPainter.Antialiasing, True)
+    painter.setPen(QPen(color, 2.0, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+    path = QPainterPath()
+    arc_rect = QRectF(center.x() - radius, center.y() - radius, radius * 2, radius * 2)
+    path.arcMoveTo(arc_rect, 35)
+    path.arcTo(arc_rect, 35, 285)
+    painter.drawPath(path)
+    tip_angle = math.radians(-250)
+    tip = QPointF(center.x() + radius * math.cos(tip_angle), center.y() + radius * math.sin(tip_angle))
+    tangent = QPointF(-math.sin(tip_angle), math.cos(tip_angle))
+    normal = QPointF(math.cos(tip_angle), math.sin(tip_angle))
+    painter.setBrush(color)
+    painter.drawPolygon(QPolygonF([tip, tip - tangent * 4.8 - normal * 3.2, tip + tangent * 4.8 - normal * 3.2]))
+    painter.restore()
 
 
 @dataclass
@@ -26,21 +59,44 @@ class CanvasObject:
     pixmap: QPixmap
     rect: QRectF
     rotation: float = 0.0
+    name: str = "Object"
+    visible: bool = True
+    locked: bool = False
+    rotation_handle_visible: bool = True
+    group_id: int | None = None
+
+    def clone(self, offset: QPointF | None = None) -> "CanvasObject":
+        copied = replace(self, rect=QRectF(self.rect))
+        if offset is not None:
+            copied.rect.translate(offset)
+        return copied
 
 
 class EngineeringCanvas(GridCanvas):
+    objects_changed = Signal()
+    selection_changed = Signal()
+
     def __init__(self) -> None:
         super().__init__()
+        self.setMouseTracking(True)
+        self.setFocusPolicy(Qt.StrongFocus)
         self.objects: list[CanvasObject] = []
-        self.selected_index: int | None = None
-        self._clipboard: CanvasObject | None = None
+        self.selected_indices: set[int] = set()
+        self._clipboard: list[CanvasObject] = []
         self._last_action: str | None = None
         self._drag_action: str | None = None
         self._drag_start = QPointF()
-        self._drag_start_rect = QRectF()
-        self._drag_start_rotation = 0.0
+        self._drag_start_rects: dict[int, QRectF] = {}
+        self._drag_start_rotations: dict[int, float] = {}
+        self._drag_group_center = QPointF()
+        self._selection_origin: QPointF | None = None
+        self._selection_rect: QRectF | None = None
+        self._undo_stack: list[list[CanvasObject]] = []
+        self._redo_stack: list[list[CanvasObject]] = []
+        self._next_group_id = 1
 
     def load_file(self, path: Path) -> None:
+        self._push_undo()
         pixmap = QPixmap(str(path))
         if not pixmap.isNull():
             width = float(pixmap.width())
@@ -49,177 +105,343 @@ class EngineeringCanvas(GridCanvas):
             width, height = 595.0, 842.0
         else:
             width, height = 520.0, 360.0
-        max_width = max(180.0, self.width() * 0.62)
-        max_height = max(160.0, self.height() * 0.74)
-        scale = min(max_width / width, max_height / height, 1.0)
+        scale = min(max(180.0, self.width() * 0.62) / width, max(160.0, self.height() * 0.74) / height, 1.0)
         width *= scale
         height *= scale
         rect = QRectF((self.width() - width) / 2, (self.height() - height) / 2, width, height)
-        self.objects.append(CanvasObject(path=path, pixmap=pixmap, rect=rect))
-        self.selected_index = len(self.objects) - 1
+        self.objects.append(CanvasObject(path=path, pixmap=pixmap, rect=rect, name=path.stem or f"Object {len(self.objects) + 1}"))
+        self._select_only(len(self.objects) - 1)
+        self._last_action = "open"
+        self.objects_changed.emit()
         self.update()
 
     def copy_selection(self) -> bool:
-        obj = self._selected_object()
-        if obj is None:
+        selected = self._selected_objects()
+        if not selected:
             return False
-        self._clipboard = CanvasObject(obj.path, obj.pixmap, QRectF(obj.rect), obj.rotation)
+        self._clipboard = [obj.clone() for _index, obj in selected]
         self._last_action = "copy"
         return True
 
     def cut_selection(self) -> bool:
-        if not self.copy_selection() or self.selected_index is None:
+        if not self.copy_selection():
             return False
-        self.objects.pop(self.selected_index)
-        self.selected_index = None
+        self._push_undo()
+        self._delete_selected_objects()
         self._last_action = "cut"
-        self.update()
         return True
 
     def paste_selection(self) -> bool:
-        if self._clipboard is None:
+        if not self._clipboard:
             return False
-        clone = CanvasObject(self._clipboard.path, self._clipboard.pixmap, QRectF(self._clipboard.rect).translated(24, 24), self._clipboard.rotation)
-        self.objects.append(clone)
-        self.selected_index = len(self.objects) - 1
+        self._push_undo()
+        start = len(self.objects)
+        for obj in self._clipboard:
+            clone = obj.clone(QPointF(24, 24))
+            clone.name = self._next_object_name(obj.name)
+            clone.group_id = None
+            self.objects.append(clone)
+        self.selected_indices = set(range(start, len(self.objects)))
         self._last_action = "paste"
+        self.objects_changed.emit()
+        self.selection_changed.emit()
         self.update()
         return True
 
     def repeat_last_action(self) -> bool:
-        if self._last_action in {"copy", "paste"}:
+        if self._last_action in {"copy", "paste", "open"}:
             return self.paste_selection()
-        obj = self._selected_object()
-        if obj is None:
+        if not self.selected_indices:
             return False
-        obj.rect.translate(12, 12)
+        self._push_undo()
+        for index in self.selected_indices:
+            self.objects[index].rect.translate(12, 12)
+        self._last_action = "repeat"
         self.update()
         return True
 
     def select_all(self) -> bool:
         if not self.objects:
             return False
-        self.selected_index = len(self.objects) - 1
+        self.selected_indices = {index for index, obj in enumerate(self.objects) if obj.visible}
+        self.selection_changed.emit()
         self.update()
         return True
 
-    def bring_to_front(self) -> bool:
-        if self.selected_index is None:
+    def undo(self) -> bool:
+        if not self._undo_stack:
             return False
-        obj = self.objects.pop(self.selected_index)
-        self.objects.append(obj)
-        self.selected_index = len(self.objects) - 1
+        self._redo_stack.append(self._snapshot())
+        self._restore_snapshot(self._undo_stack.pop())
+        return True
+
+    def redo(self) -> bool:
+        if not self._redo_stack:
+            return False
+        self._undo_stack.append(self._snapshot())
+        self._restore_snapshot(self._redo_stack.pop())
+        return True
+
+    def bring_to_front(self) -> bool:
+        if not self.selected_indices:
+            return False
+        self._push_undo()
+        selected = [self.objects[index] for index in sorted(self.selected_indices)]
+        remaining = [obj for index, obj in enumerate(self.objects) if index not in self.selected_indices]
+        self.objects = remaining + selected
+        self.selected_indices = set(range(len(remaining), len(self.objects)))
+        self.objects_changed.emit()
         self.update()
         return True
 
     def send_to_back(self) -> bool:
-        if self.selected_index is None:
+        if not self.selected_indices:
             return False
-        obj = self.objects.pop(self.selected_index)
-        self.objects.insert(0, obj)
-        self.selected_index = 0
+        self._push_undo()
+        selected = [self.objects[index] for index in sorted(self.selected_indices)]
+        remaining = [obj for index, obj in enumerate(self.objects) if index not in self.selected_indices]
+        self.objects = selected + remaining
+        self.selected_indices = set(range(len(selected)))
+        self.objects_changed.emit()
         self.update()
         return True
 
-    def _selected_object(self) -> CanvasObject | None:
-        if self.selected_index is None or self.selected_index < 0 or self.selected_index >= len(self.objects):
-            return None
-        return self.objects[self.selected_index]
+    def group_selection(self) -> bool:
+        if len(self.selected_indices) < 2:
+            return False
+        self._push_undo()
+        group_id = self._next_group_id
+        self._next_group_id += 1
+        for index in self.selected_indices:
+            self.objects[index].group_id = group_id
+        self.objects_changed.emit()
+        self.update()
+        return True
+
+    def ungroup_selection(self) -> bool:
+        group_ids = {self.objects[index].group_id for index in self.selected_indices if self.objects[index].group_id is not None}
+        if not group_ids:
+            return False
+        self._push_undo()
+        for obj in self.objects:
+            if obj.group_id in group_ids:
+                obj.group_id = None
+        self.objects_changed.emit()
+        self.update()
+        return True
+
+    def toggle_rotation_handles(self) -> bool:
+        if not self.selected_indices:
+            return False
+        self._push_undo()
+        first = self.objects[min(self.selected_indices)].rotation_handle_visible
+        for index in self.selected_indices:
+            self.objects[index].rotation_handle_visible = not first
+        self.objects_changed.emit()
+        self.update()
+        return True
+
+    def toggle_object_visible(self, index: int) -> None:
+        if 0 <= index < len(self.objects):
+            self._push_undo()
+            self.objects[index].visible = not self.objects[index].visible
+            if not self.objects[index].visible:
+                self.selected_indices.discard(index)
+            self.objects_changed.emit()
+            self.selection_changed.emit()
+            self.update()
+
+    def toggle_object_locked(self, index: int) -> None:
+        if 0 <= index < len(self.objects):
+            self._push_undo()
+            self.objects[index].locked = not self.objects[index].locked
+            self.objects_changed.emit()
+            self.update()
+
+    def toggle_object_rotation_handle(self, index: int) -> None:
+        if 0 <= index < len(self.objects):
+            self._push_undo()
+            self.objects[index].rotation_handle_visible = not self.objects[index].rotation_handle_visible
+            self.objects_changed.emit()
+            self.update()
+
+    def _selected_objects(self) -> list[tuple[int, CanvasObject]]:
+        return [(index, self.objects[index]) for index in sorted(self.selected_indices) if 0 <= index < len(self.objects)]
+
+    def _select_only(self, index: int) -> None:
+        self.selected_indices = {index}
+        self.selection_changed.emit()
+
+    def _delete_selected_objects(self) -> None:
+        self.objects = [obj for index, obj in enumerate(self.objects) if index not in self.selected_indices]
+        self.selected_indices = set()
+        self.objects_changed.emit()
+        self.selection_changed.emit()
+        self.update()
+
+    def _snapshot(self) -> list[CanvasObject]:
+        return [obj.clone() for obj in self.objects]
+
+    def _restore_snapshot(self, snapshot: list[CanvasObject]) -> None:
+        self.objects = [obj.clone() for obj in snapshot]
+        self.selected_indices = set()
+        self.objects_changed.emit()
+        self.selection_changed.emit()
+        self.update()
+
+    def _push_undo(self) -> None:
+        self._undo_stack.append(self._snapshot())
+        if len(self._undo_stack) > 80:
+            self._undo_stack.pop(0)
+        self._redo_stack.clear()
+
+    def _next_object_name(self, base: str) -> str:
+        existing = {obj.name for obj in self.objects}
+        clean = base or "Object"
+        if clean not in existing:
+            return clean
+        counter = 1
+        while f"{clean}-{counter}" in existing:
+            counter += 1
+        return f"{clean}-{counter}"
 
     def _to_canvas_point(self, point: QPointF) -> QPointF:
         center_x = self.width() / 2.0
         center_y = self.height() / 2.0
-        return QPointF(((point.x() - center_x) / self._zoom) + center_x, ((point.y() - center_y) / self._zoom) + center_y)
+        zoom = max(self._zoom, 0.01)
+        return QPointF(((point.x() - center_x) / zoom) + center_x, ((point.y() - center_y) / zoom) + center_y)
+
+    def _scene_to_object_local(self, obj: CanvasObject, point: QPointF) -> QPointF:
+        return _rotate_vector(point - obj.rect.center(), -obj.rotation)
+
+    def _object_local_to_scene(self, obj: CanvasObject, point: QPointF) -> QPointF:
+        return obj.rect.center() + _rotate_vector(point, obj.rotation)
 
     def _hit_test_object(self, point: QPointF) -> tuple[int | None, str | None]:
         for index in range(len(self.objects) - 1, -1, -1):
-            rect = self.objects[index].rect
-            action = self._hit_test_rect(rect, point)
-            if action is not None:
-                return index, action
+            obj = self.objects[index]
+            if obj.visible:
+                action = self._hit_test_single_object(obj, point)
+                if action is not None:
+                    return index, action
         return None, None
 
-    def _hit_test_rect(self, rect: QRectF, point: QPointF) -> str | None:
-        rotate_center = QPointF(rect.center().x(), rect.top() - 34)
-        if math.hypot(point.x() - rotate_center.x(), point.y() - rotate_center.y()) <= 15:
+    def _hit_test_single_object(self, obj: CanvasObject, point: QPointF) -> str | None:
+        local = self._scene_to_object_local(obj, point)
+        half_w = obj.rect.width() / 2
+        half_h = obj.rect.height() / 2
+        if obj.rotation_handle_visible and math.hypot(local.x(), local.y() + half_h + 34) <= 15:
             return "rotate"
-        tolerance = 8.0
         handles = {
-            "resize_nw": rect.topLeft(), "resize_n": QPointF(rect.center().x(), rect.top()), "resize_ne": rect.topRight(),
-            "resize_e": QPointF(rect.right(), rect.center().y()), "resize_se": rect.bottomRight(), "resize_s": QPointF(rect.center().x(), rect.bottom()),
-            "resize_sw": rect.bottomLeft(), "resize_w": QPointF(rect.left(), rect.center().y()),
+            "resize_nw": QPointF(-half_w, -half_h), "resize_n": QPointF(0, -half_h), "resize_ne": QPointF(half_w, -half_h),
+            "resize_e": QPointF(half_w, 0), "resize_se": QPointF(half_w, half_h), "resize_s": QPointF(0, half_h),
+            "resize_sw": QPointF(-half_w, half_h), "resize_w": QPointF(-half_w, 0),
         }
         for action, handle in handles.items():
-            if abs(point.x() - handle.x()) <= tolerance and abs(point.y() - handle.y()) <= tolerance:
+            if abs(local.x() - handle.x()) <= 9.0 and abs(local.y() - handle.y()) <= 9.0:
                 return action
-        inner = rect.adjusted(7, 7, -7, -7)
-        if inner.contains(point):
+        if -half_w + 7 <= local.x() <= half_w - 7 and -half_h + 7 <= local.y() <= half_h - 7:
             return "move"
         return None
 
+    def _group_bounds(self) -> QRectF:
+        points: list[QPointF] = []
+        for index in self.selected_indices:
+            obj = self.objects[index]
+            half_w = obj.rect.width() / 2
+            half_h = obj.rect.height() / 2
+            for point in (QPointF(-half_w, -half_h), QPointF(half_w, -half_h), QPointF(half_w, half_h), QPointF(-half_w, half_h)):
+                points.append(self._object_local_to_scene(obj, point))
+        if not points:
+            return QRectF()
+        return QRectF(QPointF(min(point.x() for point in points), min(point.y() for point in points)), QPointF(max(point.x() for point in points), max(point.y() for point in points)))
+
     def _apply_drag(self, point: QPointF) -> None:
-        obj = self._selected_object()
-        if obj is None or self._drag_action is None:
+        if self._drag_action is None:
             return
-        dx = point.x() - self._drag_start.x()
-        dy = point.y() - self._drag_start.y()
-        rect = QRectF(self._drag_start_rect)
         if self._drag_action == "move":
-            obj.rect = rect.translated(dx, dy)
-        elif self._drag_action == "rotate":
-            center = rect.center()
-            start_angle = math.degrees(math.atan2(self._drag_start.y() - center.y(), self._drag_start.x() - center.x()))
-            current_angle = math.degrees(math.atan2(point.y() - center.y(), point.x() - center.x()))
-            obj.rotation = self._drag_start_rotation + current_angle - start_angle
-        elif self._drag_action.startswith("resize"):
-            if self._drag_action == "resize_w":
-                rect.setLeft(rect.left() + dx)
-            elif self._drag_action == "resize_e":
-                rect.setRight(rect.right() + dx)
-            elif self._drag_action == "resize_n":
-                rect.setTop(rect.top() + dy)
-            elif self._drag_action == "resize_s":
-                rect.setBottom(rect.bottom() + dy)
-            else:
-                if "w" in self._drag_action:
-                    rect.setLeft(rect.left() + dx)
-                if "e" in self._drag_action:
-                    rect.setRight(rect.right() + dx)
-                if "n" in self._drag_action:
-                    rect.setTop(rect.top() + dy)
-                if "s" in self._drag_action:
-                    rect.setBottom(rect.bottom() + dy)
-            if rect.width() < 35:
-                if "w" in self._drag_action:
-                    rect.setLeft(rect.right() - 35)
-                else:
-                    rect.setRight(rect.left() + 35)
-            if rect.height() < 35:
-                if "n" in self._drag_action:
-                    rect.setTop(rect.bottom() - 35)
-                else:
-                    rect.setBottom(rect.top() + 35)
-            obj.rect = rect.normalized()
+            delta = point - self._drag_start
+            for index in self.selected_indices:
+                self.objects[index].rect = QRectF(self._drag_start_rects[index]).translated(delta)
+            self.update()
+            return
+        if self._drag_action == "rotate":
+            start_angle = math.degrees(math.atan2(self._drag_start.y() - self._drag_group_center.y(), self._drag_start.x() - self._drag_group_center.x()))
+            current_angle = math.degrees(math.atan2(point.y() - self._drag_group_center.y(), point.x() - self._drag_group_center.x()))
+            delta_angle = current_angle - start_angle
+            for index in self.selected_indices:
+                start_rect = self._drag_start_rects[index]
+                new_center = self._drag_group_center + _rotate_vector(start_rect.center() - self._drag_group_center, delta_angle)
+                self.objects[index].rect = QRectF(new_center.x() - start_rect.width() / 2, new_center.y() - start_rect.height() / 2, start_rect.width(), start_rect.height())
+                self.objects[index].rotation = self._drag_start_rotations[index] + delta_angle
+            self.update()
+            return
+        if len(self.selected_indices) != 1 or not self._drag_action.startswith("resize"):
+            return
+        index = next(iter(self.selected_indices))
+        obj = self.objects[index]
+        start_rect = self._drag_start_rects[index]
+        start_rotation = self._drag_start_rotations[index]
+        delta_local = _rotate_vector(point - self._drag_start, -start_rotation)
+        width = start_rect.width()
+        height = start_rect.height()
+        center_shift = QPointF(0, 0)
+        if "w" in self._drag_action:
+            width = max(35.0, width - delta_local.x())
+            center_shift.setX(delta_local.x() / 2)
+        if "e" in self._drag_action:
+            width = max(35.0, width + delta_local.x())
+            center_shift.setX(delta_local.x() / 2)
+        if "n" in self._drag_action:
+            height = max(35.0, height - delta_local.y())
+            center_shift.setY(delta_local.y() / 2)
+        if "s" in self._drag_action:
+            height = max(35.0, height + delta_local.y())
+            center_shift.setY(delta_local.y() / 2)
+        new_center = start_rect.center() + _rotate_vector(center_shift, start_rotation)
+        obj.rect = QRectF(new_center.x() - width / 2, new_center.y() - height / 2, width, height)
         self.update()
 
     def mousePressEvent(self, event) -> None:  # noqa: N802
         if event.button() == Qt.LeftButton:
             point = self._to_canvas_point(event.position())
             index, action = self._hit_test_object(point)
+            ctrl = bool(event.modifiers() & Qt.ControlModifier)
             if index is None:
-                self.selected_index = None
+                if not ctrl:
+                    self.selected_indices = set()
+                    self.selection_changed.emit()
+                self._selection_origin = point
+                self._selection_rect = QRectF(point, point)
                 self._drag_action = None
                 self.update()
                 event.accept()
                 return
-            self.selected_index = index
-            if action is not None:
-                obj = self.objects[index]
+            if ctrl:
+                if index in self.selected_indices:
+                    self.selected_indices.remove(index)
+                else:
+                    self.selected_indices.add(index)
+                self.selection_changed.emit()
+            elif index not in self.selected_indices:
+                self._select_only(index)
+            obj = self.objects[index]
+            if action is not None and not obj.locked:
+                self._push_undo()
                 self._drag_action = action
                 self._drag_start = point
-                self._drag_start_rect = QRectF(obj.rect)
-                self._drag_start_rotation = obj.rotation
+                self._drag_start_rects = {selected: QRectF(self.objects[selected].rect) for selected in self.selected_indices}
+                self._drag_start_rotations = {selected: self.objects[selected].rotation for selected in self.selected_indices}
+                self._drag_group_center = self._group_bounds().center() if len(self.selected_indices) > 1 else obj.rect.center()
             self.update()
+            event.accept()
+            return
+        if event.button() == Qt.RightButton:
+            point = self._to_canvas_point(event.position())
+            index, _action = self._hit_test_object(point)
+            if index is not None and index not in self.selected_indices:
+                self._select_only(index)
+                self.update()
             event.accept()
             return
         super().mousePressEvent(event)
@@ -229,6 +451,11 @@ class EngineeringCanvas(GridCanvas):
         self.mouse_position_changed.emit(point.x(), point.y())
         if self._drag_action is not None:
             self._apply_drag(point)
+            event.accept()
+            return
+        if self._selection_origin is not None and event.buttons() & Qt.LeftButton:
+            self._selection_rect = QRectF(self._selection_origin, point).normalized()
+            self.update()
             event.accept()
             return
         _index, hover = self._hit_test_object(point)
@@ -249,7 +476,39 @@ class EngineeringCanvas(GridCanvas):
         event.accept()
 
     def mouseReleaseEvent(self, event) -> None:  # noqa: N802
+        if event.button() == Qt.LeftButton and self._selection_origin is not None:
+            if self._selection_rect is not None and self._selection_rect.width() > 6 and self._selection_rect.height() > 6:
+                selected = {index for index, obj in enumerate(self.objects) if obj.visible and self._selection_rect.intersects(self._object_scene_bounds(obj))}
+                self.selected_indices = selected
+                self.selection_changed.emit()
+            self._selection_origin = None
+            self._selection_rect = None
+            self.update()
         self._drag_action = None
+        event.accept()
+
+    def contextMenuEvent(self, event) -> None:  # noqa: N802
+        self.context_actions_requested.emit(event.globalPos())
+        event.accept()
+
+    def keyPressEvent(self, event) -> None:  # noqa: N802
+        ctrl = bool(event.modifiers() & Qt.ControlModifier)
+        shift = bool(event.modifiers() & Qt.ShiftModifier)
+        if ctrl and event.key() == Qt.Key_A:
+            self.select_all()
+        elif ctrl and event.key() == Qt.Key_C:
+            self.copy_selection()
+        elif ctrl and event.key() == Qt.Key_X:
+            self.cut_selection()
+        elif ctrl and event.key() == Qt.Key_V:
+            self.paste_selection()
+        elif ctrl and event.key() == Qt.Key_Z and not shift:
+            self.undo()
+        elif (ctrl and event.key() == Qt.Key_Y) or (ctrl and shift and event.key() == Qt.Key_Z):
+            self.redo()
+        else:
+            super().keyPressEvent(event)
+            return
         event.accept()
 
     def paintEvent(self, event) -> None:  # noqa: N802
@@ -262,9 +521,24 @@ class EngineeringCanvas(GridCanvas):
         painter.translate(-self.width() / 2, -self.height() / 2)
         self._paint_grid(painter)
         for index, obj in enumerate(self.objects):
-            self._paint_object(painter, obj)
-            if index == self.selected_index:
-                self._paint_selection_frame(painter, obj.rect)
+            if obj.visible:
+                self._paint_object(painter, obj)
+                if index in self.selected_indices and len(self.selected_indices) == 1:
+                    self._paint_selection_frame(painter, obj)
+        if len(self.selected_indices) > 1:
+            self._paint_group_selection(painter)
+        if self._selection_rect is not None:
+            fill = QColor("#2f7df6")
+            fill.setAlpha(28)
+            painter.fillRect(self._selection_rect, fill)
+            painter.setPen(QPen(QColor("#2f7df6"), 1.2, Qt.DashLine))
+            painter.drawRect(self._selection_rect)
+
+    def _object_scene_bounds(self, obj: CanvasObject) -> QRectF:
+        half_w = obj.rect.width() / 2
+        half_h = obj.rect.height() / 2
+        points = [self._object_local_to_scene(obj, point) for point in (QPointF(-half_w, -half_h), QPointF(half_w, -half_h), QPointF(half_w, half_h), QPointF(-half_w, half_h))]
+        return QRectF(QPointF(min(point.x() for point in points), min(point.y() for point in points)), QPointF(max(point.x() for point in points), max(point.y() for point in points)))
 
     def _paint_object(self, painter: QPainter, obj: CanvasObject) -> None:
         rect = obj.rect
@@ -282,32 +556,87 @@ class EngineeringCanvas(GridCanvas):
             painter.drawText(local.adjusted(10, 10, -10, -10), Qt.AlignCenter, obj.path.name)
         painter.restore()
 
-    def _paint_selection_frame(self, painter: QPainter, rect: QRectF) -> None:
+    def _paint_selection_frame(self, painter: QPainter, obj: CanvasObject) -> None:
+        rect = obj.rect
+        half_w = rect.width() / 2
+        half_h = rect.height() / 2
         select = QColor("#2f7df6")
+        painter.save()
+        painter.translate(rect.center())
+        painter.rotate(obj.rotation)
+        local = QRectF(-half_w, -half_h, rect.width(), rect.height())
         painter.setBrush(Qt.NoBrush)
         painter.setPen(QPen(select, 1.5, Qt.DashLine))
-        painter.drawRect(rect.adjusted(-5, -5, 5, 5))
-        handles = (
-            rect.topLeft(), QPointF(rect.center().x(), rect.top()), rect.topRight(),
-            QPointF(rect.right(), rect.center().y()), rect.bottomRight(), QPointF(rect.center().x(), rect.bottom()),
-            rect.bottomLeft(), QPointF(rect.left(), rect.center().y()),
-        )
+        painter.drawRect(local.adjusted(-5, -5, 5, 5))
+        handles = (QPointF(-half_w, -half_h), QPointF(0, -half_h), QPointF(half_w, -half_h), QPointF(half_w, 0), QPointF(half_w, half_h), QPointF(0, half_h), QPointF(-half_w, half_h), QPointF(-half_w, 0))
         painter.setPen(QPen(QColor("#ffffff"), 1.0))
         painter.setBrush(select)
         for handle in handles:
             painter.drawRoundedRect(QRectF(handle.x() - 4, handle.y() - 4, 8, 8), 2, 2)
+        if obj.rotation_handle_visible:
+            rotate_center = QPointF(0, -half_h - 34)
+            painter.setPen(QPen(select, 1.2, Qt.DashLine))
+            painter.drawLine(QPointF(0, -half_h - 5), QPointF(0, rotate_center.y() + 13))
+            painter.setBrush(QColor("#fff9de"))
+            painter.setPen(QPen(QColor("#7e5b10"), 1.4))
+            painter.drawEllipse(rotate_center, 13, 13)
+            _paint_rotation_arc(painter, rotate_center, 7.2, QColor("#ff8a35"))
+        painter.restore()
+
+    def _paint_group_selection(self, painter: QPainter) -> None:
+        rect = self._group_bounds().adjusted(-6, -6, 6, 6)
+        painter.setBrush(Qt.NoBrush)
+        painter.setPen(QPen(QColor("#2f7df6"), 1.5, Qt.DashLine))
+        painter.drawRoundedRect(rect, 4, 4)
         rotate_center = QPointF(rect.center().x(), rect.top() - 34)
-        painter.setPen(QPen(select, 1.2, Qt.DashLine))
-        painter.drawLine(QPointF(rect.center().x(), rect.top() - 5), QPointF(rotate_center.x(), rotate_center.y() + 13))
+        painter.setPen(QPen(QColor("#2f7df6"), 1.2, Qt.DashLine))
+        painter.drawLine(QPointF(rect.center().x(), rect.top()), QPointF(rotate_center.x(), rotate_center.y() + 13))
         painter.setBrush(QColor("#fff9de"))
         painter.setPen(QPen(QColor("#7e5b10"), 1.4))
         painter.drawEllipse(rotate_center, 13, 13)
-        _paint_rotation_glyph(painter, rotate_center, 7.4, QColor("#ff8a35"))
+        _paint_rotation_arc(painter, rotate_center, 7.2, QColor("#ff8a35"))
+
+
+class SaveOptionsDialog(QDialog):
+    def __init__(self, parent: QWidget, options: dict[str, bool]) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Save Options")
+        self.setWindowFlag(Qt.FramelessWindowHint)
+        self.selected = dict(options)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(14, 14, 14, 14)
+        title = QLabel("Save Options")
+        title.setObjectName("PanelTitle")
+        layout.addWidget(title)
+        self.save_grid = QCheckBox("Save Grid")
+        self.save_grid.setChecked(self.selected.get("save_grid", False))
+        self.remove_background = QCheckBox("Remove White Background")
+        self.remove_background.setChecked(self.selected.get("remove_white_background", False))
+        layout.addWidget(self.save_grid)
+        layout.addWidget(self.remove_background)
+        row = QHBoxLayout()
+        row.addStretch(1)
+        apply_button = QPushButton("Continue")
+        apply_button.setObjectName("PageButton")
+        cancel_button = QPushButton("Cancel")
+        cancel_button.setObjectName("PageButton")
+        apply_button.clicked.connect(self.accept)
+        cancel_button.clicked.connect(self.reject)
+        row.addWidget(apply_button)
+        row.addWidget(cancel_button)
+        layout.addLayout(row)
+
+    def accept(self) -> None:  # noqa: D102
+        self.selected["save_grid"] = self.save_grid.isChecked()
+        self.selected["remove_white_background"] = self.remove_background.isChecked()
+        super().accept()
 
 
 class EngineeringDesignWorkspace(ModuleWindow):
     def __init__(self, module: LauncherModule) -> None:
         self._start_bar_tool_state: dict[str, bool] = {}
+        self._layer_list_layout: QVBoxLayout | None = None
+        self._save_options = {"save_grid": False, "remove_white_background": False}
         super().__init__(module)
         self._layers = []
         self._refresh_layers()
@@ -330,12 +659,120 @@ class EngineeringDesignWorkspace(ModuleWindow):
         self._canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self._canvas.mouse_position_changed.connect(self._update_canvas_coordinates)
         self._canvas.context_actions_requested.connect(self._show_canvas_context_menu)
+        self._canvas.objects_changed.connect(self._refresh_layers)
+        self._canvas.selection_changed.connect(self._refresh_layers)
         canvas_layout.addWidget(self._canvas, 1)
         layout.addWidget(canvas_shell, 1)
         properties = self._build_side_panel("Properties", ("Selection", "Coordinates", "Size", "Style", "Behavior"))
         properties.setFixedWidth(220)
         layout.addWidget(properties)
         return area
+
+    def _build_layers_panel(self) -> QWidget:
+        panel = QWidget()
+        panel.setObjectName("SidePanel")
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(8)
+        title = QLabel("Layers")
+        title.setObjectName("PanelTitle")
+        layout.addWidget(title)
+        self._layer_list_layout = QVBoxLayout()
+        self._layer_list_layout.setSpacing(5)
+        layout.addLayout(self._layer_list_layout)
+        layout.addStretch(1)
+        return panel
+
+    def _refresh_layers(self) -> None:
+        if self._layer_list_layout is None:
+            return
+        while self._layer_list_layout.count():
+            item = self._layer_list_layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.setParent(None)
+                widget.deleteLater()
+        canvas = self._canvas if isinstance(getattr(self, "_canvas", None), EngineeringCanvas) else None
+        if canvas is None or not canvas.objects:
+            empty = QLabel("No layers")
+            empty.setObjectName("PanelItem")
+            empty.setFixedHeight(28)
+            self._layer_list_layout.addWidget(empty)
+            return
+        for index, obj in enumerate(canvas.objects):
+            row = QWidget()
+            row.setObjectName("LayerRow")
+            row_layout = QHBoxLayout(row)
+            row_layout.setContentsMargins(0, 0, 0, 0)
+            row_layout.setSpacing(4)
+            row_layout.addWidget(self._layer_button("Show" if obj.visible else "Hide", "Show", lambda checked=False, i=index: canvas.toggle_object_visible(i)))
+            row_layout.addWidget(self._layer_button("Lock" if not obj.locked else "Unlock", "Lock", lambda checked=False, i=index: canvas.toggle_object_locked(i)))
+            row_layout.addWidget(self._layer_button("Rotate", "Rotate Handle", lambda checked=False, i=index: canvas.toggle_object_rotation_handle(i)))
+            name = QLabel(("G " if obj.group_id is not None else "") + obj.name)
+            name.setObjectName("PanelItem")
+            name.setMinimumHeight(26)
+            if index in canvas.selected_indices:
+                name.setStyleSheet("border:1px solid #2f7df6; border-radius:6px; padding-left:6px; background:#eef6ff;")
+            row_layout.addWidget(name, 1)
+            self._layer_list_layout.addWidget(row)
+
+    def _layer_button(self, text: str, tooltip: str, callback) -> QPushButton:
+        button = QPushButton(text[:1])
+        button.setObjectName("LayerIconButton")
+        button.setToolTip(tooltip)
+        button.setFixedSize(24, 24)
+        button.clicked.connect(callback)
+        return button
+
+    def _build_start_bar(self) -> QWidget:
+        bar = super()._build_start_bar()
+        layout = bar.layout()
+        if layout is not None:
+            layout.insertWidget(0, self._start_bar_action_button("Redo", self._build_history_icon("redo"), self._redo))
+            layout.insertWidget(0, self._start_bar_action_button("Undo", self._build_history_icon("undo"), self._undo))
+        self._start_bar_tool_state = {tool.key: True for tool in self.get_start_bar_tools()}
+        return bar
+
+    def _start_bar_action_button(self, tooltip: str, icon: QIcon, callback) -> QPushButton:
+        button = QPushButton()
+        button.setObjectName("ToolIconButton")
+        button.setToolTip(tooltip)
+        button.setIcon(icon)
+        button.setIconSize(QSize(22, 22))
+        button.setFixedSize(38, 30)
+        button.clicked.connect(callback)
+        return button
+
+    def _build_history_icon(self, direction: str) -> QIcon:
+        pixmap = QPixmap(42, 42)
+        pixmap.fill(Qt.transparent)
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.Antialiasing, True)
+        color = QColor("#1c62b7") if direction == "undo" else QColor("#2fbf9f")
+        painter.setPen(QPen(color, 3.0, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+        rect = QRectF(10, 10, 22, 22)
+        if direction == "undo":
+            painter.drawArc(rect, 35 * 16, 280 * 16)
+            arrow = QPolygonF([QPointF(10, 18), QPointF(18, 13), QPointF(17, 23)])
+        else:
+            painter.drawArc(rect, 145 * 16, -280 * 16)
+            arrow = QPolygonF([QPointF(32, 18), QPointF(24, 13), QPointF(25, 23)])
+        painter.setBrush(color)
+        painter.drawPolygon(arrow)
+        painter.end()
+        return QIcon(pixmap)
+
+    def _undo(self) -> None:
+        if isinstance(self._canvas, EngineeringCanvas) and self._canvas.undo():
+            self._set_status("Undo")
+            return
+        self._set_status("Nothing to undo")
+
+    def _redo(self) -> None:
+        if isinstance(self._canvas, EngineeringCanvas) and self._canvas.redo():
+            self._set_status("Redo")
+            return
+        self._set_status("Nothing to redo")
 
     def _copy(self) -> None:
         if isinstance(self._canvas, EngineeringCanvas) and self._canvas.copy_selection():
@@ -351,14 +788,12 @@ class EngineeringDesignWorkspace(ModuleWindow):
 
     def _paste(self) -> None:
         if isinstance(self._canvas, EngineeringCanvas) and self._canvas.paste_selection():
-            self._add_layer("Pasted Object")
             self._set_status("Paste")
             return
         super()._paste()
 
     def _repeat_last_tools(self) -> None:
         if isinstance(self._canvas, EngineeringCanvas) and self._canvas.repeat_last_action():
-            self._add_layer("Repeated Object")
             self._set_status("Repeat")
             return
         super()._repeat_last_tools()
@@ -370,113 +805,125 @@ class EngineeringDesignWorkspace(ModuleWindow):
         super()._select_all()
 
     def _bring_to_front(self) -> None:
-        if isinstance(self._canvas, EngineeringCanvas):
-            self._canvas.bring_to_front()
-        self._set_status("Bring to Front")
+        if isinstance(self._canvas, EngineeringCanvas) and self._canvas.bring_to_front():
+            self._set_status("Bring to Front")
+            return
+        self._set_status("No selected object")
 
     def _send_to_back(self) -> None:
-        if isinstance(self._canvas, EngineeringCanvas):
-            self._canvas.send_to_back()
-        self._set_status("Send to Back")
+        if isinstance(self._canvas, EngineeringCanvas) and self._canvas.send_to_back():
+            self._set_status("Send to Back")
+            return
+        self._set_status("No selected object")
 
-    def _build_start_bar(self) -> QWidget:
-        bar = super()._build_start_bar()
-        self._start_bar_tool_state = {tool.key: True for tool in self.get_start_bar_tools()}
-        return bar
+    def _group_selection(self) -> None:
+        if isinstance(self._canvas, EngineeringCanvas) and self._canvas.group_selection():
+            self._set_status("Group")
+            return
+        self._set_status("Select at least two objects to group")
 
-    def _build_status_bar(self) -> QWidget:
-        bar = QWidget()
-        bar.setObjectName("StatusBar")
-        bar.setFixedHeight(34)
-        layout = QHBoxLayout(bar)
-        layout.setContentsMargins(14, 0, 14, 0)
-        layout.setSpacing(12)
-        self._status_items = []
+    def _ungroup_selection(self) -> None:
+        if isinstance(self._canvas, EngineeringCanvas) and self._canvas.ungroup_selection():
+            self._set_status("Ungroup")
+            return
+        self._set_status("No selected group")
 
-        tool_item = QLabel("Tool Select: Ready")
-        tool_item.setObjectName("StatusItem")
-        layout.addWidget(tool_item)
-        self._status_items.append(tool_item)
+    def _rotate_selection(self) -> None:
+        if isinstance(self._canvas, EngineeringCanvas) and self._canvas.toggle_rotation_handles():
+            self._set_status("Rotate handle toggled")
+            return
+        self._set_status("No selected object")
 
-        coordinate_item = QLabel("X: 0  Y: 0")
-        coordinate_item.setObjectName("StatusItem")
-        layout.addWidget(coordinate_item)
-        self._status_items.append(coordinate_item)
+    def _show_canvas_context_menu(self, global_pos: QPoint) -> None:
+        menu = QMenu(self)
+        for label, callback in (("Repeat", self._repeat_last_tools), ("Copy", self._copy), ("Cut", self._cut), ("Paste", self._paste), ("Rotate", self._rotate_selection), ("Bring to Front", self._bring_to_front), ("Send to Back", self._send_to_back), ("Group", self._group_selection), ("Ungroup", self._ungroup_selection)):
+            if label in {"Rotate", "Group"}:
+                menu.addSeparator()
+            action = QAction(label, self)
+            action.triggered.connect(lambda checked=False, selected_callback=callback: selected_callback())
+            menu.addAction(action)
+        menu.exec(global_pos)
 
-        unit_item = QLabel("Unit: mm")
-        unit_item.setObjectName("StatusItem")
-        layout.addWidget(unit_item)
-        self._status_items.append(unit_item)
+    def _save(self):
+        path = getattr(self, "_current_file_path", None) or getattr(self, "current_file_path", None)
+        if not path:
+            return self._save_as()
+        parent_save = getattr(super(), "_save", None) or getattr(super(), "_save_file", None)
+        if parent_save is not None:
+            return parent_save()
+        self._set_status("Save")
+        return True
 
-        layout.addStretch(1)
-        zoom_label = QLabel("Zoom:")
-        zoom_label.setObjectName("StatusItem")
-        layout.addWidget(zoom_label)
-        layout.addWidget(self._build_zoom_control())
-        return bar
+    def _save_file(self):
+        return self._save()
+
+    def _save_as(self):
+        if not self._capture_save_options():
+            self._set_status("Save As canceled")
+            return False
+        parent_save_as = getattr(super(), "_save_as", None) or getattr(super(), "_save_file_as", None)
+        if parent_save_as is not None:
+            return parent_save_as()
+        self._set_status("Save As")
+        return True
+
+    def _save_file_as(self):
+        return self._save_as()
+
+    def _capture_save_options(self) -> bool:
+        dialog = SaveOptionsDialog(self, self._save_options)
+        if dialog.exec() != QDialog.Accepted:
+            return False
+        self._save_options = dialog.selected
+        return True
 
     def _build_zoom_control(self) -> QWidget:
         control = QWidget()
         control.setObjectName("ZoomControl")
-        control.setFixedSize(126, 28)
         control_layout = QHBoxLayout(control)
         control_layout.setContentsMargins(0, 0, 0, 0)
         control_layout.setSpacing(2)
         self._zoom_input = QDoubleSpinBox()
         self._zoom_input.setObjectName("ZoomInput")
         self._zoom_input.setButtonSymbols(QAbstractSpinBox.NoButtons)
-        self._zoom_input.setRange(5.0, 3200.0)
+        self._zoom_input.setRange(10.0, 800.0)
         self._zoom_input.setDecimals(2)
         self._zoom_input.setSingleStep(5.0)
         self._zoom_input.setValue(100.0)
         self._zoom_input.setSuffix(" %")
         self._zoom_input.setFixedSize(92, 26)
-        self._zoom_input.setStyleSheet(
-            "QDoubleSpinBox#ZoomInput {background:#fff9de; border:1px solid #b38621; border-radius:8px;"
-            "color:#132238; font-size:11px; font-style:normal; font-weight:700; padding:2px 6px; selection-background-color:#43d3bd; }"
-        )
+        self._zoom_input.setStyleSheet("QDoubleSpinBox#ZoomInput {background:#fff9de; border:1px solid #b38621; border-radius:8px;color:#132238; font-size:11px; font-style:normal; font-weight:700; padding:2px 6px; selection-background-color:#43d3bd; }")
         self._zoom_input.valueChanged.connect(self._set_zoom)
         control_layout.addWidget(self._zoom_input)
         arrows = QWidget()
         arrows.setObjectName("ZoomArrowStack")
         arrows_layout = QVBoxLayout(arrows)
         arrows_layout.setContentsMargins(0, 0, 0, 0)
-        arrows_layout.setSpacing(2)
-        up_button = self._build_zoom_arrow_button("up")
-        down_button = self._build_zoom_arrow_button("down")
-        up_button.clicked.connect(lambda: self._zoom_input.stepUp())
-        down_button.clicked.connect(lambda: self._zoom_input.stepDown())
-        arrows_layout.addWidget(up_button)
-        arrows_layout.addWidget(down_button)
+        arrows_layout.setSpacing(1)
+        arrows_layout.addWidget(self._build_zoom_arrow_button("up"))
+        arrows_layout.addWidget(self._build_zoom_arrow_button("down"))
         control_layout.addWidget(arrows)
         return control
 
     def _build_zoom_arrow_button(self, direction: str) -> QPushButton:
         button = QPushButton()
         button.setObjectName("ZoomArrowButton")
-        button.setFixedSize(28, 12)
+        button.setFixedSize(24, 12)
         button.setIcon(self._build_zoom_arrow_icon(direction))
         button.setIconSize(QSize(22, 10))
         button.setToolTip("Zoom in" if direction == "up" else "Zoom out")
-        button.setStyleSheet(
-            "QPushButton#ZoomArrowButton {background:qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #fff9de, stop:1 #ffc35a);"
-            "border:1px solid #7e5b10; border-radius:4px; padding:0px; }"
-            "QPushButton#ZoomArrowButton:hover { background:#ff8a35; border-color:#ffffff; }"
-            "QPushButton#ZoomArrowButton:pressed { background:#d46a16; padding-top:1px; }"
-        )
+        button.setStyleSheet("QPushButton#ZoomArrowButton {background:qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #fff9de, stop:1 #ffc35a);border:1px solid #7e5b10; border-radius:4px; padding:0px; }QPushButton#ZoomArrowButton:hover { background:#ff8a35; border-color:#ffffff; }QPushButton#ZoomArrowButton:pressed { background:#d46a16; padding-top:1px; }")
+        button.clicked.connect(lambda checked=False, step=5.0 if direction == "up" else -5.0: self._set_zoom(self._zoom_input.value() + step))
         return button
 
     def _build_zoom_arrow_icon(self, direction: str) -> QIcon:
         pixmap = QPixmap(22, 10)
-        pixmap.fill(Qt.GlobalColor.transparent)
+        pixmap.fill(Qt.transparent)
         painter = QPainter(pixmap)
         painter.setRenderHint(QPainter.Antialiasing, True)
-        painter.setPen(QPen(QColor("#ffffff"), 0.9))
+        painter.setPen(Qt.NoPen)
         painter.setBrush(QColor("#132238"))
-        if direction == "up":
-            points = QPolygonF([QPointF(11, 1), QPointF(20, 9), QPointF(2, 9)])
-        else:
-            points = QPolygonF([QPointF(2, 1), QPointF(20, 1), QPointF(11, 9)])
+        points = QPolygonF([QPointF(11, 1), QPointF(18, 8), QPointF(4, 8)]) if direction == "up" else QPolygonF([QPointF(4, 2), QPointF(18, 2), QPointF(11, 9)])
         painter.drawPolygon(points)
         painter.end()
         return QIcon(pixmap)
@@ -488,9 +935,8 @@ class EngineeringDesignWorkspace(ModuleWindow):
         self._show_menu("View", tuple(items), anchor)
 
     def _toggle_start_bar_tool(self, key: str) -> None:
-        visible = not self._start_bar_tool_state.get(key, True)
-        self._start_bar_tool_state[key] = visible
-        if self._start_bar_widget is not None and hasattr(self._start_bar_widget, "set_tool_visible"):
-            self._start_bar_widget.set_tool_visible(key, visible)
-        label = next((tool.label for tool in self.get_start_bar_tools() if tool.key == key), key)
-        self._set_status(f"{label} {'shown on' if visible else 'removed from'} Start Bar")
+        self._start_bar_tool_state[key] = not self._start_bar_tool_state.get(key, True)
+        for button in getattr(self, "_start_bar_buttons", []):
+            if button.property("tool_key") == key:
+                button.setVisible(self._start_bar_tool_state[key])
+        self._set_status(f"{key.replace('_', ' ').title()} {'shown' if self._start_bar_tool_state[key] else 'hidden'}")
