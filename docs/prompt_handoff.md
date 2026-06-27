@@ -13,8 +13,15 @@ docs/prompt_handoff.md
 modules/mechanics_dynamics_statics/README.md
 
 قانون اصلی:
-فعلاً فقط پروژه Engineering Design Tools فعال است.
-برای پروژه‌های دیگر فایل یا پنجره جدا نساز مگر اینکه کاربر صریحاً دستور بدهد.
+لانچر باید کامل باقی بماند و پنج کارت اصلی را نشان دهد:
+Engineering Design Tools
+Circuit Design
+Flowcharts
+Barcode
+Background
+
+تمرکز فعلی طراحی فقط روی Engineering Design Tools است، اما این موضوع به معنی حذف کارت‌های دیگر یا ساده‌سازی لانچر نیست.
+برای پروژه‌های دیگر فقط placeholder موجود را نگه دار و طراحی نهایی نساز مگر اینکه کاربر صریحاً دستور بدهد.
 
 فایل نصب:
 install_from_github.cmd
@@ -32,6 +39,9 @@ fallback:
 
 لانچر:
 src/engineers_tools/app/launcher_window.py
+
+کامپوننت کارت گرافیکی لانچر:
+src/engineers_tools/ui/launcher_button.py
 
 کنترلر:
 src/engineers_tools/app/controller.py
