@@ -1,0 +1,1 @@
+"""Barcode Designer module placeholder."""
