@@ -20,6 +20,8 @@ class EngineeringDesignWorkspace(ModuleWindow):
     def __init__(self, module: LauncherModule) -> None:
         self._start_bar_tool_state: dict[str, bool] = {}
         super().__init__(module)
+        self._layers = []
+        self._refresh_layers()
 
     def _build_start_bar(self) -> QWidget:
         bar = super()._build_start_bar()
