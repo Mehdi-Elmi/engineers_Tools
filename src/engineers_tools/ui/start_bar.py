@@ -37,6 +37,7 @@ class StartBar(QWidget):
         self.setObjectName("StartBar")
         self.setFixedHeight(58)
         self.tools = tools
+        self._buttons: dict[str, QPushButton] = {}
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(14, 8, 14, 8)
@@ -48,6 +49,16 @@ class StartBar(QWidget):
             button.setToolTip(tool.tooltip)
             button.setProperty("toolKey", tool.key)
             button.setProperty("propertiesSchema", tool.properties_schema)
+            self._buttons[tool.key] = button
             layout.addWidget(button)
 
         layout.addStretch(1)
+
+    def set_tool_visible(self, key: str, visible: bool) -> None:
+        button = self._buttons.get(key)
+        if button is not None:
+            button.setVisible(visible)
+
+    def is_tool_visible(self, key: str) -> bool:
+        button = self._buttons.get(key)
+        return bool(button is not None and button.isVisible())
