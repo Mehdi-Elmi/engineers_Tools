@@ -6,8 +6,8 @@ provide a different tool list while keeping the same visual and behavioral shell
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from collections.abc import Callable
+from dataclasses import dataclass
 
 from PySide6.QtCore import QPoint, QPointF, QRectF, QSize, Signal, Qt
 from PySide6.QtGui import QColor, QIcon, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap, QPolygonF
@@ -86,7 +86,7 @@ def _tool_icon(key: str) -> QIcon:
         "text": "#d8b6ff",
         "grid": "#b8d4ef",
         "snap": "#93d6bd",
-        "unit": "#ffd36e",
+        "unit": "#78e1cf",
         "ruler": "#ffc35a",
         "zoom": "#9bc8ff",
     }
@@ -132,33 +132,36 @@ def _tool_icon(key: str) -> QIcon:
         painter.drawEllipse(QPointF(18, 12), 2.5, 2.5)
     elif key == "unit":
         painter.save()
-        ruler = QPainterPath()
-        ruler.addRoundedRect(QRectF(8, 20, 21, 7), 2, 2)
-        ruler_gradient = QLinearGradient(8, 20, 29, 27)
-        ruler_gradient.setColorAt(0.0, QColor("#ffffff"))
-        ruler_gradient.setColorAt(1.0, QColor("#ffbf45"))
-        painter.fillPath(ruler, ruler_gradient)
-        painter.setPen(QPen(QColor("#7e5b10"), 1.0, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
-        painter.drawPath(ruler)
-        for index, x in enumerate((11, 15, 19, 23, 27)):
-            painter.drawLine(QPointF(x, 20), QPointF(x, 25 if index % 2 == 0 else 23))
-        tag = QPainterPath()
-        tag.addRoundedRect(QRectF(7, 8, 22, 13), 4, 4)
-        tag_gradient = QLinearGradient(7, 8, 29, 21)
-        tag_gradient.setColorAt(0.0, QColor("#ffffff"))
-        tag_gradient.setColorAt(0.55, QColor("#fff4cf"))
-        tag_gradient.setColorAt(1.0, QColor("#43d3bd"))
-        painter.fillPath(tag, tag_gradient)
-        painter.setPen(QPen(QColor("#315d70"), 1.0))
-        painter.drawPath(tag)
+        body = QPainterPath()
+        body.addRoundedRect(QRectF(7, 8, 22, 20), 5, 5)
+        body_gradient = QLinearGradient(7, 8, 29, 28)
+        body_gradient.setColorAt(0.0, QColor("#ffffff"))
+        body_gradient.setColorAt(0.52, QColor("#e9fff9"))
+        body_gradient.setColorAt(1.0, QColor("#38c9b5"))
+        painter.fillPath(body, body_gradient)
+        painter.setPen(QPen(QColor("#2e6574"), 1.05))
+        painter.drawPath(body)
+
+        painter.setPen(QPen(QColor("#132238"), 1.65, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+        painter.drawLine(QPointF(10, 22), QPointF(26, 22))
+        painter.drawLine(QPointF(10, 22), QPointF(10, 15))
+        painter.drawLine(QPointF(26, 22), QPointF(26, 15))
+        for index, x in enumerate((13, 16, 19, 22)):
+            painter.drawLine(QPointF(x, 22), QPointF(x, 17 if index % 2 == 0 else 19))
+
+        painter.setPen(QPen(QColor("#ff8a35"), 1.7, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+        painter.drawLine(QPointF(11, 12), QPointF(25, 12))
+        _draw_arrow_head(painter, QPointF(11, 12), QPointF(16, 12), 3.8)
+        _draw_arrow_head(painter, QPointF(25, 12), QPointF(20, 12), 3.8)
+
         font = painter.font()
         font.setFamily("Times New Roman")
         font.setBold(True)
         font.setItalic(False)
-        font.setPointSize(9)
+        font.setPointSize(7)
         painter.setFont(font)
-        painter.setPen(QPen(ink, 1.0))
-        painter.drawText(QRectF(7, 7, 22, 14), Qt.AlignCenter, "mm")
+        painter.setPen(QPen(QColor("#132238"), 1.0))
+        painter.drawText(QRectF(9, 23, 18, 7), Qt.AlignCenter, "mm")
         painter.restore()
     elif key == "ruler":
         painter.drawRoundedRect(QRectF(8, 12, 21, 11), 2, 2)
@@ -266,6 +269,7 @@ class StartBar(QWidget):
         layout.addWidget(heading)
         shell.setStyleSheet(
             "QWidget#StartToolPopupShell {background:qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 #ffffff, stop:0.48 #eef8ff, stop:1 #fff3d4); border:1px solid #8fa2bb; border-radius:12px;}"
+            "QLabel {background:transparent; color:#1f3148;}"
             "QLabel#StartToolPopupTitle {background:transparent; color:#132238; font-size:12px; font-style:italic; font-weight:900; padding:2px 4px;}"
             "QPushButton#PopupChoice {background:rgba(255,255,255,210); border:1px solid #b8c5d4; border-left:3px solid #43d3bd; border-radius:7px; color:#1f3148; font-size:12px; font-style:italic; font-weight:800; padding:5px 9px; text-align:left;}"
             "QPushButton#PopupChoice:hover {background:#fff4cf; border-color:#ff8a35; border-left-color:#d91f5c;}"
