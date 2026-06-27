@@ -281,7 +281,8 @@ class ProjectFileDialog(QDialog):
             item = QListWidgetItem(self._icon_provider.icon(QFileInfo(str(path))), label)
             item.setData(Qt.UserRole, str(path))
             self._places.addItem(item)
-        this_pc = QListWidgetItem(self._icon_provider.icon(QFileIconProvider.Computer), "This PC")
+        computer_icon = self._icon_provider.icon(QFileIconProvider.IconType.Computer)
+        this_pc = QListWidgetItem(computer_icon, "This PC")
         this_pc.setData(Qt.UserRole, "__THIS_PC__")
         self._places.addItem(this_pc)
 
