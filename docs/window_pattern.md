@@ -18,22 +18,38 @@ Mehdi-Elmi/engineers_Tools
 
 - `TopBar`: نوار سرمه‌ای بالا با لوگو، عنوان، minimize، maximize و close.
 - `CommandBar`: منوهای `Home`, `File`, `Edit`, `View`, `Insert`, `Draw`, `Modify`.
-- `StartBar`: نوار ابزار سریع؛ ابزارهای بعدی اول اینجا تعریف می‌شوند.
+- `StartBar`: نوار ابزار سریع؛ ساختار آن در فایل جدا نگهداری می‌شود.
 - `Properties`: پنل تنظیمات ابزار یا آبجکت انتخاب‌شده.
-- `GridCanvas`: بوم طراحی.
+- `GridCanvas`: بوم طراحی، بدون عنوان اضافه داخل Canvas.
 - `Layers`: پنل لایه‌ها و ساختار صفحه.
 - `PageBar`: مدیریت صفحه‌ها.
 - `StatusBar`: مختصات، zoom، unit و وضعیت tool select.
 
 ## قانون Start Bar
 
+`StartBar` باید مستقل از پنجره مادر نگهداری شود:
+
+```text
+src/engineers_tools/ui/start_bar.py
+```
+
+پنجره مادر فقط جایگاه Start Bar را می‌سازد و این فایل را صدا می‌زند. هر ماژول می‌تواند با override کردن متد زیر ابزارهای خودش را معرفی کند:
+
+```text
+get_start_bar_tools()
+```
+
 هر ابزار جدید باید:
 
+- داخل `StartBarTool` تعریف شود.
+- `key`, `label`, `tooltip` و در صورت نیاز `properties_schema` داشته باشد.
 - دکمه مشخص در Start Bar داشته باشد.
 - tooltip انگلیسی داشته باشد.
 - icon style یکسان با پروژه داشته باشد.
 - اگر آبجکت می‌سازد، Properties schema خودش را معرفی کند.
 - اگر ابزار انتخاب است، از قانون واحد Select پیروی کند.
+
+چت‌های اختصاصی هر پروژه نباید برای تغییر ابزارهای Start Bar ساختار پنجره مادر را خراب کنند. تغییر باید از `start_bar.py` یا override همان ماژول انجام شود.
 
 ## قانون Select
 
