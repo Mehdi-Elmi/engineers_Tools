@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import os
 import shutil
+import traceback
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
 from PySide6.QtCore import QFileInfo, QPoint, QPointF, QRectF, QSize, QStandardPaths, Qt
@@ -53,6 +55,25 @@ class FileDialogResult:
     path: Path
     filter_name: str
     options: dict[str, bool] | None = None
+
+
+def _runtime_log_path() -> Path:
+    local_app_data = os.environ.get("LOCALAPPDATA")
+    if local_app_data:
+        return Path(local_app_data) / "EngineerTools" / "logs" / "runtime.log"
+    return Path.home() / ".engineer_tools" / "logs" / "runtime.log"
+
+
+def _write_dialog_error(operation: str, error: BaseException) -> None:
+    try:
+        log_path = _runtime_log_path()
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        with log_path.open("a", encoding="utf-8") as log_file:
+            log_file.write(f"\n[{timestamp}] ProjectFileDialog.{operation} failed\n")
+            log_file.write("".join(traceback.format_exception(type(error), error, error.__traceback__)))
+    except OSError:
+        return
 
 
 def _option_icon(checked: bool) -> QIcon:
@@ -117,24 +138,29 @@ class ProjectFileDialog(QDialog):
             self._set_default_file_name(force=True)
 
     @classmethod
+    def _run_dialog(cls, operation: str, mode: str, parent: QWidget | None, start_dir: Path | None, filter_kind: str) -> FileDialogResult | None:
+        try:
+            dialog = cls(mode, parent, start_dir, filter_kind)
+            return dialog.selected_result if dialog.exec() == QDialog.Accepted else None
+        except Exception as error:  # noqa: BLE001 - keep GUI alive and log the real traceback.
+            _write_dialog_error(operation, error)
+            return None
+
+    @classmethod
     def get_open_file(cls, parent: QWidget | None = None, start_dir: Path | None = None) -> FileDialogResult | None:
-        dialog = cls("open", parent, start_dir, "project")
-        return dialog.selected_result if dialog.exec() == QDialog.Accepted else None
+        return cls._run_dialog("open", "open", parent, start_dir, "project")
 
     @classmethod
     def get_save_file(cls, parent: QWidget | None = None, start_dir: Path | None = None) -> FileDialogResult | None:
-        dialog = cls("save", parent, start_dir, "project")
-        return dialog.selected_result if dialog.exec() == QDialog.Accepted else None
+        return cls._run_dialog("save", "save", parent, start_dir, "project")
 
     @classmethod
     def get_import_file(cls, parent: QWidget | None = None, start_dir: Path | None = None) -> FileDialogResult | None:
-        dialog = cls("import", parent, start_dir, "office")
-        return dialog.selected_result if dialog.exec() == QDialog.Accepted else None
+        return cls._run_dialog("import", "import", parent, start_dir, "office")
 
     @classmethod
     def get_export_file(cls, parent: QWidget | None = None, start_dir: Path | None = None) -> FileDialogResult | None:
-        dialog = cls("export", parent, start_dir, "office")
-        return dialog.selected_result if dialog.exec() == QDialog.Accepted else None
+        return cls._run_dialog("export", "export", parent, start_dir, "office")
 
     def _install_shortcuts(self) -> None:
         for sequence, callback in (
@@ -443,7 +469,8 @@ class ProjectFileDialog(QDialog):
         suffixes = self._selected_suffixes()
         try:
             children = sorted(self._current_dir.iterdir(), key=lambda item: (not item.is_dir(), item.name.lower()))
-        except PermissionError:
+        except OSError as error:
+            _write_dialog_error("refresh_files", error)
             return
         for child in children:
             if child.is_file() and not self._matches_filter(child, suffixes):
@@ -462,6 +489,7 @@ class ProjectFileDialog(QDialog):
     def _build_compact_item_widget(self, label: str, icon: QIcon, object_name: str, width: int) -> QWidget:
         row = QWidget()
         row.setObjectName(object_name)
+        row.setAttribute(Qt.WA_StyledBackground, True)
         row.setProperty("selected", False)
         row.setFixedSize(width, 28)
         layout = QHBoxLayout(row)
@@ -635,7 +663,8 @@ class ProjectFileDialog(QDialog):
                 shutil.copytree(source, destination)
             else:
                 shutil.copy2(source, destination)
-        except OSError:
+        except OSError as error:
+            _write_dialog_error("paste", error)
             return
         self._refresh_files()
         self._select_path(destination)
@@ -651,7 +680,8 @@ class ProjectFileDialog(QDialog):
                 shutil.rmtree(path)
             else:
                 path.unlink()
-        except OSError:
+        except OSError as error:
+            _write_dialog_error("delete", error)
             return
         self._file_name.clear()
         self._refresh_files()
@@ -660,7 +690,8 @@ class ProjectFileDialog(QDialog):
         target = self._make_unique_path(self._current_dir / "New Folder")
         try:
             target.mkdir(parents=False, exist_ok=False)
-        except OSError:
+        except OSError as error:
+            _write_dialog_error("new_folder", error)
             return
         self._refresh_files()
         self._select_path(target)
