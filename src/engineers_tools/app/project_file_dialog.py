@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from PySide6.QtCore import QFileInfo, QPoint, QPointF, QRectF, QSize, QStandardPaths, Qt
-from PySide6.QtGui import QAction, QColor, QIcon, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap, QPolygonF, QRegion
+from PySide6.QtGui import QAction, QColor, QIcon, QKeySequence, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap, QPolygonF, QRegion, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
@@ -109,6 +109,10 @@ class ProjectFileDialog(QDialog):
         layout.addWidget(self._build_navigation_bar())
         layout.addWidget(self._build_body(), 1)
         layout.addWidget(self._build_footer())
+
+        self._delete_shortcut = QShortcut(QKeySequence(Qt.Key_Delete), self)
+        self._delete_shortcut.setContext(Qt.WindowShortcut)
+        self._delete_shortcut.activated.connect(self._delete_current_file)
 
         self._navigate_to(self._current_dir, add_history=True)
         if self.mode in {"save", "export"}:
@@ -242,6 +246,9 @@ class ProjectFileDialog(QDialog):
         self._places = QListWidget()
         self._places.setObjectName("PlacesList")
         self._places.setFixedWidth(170)
+        self._places.setFocusPolicy(Qt.NoFocus)
+        self._places.setSelectionMode(QAbstractItemView.SingleSelection)
+        self._places.setStyleSheet("QListWidget#PlacesList { outline:0; } QListWidget#PlacesList::item:selected { background:transparent; color:#1f3148; border:0; } QListWidget#PlacesList::item:focus { outline:0; border:0; }")
         self._populate_places()
         self._places.itemClicked.connect(self._place_clicked)
         layout.addWidget(self._places)
@@ -329,13 +336,8 @@ class ProjectFileDialog(QDialog):
 
     def _populate_places(self) -> None:
         for label, path in self._places_paths():
-            item = QListWidgetItem(self._icon_provider.icon(QFileInfo(str(path))), label)
-            item.setData(Qt.UserRole, str(path))
-            self._places.addItem(item)
-        computer_icon = self._icon_provider.icon(QFileIconProvider.IconType.Computer)
-        this_pc = QListWidgetItem(computer_icon, "This PC")
-        this_pc.setData(Qt.UserRole, "__THIS_PC__")
-        self._places.addItem(this_pc)
+            self._add_place_item(label, str(path), self._icon_provider.icon(QFileInfo(str(path))))
+        self._add_place_item("This PC", "__THIS_PC__", self._icon_provider.icon(QFileIconProvider.IconType.Computer))
 
     def _places_paths(self) -> list[tuple[str, Path]]:
         paths: list[tuple[str, Path]] = []
@@ -355,6 +357,14 @@ class ProjectFileDialog(QDialog):
         if one_drive and Path(one_drive).exists():
             paths.append(("OneDrive", Path(one_drive)))
         return paths
+
+    def _add_place_item(self, label: str, data: str, icon: QIcon) -> None:
+        item = QListWidgetItem("")
+        item.setData(Qt.UserRole, data)
+        item.setSizeHint(QSize(self._place_item_width(label), 30))
+        self._places.addItem(item)
+        row = self._build_compact_item_widget(label, icon, "PlaceItemRow", self._place_item_width(label))
+        self._places.setItemWidget(item, row)
 
     def _drive_paths(self) -> list[tuple[str, Path]]:
         if os.name != "nt":
@@ -414,52 +424,55 @@ class ProjectFileDialog(QDialog):
         item.setData(Qt.UserRole, str(path))
         item.setSizeHint(self._file_item_size(label))
         self._files.addItem(item)
-        row = self._build_file_item_widget(label, path)
-        row.setFixedWidth(self._file_item_size(label).width())
+        row = self._build_compact_item_widget(label, self._icon_provider.icon(QFileInfo(str(path))), "FileItemRow", self._file_item_size(label).width())
         self._files.setItemWidget(item, row)
 
-    def _build_file_item_widget(self, label: str, path: Path) -> QWidget:
+    def _build_compact_item_widget(self, label: str, icon: QIcon, object_name: str, width: int) -> QWidget:
         row = QWidget()
-        row.setObjectName("FileItemRow")
+        row.setObjectName(object_name)
         row.setProperty("selected", False)
-        row.setFixedHeight(30)
+        row.setFixedSize(width, 28)
         layout = QHBoxLayout(row)
-        layout.setContentsMargins(6, 2, 8, 2)
-        layout.setSpacing(7)
+        layout.setContentsMargins(4, 2, 5, 2)
+        layout.setSpacing(5)
         icon_label = QLabel()
-        icon_label.setObjectName("FileItemIcon")
         icon_label.setFixedSize(22, 22)
-        icon = self._icon_provider.icon(QFileInfo(str(path)))
         icon_label.setPixmap(icon.pixmap(22, 22))
+        icon_label.setStyleSheet("background:transparent; border:0;")
         layout.addWidget(icon_label)
         text = QLabel(label)
-        text.setObjectName("FileItemText")
         text.setFixedHeight(24)
-        text.setStyleSheet("background:transparent; color:#1f3148; font-style:normal; font-weight:700;")
+        text.setStyleSheet("background:transparent; color:#1f3148; font-style:normal; font-weight:700; border:0;")
         layout.addWidget(text)
-        layout.addStretch(1)
         row.setStyleSheet(
-            "QWidget#FileItemRow {background:transparent; border:1px solid transparent; border-radius:7px;}"
-            "QWidget#FileItemRow[selected=\"true\"] {background:#cfe7ff; border:1px solid #74aef2;}"
-            "QWidget#FileItemRow:hover {background:#fff3d4; border:1px solid #e8bd67;}"
+            f"QWidget#{object_name} {{background:transparent; border:0; border-radius:6px;}}"
+            f"QWidget#{object_name}[selected=\"true\"] {{background:#cfe7ff; border:0;}}"
+            f"QWidget#{object_name}:hover {{background:#fff3d4; border:0;}}"
         )
         return row
 
     def _sync_file_selection(self, selected_item: QListWidgetItem | None) -> None:
-        for row_index in range(self._files.count()):
-            item = self._files.item(row_index)
-            widget = self._files.itemWidget(item)
+        self._sync_list_selection(self._files, selected_item)
+
+    def _sync_place_selection(self, selected_item: QListWidgetItem | None) -> None:
+        self._sync_list_selection(self._places, selected_item)
+
+    def _sync_list_selection(self, list_widget: QListWidget, selected_item: QListWidgetItem | None) -> None:
+        for row_index in range(list_widget.count()):
+            item = list_widget.item(row_index)
+            widget = list_widget.itemWidget(item)
             if widget is None:
                 continue
-            is_selected = item is selected_item
-            widget.setProperty("selected", is_selected)
+            widget.setProperty("selected", item is selected_item)
             widget.style().unpolish(widget)
             widget.style().polish(widget)
             widget.update()
 
     def _file_item_size(self, name: str) -> QSize:
-        width = max(120, min(360, self.fontMetrics().horizontalAdvance(name) + 64))
-        return QSize(width, 32)
+        return QSize(max(44, min(520, self.fontMetrics().horizontalAdvance(name) + 35)), 30)
+
+    def _place_item_width(self, name: str) -> int:
+        return max(44, min(150, self.fontMetrics().horizontalAdvance(name) + 35))
 
     def _file_type_changed(self, _index: int) -> None:
         if self.mode in {"save", "export"} and (not self._file_name.text().strip() or self._file_name.text().startswith("EngineerTools")):
@@ -488,6 +501,8 @@ class ProjectFileDialog(QDialog):
         return ".*" in suffixes or path.suffix.lower() in suffixes
 
     def _place_clicked(self, item: QListWidgetItem) -> None:
+        self._places.setCurrentItem(item)
+        self._sync_place_selection(item)
         data = str(item.data(Qt.UserRole))
         if data == "__THIS_PC__":
             self._show_this_pc()
@@ -512,12 +527,19 @@ class ProjectFileDialog(QDialog):
         if self.mode in {"open", "import"}:
             self._accept_selection()
 
+    def _selected_file_path(self) -> Path | None:
+        item = self._files.currentItem()
+        if item is None:
+            return None
+        data = item.data(Qt.UserRole)
+        return Path(data) if data else None
+
     def _show_files_context_menu(self, position: QPoint) -> None:
         item = self._files.itemAt(position)
         if item is not None:
             self._files.setCurrentItem(item)
             self._sync_file_selection(item)
-        selected_path = Path(item.data(Qt.UserRole)) if item is not None else None
+        selected_path = Path(item.data(Qt.UserRole)) if item is not None else self._selected_file_path()
         menu = QMenu(self)
         menu.setObjectName("ProjectContextMenu")
         menu.setStyleSheet(
@@ -531,9 +553,9 @@ class ProjectFileDialog(QDialog):
         cut_action = QAction("Cut", self)
         paste_action = QAction("Paste", self)
         delete_action = QAction("Delete", self)
-        copy_action.setEnabled(selected_path is not None)
-        cut_action.setEnabled(selected_path is not None)
-        delete_action.setEnabled(selected_path is not None)
+        copy_action.setEnabled(selected_path is not None and selected_path.exists())
+        cut_action.setEnabled(selected_path is not None and selected_path.exists())
+        delete_action.setEnabled(selected_path is not None and selected_path.exists())
         paste_action.setEnabled(ProjectFileDialog._pending_file_action is not None)
         copy_action.triggered.connect(lambda checked=False, path=selected_path: self._remember_file_action("copy", path))
         cut_action.triggered.connect(lambda checked=False, path=selected_path: self._remember_file_action("cut", path))
@@ -570,6 +592,9 @@ class ProjectFileDialog(QDialog):
         except OSError:
             return
         self._refresh_files()
+
+    def _delete_current_file(self) -> None:
+        self._delete_file_action(self._selected_file_path())
 
     def _delete_file_action(self, path: Path | None) -> None:
         if path is None or not path.exists():
@@ -650,9 +675,7 @@ class ProjectFileDialog(QDialog):
             event.accept()
             return
         if event.key() == Qt.Key_Delete:
-            item = self._files.currentItem()
-            path = Path(item.data(Qt.UserRole)) if item is not None else None
-            self._delete_file_action(path)
+            self._delete_current_file()
             event.accept()
             return
         super().keyPressEvent(event)
