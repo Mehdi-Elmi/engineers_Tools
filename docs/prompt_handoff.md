@@ -59,9 +59,25 @@ src/engineers_tools/app/theme.py
 TopBar و StatusBar باید سرمه‌ای هماهنگ باشند.
 StatusBar باید گوشه‌های پایین را گرد کند.
 Close باید علامت واقعی × باشد، نه x.
-Home باید دکمه گرافیکی با آیکن خانه باشد.
-File/Edit/View/Insert/Draw/Modify باید متن ساده شبیه منوی ویندوز باشند، نه دکمه برجسته.
+Home باید دکمه گرافیکی واضح با آیکن خانه سه‌بعدی باشد.
+File/Edit/View/Insert/Draw/Help باید متن ساده شبیه منوی ویندوز باشند، نه دکمه برجسته.
+Modify حذف شده و نباید بدون دستور جدید کاربر برگردد.
 Add Page و دکمه‌های Yes/No/Apply/Confirm باید از الگوی ConfirmButton استفاده کنند.
+هر پنجره، دیالوگ و منوی بازشونده باید گوشه گرد و ظاهر هماهنگ با پروژه داشته باشد.
+
+منوهای ثابت پنجره مادر:
+File: New, Open, Save, Save As, Page Setup, Print Setup, Import, Export, Properties
+Edit: Undo, Redo, Cut, Copy, Paste, Delete, Repeat Last Tool, Select All, Group, Ungroup, Move
+View: Start Bar, Grid, Ruler, Snap
+Insert: Image, Text
+Draw: فعلاً خالی است.
+Help: Shortcuts, About
+
+قانون عملکرد منوها:
+Undo/Redo/Cut/Copy/Paste/Select All اگر ویجت فعال عملیات واقعی داشته باشد همان را اجرا می‌کند.
+Grid واقعاً Canvas را روشن و خاموش می‌کند.
+Start Bar واقعاً نوار ابزار سریع را روشن و خاموش می‌کند.
+Ruler, Snap, Repeat Last Tool, Group, Ungroup, Move تا زمان ساخت موتور آبجکت‌ها وضعیت را در StatusBar اعلام می‌کنند و بعداً به منطق واقعی وصل می‌شوند.
 
 قانون Minimize/Maximize:
 پنجره‌های ماژول frameless هستند.
