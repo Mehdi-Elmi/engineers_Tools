@@ -52,6 +52,12 @@ src/engineers_tools/app/modules.py
 پنجره مادر:
 src/engineers_tools/app/module_window.py
 
+قانون Minimize/Maximize:
+پنجره‌های ماژول frameless هستند.
+minimize باید از _minimize_window استفاده کند.
+maximize باید دستی با screen.availableGeometry انجام شود، نه فقط showMaximized ساده.
+restore باید از _normal_geometry استفاده کند.
+
 Start Bar مشترک:
 src/engineers_tools/ui/start_bar.py
 
