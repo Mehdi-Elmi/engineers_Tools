@@ -95,6 +95,27 @@ modules.mechanics_dynamics_statics.module_entry:create_window
 modules/mechanics_dynamics_statics/workspace.py
 ```
 
+## قانون `__init__.py`
+
+فایل `__init__.py` برای این است که Python یک پوشه را به‌عنوان package بشناسد و importهایی مثل موارد زیر درست کار کنند:
+
+```text
+src.engineers_tools.app.controller
+modules.mechanics_dynamics_statics.module_entry
+```
+
+این فایل محل طراحی Toolbar، Properties، Canvas یا منطق ابزارها نیست. در حالت عادی باید خالی یا بسیار سبک بماند.
+
+هر پوشه‌ای که قرار است به‌عنوان package در import استفاده شود باید `__init__.py` داشته باشد. برای مثال:
+
+```text
+src/engineers_tools/__init__.py
+src/engineers_tools/app/__init__.py
+modules/mechanics_dynamics_statics/__init__.py
+```
+
+چت‌هایی که فقط روی Toolbar، Start Bar، Properties یا ابزارهای طراحی کار می‌کنند نباید `__init__.py` را تغییر بدهند، مگر اینکه پوشه Python جدید ساخته شود یا مسیر import واقعاً تغییر کند.
+
 ## قانون پنجره مادر
 
 تمام پنجره‌های آینده باید ادامه همین الگو باشند:
