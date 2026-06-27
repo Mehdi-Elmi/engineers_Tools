@@ -10,7 +10,7 @@ import math
 from dataclasses import dataclass, replace
 from pathlib import Path
 
-from PySide6.QtCore import QPointF, QRectF, QSize, Qt
+from PySide6.QtCore import QPointF, QRectF, QSize, Signal, Qt
 from PySide6.QtGui import QColor, QIcon, QPainter, QPainterPath, QPen, QPixmap, QPolygonF
 from PySide6.QtWidgets import QAbstractSpinBox, QDoubleSpinBox, QHBoxLayout, QLabel, QPushButton, QSizePolicy, QVBoxLayout, QWidget
 
@@ -65,6 +65,9 @@ class CanvasObject:
 
 
 class EngineeringCanvas(GridCanvas):
+    objects_changed = Signal()
+    selection_changed = Signal()
+
     def __init__(self) -> None:
         super().__init__()
         self.setMouseTracking(True)
@@ -230,13 +233,11 @@ class EngineeringCanvas(GridCanvas):
         return True
 
     def _emit_object_changes(self) -> None:
-        if hasattr(self, "objects_changed"):
-            self.objects_changed.emit()
+        self.objects_changed.emit()
         self._emit_selection_changes()
 
     def _emit_selection_changes(self) -> None:
-        if hasattr(self, "selection_changed"):
-            self.selection_changed.emit()
+        self.selection_changed.emit()
 
     def _selected_objects(self) -> list[tuple[int, CanvasObject]]:
         return [(index, self.objects[index]) for index in sorted(self.selected_indices) if 0 <= index < len(self.objects)]
@@ -581,6 +582,8 @@ class EngineeringDesignWorkspace(ModuleWindow):
         self._canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self._canvas.mouse_position_changed.connect(self._update_canvas_coordinates)
         self._canvas.context_actions_requested.connect(self._show_canvas_context_menu)
+        self._canvas.objects_changed.connect(self._refresh_layers)
+        self._canvas.selection_changed.connect(self._refresh_layers)
         canvas_layout.addWidget(self._canvas, 1)
         layout.addWidget(canvas_shell, 1)
         properties = self._build_side_panel("Properties", ("Selection", "Coordinates", "Size", "Style", "Behavior"))
