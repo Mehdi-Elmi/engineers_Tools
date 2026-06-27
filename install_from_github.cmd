@@ -31,6 +31,7 @@ if exist "%UPDATE_STATUS_FILE%" del /f /q "%UPDATE_STATUS_FILE%" >nul 2>nul
 
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "$ErrorActionPreference='Stop';" ^
+  "$utf8NoBom=New-Object System.Text.UTF8Encoding($false);" ^
   "$tokenPath=$env:TOKEN_FILE;" ^
   "$token=[System.IO.File]::ReadAllText($tokenPath,[System.Text.Encoding]::UTF8).Trim();" ^
   "$token=$token.Trim([char]0xFEFF).Trim().Trim([char]34).Trim([char]39);" ^
@@ -42,14 +43,16 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "foreach($scheme in @('Bearer','token')){ try{ $headers=$baseHeaders.Clone(); $headers.Authorization=$scheme + ' ' + $token; $response=Invoke-WebRequest -Uri $branchUri -Headers $headers -UseBasicParsing; $branchData=$response.Content | ConvertFrom-Json; break } catch { if($_.Exception.Response -and [int]$_.Exception.Response.StatusCode -eq 401){ continue } throw } }" ^
   "if($null -eq $branchData){ Write-Host 'GitHub returned 401 Unauthorized.'; Write-Host 'The token is invalid, expired, or does not have read access to this private repository.'; exit 11 }" ^
   "$remoteSha=[string]$branchData.commit.sha;" ^
-  "[System.IO.File]::WriteAllText($env:REMOTE_SHA_FILE,$remoteSha,[System.Text.Encoding]::UTF8);" ^
-  "$localSha=''; if(Test-Path $env:COMMIT_STAMP){ $localSha=[System.IO.File]::ReadAllText($env:COMMIT_STAMP,[System.Text.Encoding]::UTF8).Trim() }" ^
+  "[System.IO.File]::WriteAllText($env:REMOTE_SHA_FILE,$remoteSha,$utf8NoBom);" ^
+  "$localSha=''; if(Test-Path $env:COMMIT_STAMP){ $localSha=[System.IO.File]::ReadAllText($env:COMMIT_STAMP,[System.Text.Encoding]::UTF8).Trim([char]0xFEFF).Trim() }" ^
   "$runFile=Join-Path $env:INSTALL_DIR 'run_engineers_tools.cmd';" ^
   "$readmeFile=Join-Path $env:INSTALL_DIR 'README.md';" ^
+  "$uiFile=Join-Path $env:INSTALL_DIR 'src\engineers_tools\app\module_window.py';" ^
   "$repoOk=(Test-Path $readmeFile) -and ((Get-Content $readmeFile -Raw) -match 'Mehdi-Elmi/engineers_Tools');" ^
   "$runnerOk=(Test-Path $runFile) -and ((Get-Content $runFile -Raw) -match 'EXPECTED_APP_ROOT');" ^
+  "$uiOk=(Test-Path $uiFile) -and ((Get-Content $uiFile -Raw) -match 'ENGINEER_TOOLS_ACTIVE_UI_2026_06_27_A');" ^
   "$force=$env:FORCE_UPDATE -eq '1';" ^
-  "if((Test-Path $runFile) -and $repoOk -and $runnerOk -and -not $force -and $localSha -eq $remoteSha){ [System.IO.File]::WriteAllText($env:UPDATE_STATUS_FILE,'UP_TO_DATE',[System.Text.Encoding]::ASCII) } else { [System.IO.File]::WriteAllText($env:UPDATE_STATUS_FILE,'NEED_UPDATE',[System.Text.Encoding]::ASCII) }"
+  "if((Test-Path $runFile) -and $repoOk -and $runnerOk -and $uiOk -and -not $force -and $localSha -eq $remoteSha){ [System.IO.File]::WriteAllText($env:UPDATE_STATUS_FILE,'UP_TO_DATE',[System.Text.Encoding]::ASCII) } else { [System.IO.File]::WriteAllText($env:UPDATE_STATUS_FILE,'NEED_UPDATE',[System.Text.Encoding]::ASCII) }"
 
 if errorlevel 1 (
     echo Version check failed.
@@ -185,6 +188,14 @@ findstr /C:"class ModuleWindow(QMainWindow)" "%APP_MODULE_DIR%\module_window.py"
 if errorlevel 1 (
     echo Installation verification failed.
     echo module_window.py does not contain the shared active workspace window.
+    pause
+    exit /b 1
+)
+
+findstr /C:"ENGINEER_TOOLS_ACTIVE_UI_2026_06_27_A" "%APP_MODULE_DIR%\module_window.py" >nul
+if errorlevel 1 (
+    echo Installation verification failed.
+    echo module_window.py does not contain the active UI marker.
     pause
     exit /b 1
 )
