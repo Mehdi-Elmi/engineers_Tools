@@ -5,6 +5,7 @@ set "APP_ROOT=%~dp0"
 set "EXPECTED_APP_ROOT=%LOCALAPPDATA%\EngineerTools\"
 set "VENV_DIR=%APP_ROOT%.venv"
 set "PYTHON_EXE=%VENV_DIR%\Scripts\python.exe"
+set "PYTHONW_EXE=%VENV_DIR%\Scripts\pythonw.exe"
 set "REQ_FILE=%APP_ROOT%requirements.txt"
 set "REQ_STAMP=%VENV_DIR%\requirements.stamp"
 set "NEED_INSTALL=0"
@@ -50,6 +51,10 @@ if not exist "%PYTHON_EXE%" (
         exit /b 1
     )
     set "NEED_INSTALL=1"
+)
+
+if not exist "%PYTHONW_EXE%" (
+    set "PYTHONW_EXE=%PYTHON_EXE%"
 )
 
 if exist "%REQ_FILE%" (
@@ -98,6 +103,7 @@ if errorlevel 1 (
     exit /b 1
 )
 
-"%PYTHON_EXE%" -m src.engineers_tools.main
+echo Starting Engineer Tools GUI...
+start "" "%PYTHONW_EXE%" -m src.engineers_tools.main
 
 endlocal
