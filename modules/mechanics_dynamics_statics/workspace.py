@@ -11,8 +11,8 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 
 from PySide6.QtCore import QPointF, QRectF, QSize, Signal, Qt
-from PySide6.QtGui import QColor, QIcon, QPainter, QPainterPath, QPen, QPixmap, QPolygonF
-from PySide6.QtWidgets import QAbstractSpinBox, QDoubleSpinBox, QHBoxLayout, QLabel, QPushButton, QSizePolicy, QVBoxLayout, QWidget
+from PySide6.QtGui import QColor, QIcon, QKeySequence, QPainter, QPainterPath, QPen, QPixmap, QPolygonF, QShortcut
+from PySide6.QtWidgets import QAbstractSpinBox, QCheckBox, QDialog, QDoubleSpinBox, QHBoxLayout, QLabel, QPushButton, QSizePolicy, QVBoxLayout, QWidget
 
 from src.engineers_tools.app.module_window import GridCanvas, MenuItemSpec, ModuleWindow
 from src.engineers_tools.app.modules import LauncherModule
@@ -231,6 +231,29 @@ class EngineeringCanvas(GridCanvas):
         self._emit_object_changes()
         self.update()
         return True
+
+    def toggle_object_visible(self, index: int) -> None:
+        if 0 <= index < len(self.objects):
+            self._push_undo()
+            self.objects[index].visible = not self.objects[index].visible
+            if not self.objects[index].visible:
+                self.selected_indices.discard(index)
+            self._emit_object_changes()
+            self.update()
+
+    def toggle_object_locked(self, index: int) -> None:
+        if 0 <= index < len(self.objects):
+            self._push_undo()
+            self.objects[index].locked = not self.objects[index].locked
+            self._emit_object_changes()
+            self.update()
+
+    def toggle_object_rotation_handle(self, index: int) -> None:
+        if 0 <= index < len(self.objects):
+            self._push_undo()
+            self.objects[index].rotation_handle_visible = not self.objects[index].rotation_handle_visible
+            self._emit_object_changes()
+            self.update()
 
     def _emit_object_changes(self) -> None:
         self.objects_changed.emit()
@@ -556,13 +579,50 @@ class EngineeringCanvas(GridCanvas):
         _paint_rotation_arc(painter, rotate_center, 7.2, QColor("#ff8a35"))
 
 
+class SaveOptionsDialog(QDialog):
+    def __init__(self, parent: QWidget, options: dict[str, bool]) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Save Options")
+        self.setWindowFlag(Qt.FramelessWindowHint)
+        self.selected = dict(options)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(14, 14, 14, 14)
+        title = QLabel("Save Options")
+        title.setObjectName("PanelTitle")
+        layout.addWidget(title)
+        self.save_grid = QCheckBox("Save Grid")
+        self.save_grid.setChecked(self.selected.get("save_grid", False))
+        self.remove_background = QCheckBox("Remove White Background")
+        self.remove_background.setChecked(self.selected.get("remove_white_background", False))
+        layout.addWidget(self.save_grid)
+        layout.addWidget(self.remove_background)
+        row = QHBoxLayout()
+        row.addStretch(1)
+        apply_button = QPushButton("Continue")
+        apply_button.setObjectName("PageButton")
+        cancel_button = QPushButton("Cancel")
+        cancel_button.setObjectName("PageButton")
+        apply_button.clicked.connect(self.accept)
+        cancel_button.clicked.connect(self.reject)
+        row.addWidget(apply_button)
+        row.addWidget(cancel_button)
+        layout.addLayout(row)
+
+    def accept(self) -> None:  # noqa: D102
+        self.selected["save_grid"] = self.save_grid.isChecked()
+        self.selected["remove_white_background"] = self.remove_background.isChecked()
+        super().accept()
+
+
 class EngineeringDesignWorkspace(ModuleWindow):
     def __init__(self, module: LauncherModule) -> None:
         self._start_bar_tool_state: dict[str, bool] = {}
         self._layer_list_layout: QVBoxLayout | None = None
+        self._save_options = {"save_grid": False, "remove_white_background": False}
         super().__init__(module)
         self._layers = []
         self._refresh_layers()
+        self._install_engineering_shortcuts()
 
     def _build_workspace(self) -> QWidget:
         area = QWidget()
@@ -623,22 +683,82 @@ class EngineeringDesignWorkspace(ModuleWindow):
             self._layer_list_layout.addWidget(empty)
             return
         for index, obj in enumerate(canvas.objects):
-            row = QLabel(("[G] " if obj.group_id is not None else "") + obj.name)
-            row.setObjectName("PanelItem")
-            row.setFixedHeight(28)
+            row = QWidget()
+            row.setObjectName("LayerRow")
+            row_layout = QHBoxLayout(row)
+            row_layout.setContentsMargins(0, 0, 0, 0)
+            row_layout.setSpacing(4)
+            show = self._layer_button("Show" if obj.visible else "Hide", "Show", lambda checked=False, i=index: canvas.toggle_object_visible(i))
+            lock = self._layer_button("Lock" if not obj.locked else "Unlock", "Lock", lambda checked=False, i=index: canvas.toggle_object_locked(i))
+            rotate = self._layer_button("Rotate", "Rotate Handle", lambda checked=False, i=index: canvas.toggle_object_rotation_handle(i))
+            name = QLabel(("[G] " if obj.group_id is not None else "") + obj.name)
+            name.setObjectName("PanelItem")
+            name.setMinimumHeight(26)
             if index in canvas.selected_indices:
-                row.setStyleSheet("border:1px solid #2f7df6; border-radius:6px; padding-left:6px; background:#eef6ff;")
+                name.setStyleSheet("border:1px solid #2f7df6; border-radius:6px; padding-left:6px; background:#eef6ff;")
+            row_layout.addWidget(show)
+            row_layout.addWidget(lock)
+            row_layout.addWidget(rotate)
+            row_layout.addWidget(name, 1)
             self._layer_list_layout.addWidget(row)
+
+    def _layer_button(self, text: str, tooltip: str, callback) -> QPushButton:
+        button = QPushButton(text[:1])
+        button.setObjectName("LayerIconButton")
+        button.setToolTip(tooltip)
+        button.setFixedSize(24, 24)
+        button.clicked.connect(callback)
+        return button
 
     def _build_start_bar(self) -> QWidget:
         bar = super()._build_start_bar()
+        layout = bar.layout()
+        if layout is not None:
+            layout.insertWidget(1, self._start_bar_action_button("Undo", self._build_history_icon("undo"), self._undo))
+            layout.insertWidget(2, self._start_bar_action_button("Redo", self._build_history_icon("redo"), self._redo))
         self._start_bar_tool_state = {tool.key: True for tool in self.get_start_bar_tools()}
         return bar
+
+    def _start_bar_action_button(self, tooltip: str, icon: QIcon, callback) -> QPushButton:
+        button = QPushButton()
+        button.setObjectName("ToolIconButton")
+        button.setToolTip(tooltip)
+        button.setIcon(icon)
+        button.setIconSize(QSize(23, 23))
+        button.setFixedSize(40, 32)
+        button.clicked.connect(callback)
+        return button
+
+    def _build_history_icon(self, direction: str) -> QIcon:
+        pixmap = QPixmap(48, 48)
+        pixmap.fill(Qt.transparent)
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.Antialiasing, True)
+        base = QColor("#fff9de")
+        edge = QColor("#7e5b10")
+        stroke = QColor("#12345a") if direction == "undo" else QColor("#0f766e")
+        painter.setBrush(base)
+        painter.setPen(QPen(edge, 1.6))
+        painter.drawRoundedRect(QRectF(5, 5, 38, 38), 9, 9)
+        painter.setPen(QPen(stroke, 3.2, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+        arc = QRectF(13, 13, 22, 22)
+        if direction == "undo":
+            painter.drawArc(arc, 30 * 16, 285 * 16)
+            arrow = QPolygonF([QPointF(13, 19), QPointF(22, 14), QPointF(20, 24)])
+        else:
+            painter.drawArc(arc, 150 * 16, -285 * 16)
+            arrow = QPolygonF([QPointF(35, 19), QPointF(26, 14), QPointF(28, 24)])
+        painter.setBrush(stroke)
+        painter.setPen(Qt.NoPen)
+        painter.drawPolygon(arrow)
+        painter.end()
+        return QIcon(pixmap)
 
     def _build_status_bar(self) -> QWidget:
         bar = QWidget()
         bar.setObjectName("StatusBar")
         bar.setFixedHeight(34)
+        bar.setStyleSheet("QWidget#StatusBar { background:#102238; } QLabel#StatusItem { color:#ffffff; font-size:11px; font-weight:600; }")
         layout = QHBoxLayout(bar)
         layout.setContentsMargins(14, 0, 14, 0)
         layout.setSpacing(12)
@@ -654,6 +774,12 @@ class EngineeringDesignWorkspace(ModuleWindow):
         layout.addWidget(zoom_label)
         layout.addWidget(self._build_zoom_control())
         return bar
+
+    def _install_engineering_shortcuts(self) -> None:
+        for sequence, callback in (("Ctrl+Z", self._undo), ("Ctrl+Y", self._redo), ("Ctrl+Shift+Z", self._redo)):
+            shortcut = QShortcut(QKeySequence(sequence), self)
+            shortcut.setContext(Qt.WidgetWithChildrenShortcut)
+            shortcut.activated.connect(callback)
 
     def _copy(self) -> None:
         if isinstance(self._canvas, EngineeringCanvas) and self._canvas.copy_selection():
@@ -726,6 +852,39 @@ class EngineeringDesignWorkspace(ModuleWindow):
             self._set_status("Rotate handle toggled")
             return
         self._set_status("No selected object")
+
+    def _save(self):
+        path = getattr(self, "_current_file_path", None) or getattr(self, "current_file_path", None)
+        if not path:
+            return self._save_as()
+        parent_save = getattr(super(), "_save", None) or getattr(super(), "_save_file", None)
+        if parent_save is not None:
+            return parent_save()
+        self._set_status("Save")
+        return True
+
+    def _save_file(self):
+        return self._save()
+
+    def _save_as(self):
+        if not self._capture_save_options():
+            self._set_status("Save As canceled")
+            return False
+        parent_save_as = getattr(super(), "_save_as", None) or getattr(super(), "_save_file_as", None)
+        if parent_save_as is not None:
+            return parent_save_as()
+        self._set_status("Save As")
+        return True
+
+    def _save_file_as(self):
+        return self._save_as()
+
+    def _capture_save_options(self) -> bool:
+        dialog = SaveOptionsDialog(self, self._save_options)
+        if dialog.exec() != QDialog.Accepted:
+            return False
+        self._save_options = dialog.selected
+        return True
 
     def _build_zoom_control(self) -> QWidget:
         control = QWidget()
