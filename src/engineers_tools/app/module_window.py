@@ -27,6 +27,8 @@ from ..ui.start_bar import DEFAULT_START_BAR_TOOLS, StartBar, StartBarTool
 from .modules import LauncherModule
 from .project_file_dialog import ProjectFileDialog
 
+UI_BUILD_MARKER = "ENGINEER_TOOLS_ACTIVE_UI_2026_06_27_A"
+
 
 def _apply_rounded_mask(widget: QWidget, radius: float) -> None:
     if widget.width() <= 0 or widget.height() <= 0:
@@ -34,6 +36,22 @@ def _apply_rounded_mask(widget: QWidget, radius: float) -> None:
     path = QPainterPath()
     path.addRoundedRect(QRectF(0, 0, widget.width(), widget.height()), radius, radius)
     widget.setMask(QRegion(path.toFillPolygon().toPolygon()))
+
+
+def _select_icon(checked: bool) -> QIcon:
+    pixmap = QPixmap(26, 26)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.Antialiasing, True)
+    painter.setPen(QPen(QColor("#18314f"), 2.0))
+    painter.setBrush(QColor("#ffffff"))
+    painter.drawEllipse(4, 4, 18, 18)
+    if checked:
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor("#2f7df6"))
+        painter.drawEllipse(9, 9, 8, 8)
+    painter.end()
+    return QIcon(pixmap)
 
 
 @dataclass(frozen=True)
@@ -154,8 +172,8 @@ class ProjectMenuDialog(QDialog):
         root.addWidget(shell)
 
         layout = QVBoxLayout(shell)
-        layout.setContentsMargins(8, 8, 8, 8)
-        layout.setSpacing(5)
+        layout.setContentsMargins(7, 7, 7, 7)
+        layout.setSpacing(4)
 
         if not items:
             empty = QLabel("No tools defined yet.")
@@ -166,7 +184,10 @@ class ProjectMenuDialog(QDialog):
             button_text = self._build_button_text(item)
             button = QPushButton(button_text)
             button.setObjectName("MenuItemButton")
-            button.setMinimumHeight(28)
+            button.setMinimumHeight(26)
+            if item.checkable:
+                button.setIcon(_select_icon(item.checked))
+                button.setIconSize(QSize(24, 24))
             if item.handler is not None:
                 button.clicked.connect(self._wrap_handler(item.handler))
             layout.addWidget(button)
@@ -175,14 +196,14 @@ class ProjectMenuDialog(QDialog):
 
     def _preferred_width(self, items: tuple[MenuItemSpec, ...]) -> int:
         if not items:
-            return 190
+            return 172
         longest = max(self.fontMetrics().horizontalAdvance(self._build_button_text(item)) for item in items)
-        return max(188, min(242, longest + 54))
+        icon_padding = 34 if any(item.checkable for item in items) else 0
+        return max(176, min(224, longest + icon_padding + 42))
 
     def _build_button_text(self, item: MenuItemSpec) -> str:
-        prefix = "◉  " if item.checkable and item.checked else "○  " if item.checkable else ""
         shortcut = f"    {item.shortcut}" if item.shortcut else ""
-        return f"{prefix}{item.label}{shortcut}"
+        return f"{item.label}{shortcut}"
 
     def _wrap_handler(self, handler: Callable[[], None]) -> Callable[[], None]:
         def run() -> None:
@@ -402,6 +423,23 @@ class ModuleWindow(QMainWindow):
         layout.setSpacing(12)
         self._status_items = []
 
+        tool_item = QLabel("Tool Select: Ready")
+        tool_item.setObjectName("StatusItem")
+        layout.addWidget(tool_item)
+        self._status_items.append(tool_item)
+
+        coordinate_item = QLabel("X: 0  Y: 0")
+        coordinate_item.setObjectName("StatusItem")
+        layout.addWidget(coordinate_item)
+        self._status_items.append(coordinate_item)
+
+        unit_item = QLabel("Unit: mm")
+        unit_item.setObjectName("StatusItem")
+        layout.addWidget(unit_item)
+        self._status_items.append(unit_item)
+
+        layout.addStretch(1)
+
         zoom_label = QLabel("Zoom:")
         zoom_label.setObjectName("StatusItem")
         layout.addWidget(zoom_label)
@@ -416,22 +454,6 @@ class ModuleWindow(QMainWindow):
         self._zoom_input.setFixedWidth(92)
         self._zoom_input.valueChanged.connect(self._set_zoom)
         layout.addWidget(self._zoom_input)
-
-        tool_item = QLabel("Tool Select: Ready")
-        tool_item.setObjectName("StatusItem")
-        layout.addWidget(tool_item)
-        self._status_items.append(tool_item)
-
-        coordinate_item = QLabel("X: 0  Y: 0")
-        coordinate_item.setObjectName("StatusItem")
-        layout.addWidget(coordinate_item)
-        self._status_items.append(coordinate_item)
-
-        layout.addStretch(1)
-        unit_item = QLabel("Unit: mm")
-        unit_item.setObjectName("StatusItem")
-        layout.addWidget(unit_item)
-        self._status_items.append(unit_item)
         return bar
 
     def _install_shortcuts(self) -> None:
