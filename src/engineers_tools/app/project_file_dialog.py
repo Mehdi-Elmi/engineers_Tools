@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QListView,
     QListWidget,
     QListWidgetItem,
     QPushButton,
@@ -36,9 +37,9 @@ PROJECT_FILE_FILTERS: tuple[tuple[str, tuple[str, ...], str], ...] = (
 
 OFFICE_FILE_FILTERS: tuple[tuple[str, tuple[str, ...], str], ...] = (
     ("Engineer Tools", (".etools", ".etool"), ".etools"),
-    ("Word", (".doc", ".docx", ".dot", ".dotx", ".rtf"), ".docx"),
-    ("PowerPoint", (".ppt", ".pptx", ".pot", ".potx", ".pps", ".ppsx"), ".pptx"),
-    ("Excel", (".xls", ".xlsx", ".xlsm", ".xlt", ".xltx", ".csv"), ".xlsx"),
+    ("Word", (".docx", ".rtf"), ".docx"),
+    ("PowerPoint", (".pptx",), ".pptx"),
+    ("Excel", (".xlsx", ".csv"), ".xlsx"),
     ("PDF", (".pdf",), ".pdf"),
     ("All Files", (".*",), ".etools"),
 )
@@ -241,7 +242,12 @@ class ProjectFileDialog(QDialog):
         layout.addWidget(self._places)
         self._files = QListWidget()
         self._files.setObjectName("FilesList")
-        self._files.setIconSize(QSize(22, 22))
+        self._files.setViewMode(QListView.IconMode)
+        self._files.setResizeMode(QListView.Adjust)
+        self._files.setMovement(QListView.Static)
+        self._files.setWrapping(True)
+        self._files.setSpacing(8)
+        self._files.setIconSize(QSize(26, 26))
         self._files.itemDoubleClicked.connect(self._file_double_clicked)
         self._files.itemClicked.connect(self._file_clicked)
         layout.addWidget(self._files, 1)
@@ -376,6 +382,7 @@ class ProjectFileDialog(QDialog):
         for label, path in self._drive_paths():
             item = QListWidgetItem(self._icon_provider.icon(QFileInfo(str(path))), label)
             item.setData(Qt.UserRole, str(path))
+            item.setSizeHint(self._file_item_size(label))
             self._files.addItem(item)
         self._back_button.setEnabled(self._history_index > 0)
         self._forward_button.setEnabled(self._history_index < len(self._history) - 1)
@@ -393,7 +400,12 @@ class ProjectFileDialog(QDialog):
                 continue
             item = QListWidgetItem(self._icon_provider.icon(QFileInfo(str(child))), child.name)
             item.setData(Qt.UserRole, str(child))
+            item.setSizeHint(self._file_item_size(child.name))
             self._files.addItem(item)
+
+    def _file_item_size(self, name: str) -> QSize:
+        width = max(92, min(210, self.fontMetrics().horizontalAdvance(name) + 48))
+        return QSize(width, 42)
 
     def _file_type_changed(self, _index: int) -> None:
         if self.mode in {"save", "export"} and (not self._file_name.text().strip() or self._file_name.text().startswith("EngineerTools")):
@@ -501,6 +513,13 @@ class ProjectFileDialog(QDialog):
         path = QPainterPath()
         path.addRoundedRect(QRectF(0, 0, self.width(), self.height()), 16, 16)
         self.setMask(QRegion(path.toFillPolygon().toPolygon()))
+
+    def keyPressEvent(self, event) -> None:  # noqa: N802
+        if event.key() == Qt.Key_Backspace and not self._file_name.hasFocus():
+            self._go_back()
+            event.accept()
+            return
+        super().keyPressEvent(event)
 
     def mousePressEvent(self, event) -> None:  # noqa: N802
         if event.button() == Qt.LeftButton and event.position().y() <= 44:
