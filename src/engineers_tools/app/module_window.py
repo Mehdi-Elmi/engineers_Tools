@@ -7,8 +7,8 @@ for reliable filesystem operations.
 
 from __future__ import annotations
 
-from PySide6.QtCore import QPoint, QRect, Qt, Signal
-from PySide6.QtGui import QColor, QPainter, QPen
+from PySide6.QtCore import QPoint, QPointF, QRect, QRectF, QSize, Qt, Signal
+from PySide6.QtGui import QColor, QIcon, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap, QPolygonF
 from PySide6.QtWidgets import (
     QDialog,
     QFileDialog,
@@ -61,7 +61,7 @@ class ProjectDialog(QDialog):
         layout.addWidget(heading)
 
         note = QLabel("Project styled dialog. Native file selection is used only behind this layer.")
-        note.setObjectName("StatusItem")
+        note.setObjectName("DialogNote")
         note.setWordWrap(True)
         layout.addWidget(note)
 
@@ -69,12 +69,12 @@ class ProjectDialog(QDialog):
         buttons.addStretch(1)
 
         open_button = QPushButton("Open File")
-        open_button.setObjectName("ToolButton")
+        open_button.setObjectName("ConfirmButton")
         open_button.clicked.connect(self._open_file_backend)
         buttons.addWidget(open_button)
 
         close_button = QPushButton("Close")
-        close_button.setObjectName("ToolButton")
+        close_button.setObjectName("ConfirmButton")
         close_button.clicked.connect(self.accept)
         buttons.addWidget(close_button)
         layout.addLayout(buttons)
@@ -155,7 +155,7 @@ class ModuleWindow(QMainWindow):
         self._maximize_button = maximize
         layout.addWidget(maximize)
 
-        close = QPushButton("x")
+        close = QPushButton("×")
         close.setObjectName("CloseButton")
         close.setFixedSize(34, 30)
         close.clicked.connect(self.close)
@@ -168,10 +168,14 @@ class ModuleWindow(QMainWindow):
         bar.setFixedHeight(38)
         layout = QHBoxLayout(bar)
         layout.setContentsMargins(14, 4, 14, 4)
-        layout.setSpacing(8)
+        layout.setSpacing(10)
 
-        home = QPushButton("Home")
+        home = QPushButton()
         home.setObjectName("HomeButton")
+        home.setToolTip("Back to launcher")
+        home.setFixedSize(40, 30)
+        home.setIcon(self._build_home_icon())
+        home.setIconSize(QSize(23, 23))
         home.clicked.connect(self.back_requested.emit)
         layout.addWidget(home)
 
@@ -186,6 +190,7 @@ class ModuleWindow(QMainWindow):
         for label, handler in menu_map.items():
             button = QPushButton(label)
             button.setObjectName("MenuButton")
+            button.setFixedHeight(28)
             if handler is not None:
                 button.clicked.connect(handler)
             layout.addWidget(button)
@@ -255,14 +260,14 @@ class ModuleWindow(QMainWindow):
         layout.addWidget(page)
         layout.addStretch(1)
         add_page = QPushButton("Add Page")
-        add_page.setObjectName("ToolButton")
+        add_page.setObjectName("ConfirmButton")
         layout.addWidget(add_page)
         return bar
 
     def _build_status_bar(self) -> QWidget:
         bar = QWidget()
         bar.setObjectName("StatusBar")
-        bar.setFixedHeight(30)
+        bar.setFixedHeight(32)
         layout = QHBoxLayout(bar)
         layout.setContentsMargins(14, 0, 14, 0)
         layout.setSpacing(18)
@@ -305,6 +310,47 @@ class ModuleWindow(QMainWindow):
         if self._maximize_button is not None:
             self._maximize_button.setText("[]")
             self._maximize_button.setToolTip("Maximize")
+
+    def _build_home_icon(self) -> QIcon:
+        pixmap = QPixmap(30, 30)
+        pixmap.fill(Qt.transparent)
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.Antialiasing, True)
+
+        shadow = QPainterPath()
+        shadow.addRoundedRect(QRectF(7, 14, 16, 11), 3, 3)
+        painter.fillPath(shadow, QColor(12, 24, 40, 72))
+
+        roof = QPolygonF(
+            [
+                QPointF(5.5, 14.0),
+                QPointF(15.0, 5.8),
+                QPointF(24.5, 14.0),
+                QPointF(22.0, 16.2),
+                QPointF(15.0, 10.2),
+                QPointF(8.0, 16.2),
+            ]
+        )
+        roof_gradient = QLinearGradient(6, 5, 24, 16)
+        roof_gradient.setColorAt(0.0, QColor("#ffffff"))
+        roof_gradient.setColorAt(0.45, QColor("#9fc4f3"))
+        roof_gradient.setColorAt(1.0, QColor("#315e9a"))
+        painter.setPen(QPen(QColor("#ffffff"), 1.1))
+        painter.setBrush(roof_gradient)
+        painter.drawPolygon(roof)
+
+        body_gradient = QLinearGradient(8, 13, 22, 25)
+        body_gradient.setColorAt(0.0, QColor("#ffffff"))
+        body_gradient.setColorAt(0.52, QColor("#8fb8f0"))
+        body_gradient.setColorAt(1.0, QColor("#274a78"))
+        painter.setBrush(body_gradient)
+        painter.drawRoundedRect(QRectF(8.2, 13.4, 13.6, 10.8), 2.4, 2.4)
+
+        painter.setPen(QPen(QColor("#ffffff"), 1.0))
+        painter.drawRoundedRect(QRectF(13.2, 17.0, 3.6, 7.0), 1.0, 1.0)
+        painter.drawLine(QPointF(10.8, 15.9), QPointF(19.2, 15.9))
+        painter.end()
+        return QIcon(pixmap)
 
     def mousePressEvent(self, event) -> None:  # noqa: N802
         if event.button() == Qt.LeftButton and event.position().y() <= 46:
