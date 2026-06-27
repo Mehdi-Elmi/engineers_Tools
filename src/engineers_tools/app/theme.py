@@ -131,7 +131,26 @@ def apply_app_theme(app: QApplication) -> None:
             background: #c7d5e6;
             padding-top: 3px;
         }}
-        QPushButton#HomeButton, QPushButton#ConfirmButton {{
+        QPushButton#HomeButton {{
+            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                stop:0 #ffffff, stop:0.36 #f4f9ff, stop:0.72 #bcd2ec, stop:1 #7f98b8);
+            border: 1px solid #6d83a0;
+            border-bottom: 3px solid #445a75;
+            border-radius: 10px;
+            color: #223650;
+            padding: 2px 8px;
+        }}
+        QPushButton#HomeButton:hover {{
+            border-color: #2f7df6;
+            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                stop:0 #ffffff, stop:0.44 #f8fbff, stop:1 #a9c8ef);
+        }}
+        QPushButton#HomeButton:pressed {{
+            padding-top: 4px;
+            padding-left: 9px;
+            border-bottom: 1px solid #445a75;
+        }}
+        QPushButton#ConfirmButton {{
             background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
                 stop:0 #ffffff, stop:0.48 #f4f9ff, stop:1 #bfd2e8);
             border: 1px solid #95a9c1;
@@ -142,11 +161,11 @@ def apply_app_theme(app: QApplication) -> None:
             font-weight: 800;
             padding: 4px 10px;
         }}
-        QPushButton#HomeButton:hover, QPushButton#ConfirmButton:hover {{
+        QPushButton#ConfirmButton:hover {{
             border-color: #2f7df6;
             background: #ffffff;
         }}
-        QPushButton#HomeButton:pressed, QPushButton#ConfirmButton:pressed {{
+        QPushButton#ConfirmButton:pressed {{
             padding-top: 6px;
             padding-left: 11px;
             border-bottom: 1px solid #7188a5;
@@ -214,5 +233,63 @@ def apply_app_theme(app: QApplication) -> None:
             font-size: 12px;
         }}
         QDialog#ProjectDialog {{ background: #dfe7f2; }}
+        QDialog#ProjectMenuDialog {{ background: transparent; }}
+        QWidget#ProjectMenuShell {{
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                stop:0 #f9fbff, stop:0.54 #e8f0fa, stop:1 #d4dfec);
+            border: 1px solid #8fa2bb;
+            border-bottom: 4px solid #7f91aa;
+            border-radius: 14px;
+        }}
+        QWidget#MenuDialogHeader {{
+            background: {NAVY};
+            border: 1px solid #203553;
+            border-radius: 10px;
+        }}
+        QLabel#MenuDialogTitle {{
+            background: transparent;
+            color: #ffffff;
+            font-size: 15px;
+            font-weight: 800;
+            padding: 5px 2px;
+        }}
+        QPushButton#MenuDialogClose {{
+            background: transparent;
+            border: 0;
+            border-radius: 6px;
+            color: #eef4fb;
+            font-size: 16px;
+            font-weight: 800;
+        }}
+        QPushButton#MenuDialogClose:hover {{
+            background: #e65252;
+            color: #ffffff;
+        }}
+        QLabel#MenuDialogEmpty {{
+            background: rgba(255, 255, 255, 120);
+            border: 1px dashed #9fb0c5;
+            border-radius: 10px;
+            color: #39516f;
+            font-size: 12px;
+            padding: 14px;
+        }}
+        QPushButton#MenuItemButton {{
+            background: rgba(255, 255, 255, 145);
+            border: 1px solid #b8c5d4;
+            border-radius: 9px;
+            color: #1f3148;
+            font-size: 13px;
+            font-weight: 800;
+            padding: 5px 10px;
+            text-align: left;
+        }}
+        QPushButton#MenuItemButton:hover {{
+            background: #ffffff;
+            border-color: #2f7df6;
+        }}
+        QPushButton#MenuItemButton:pressed {{
+            background: #cddbeb;
+            padding-top: 7px;
+        }}
         """
     )
