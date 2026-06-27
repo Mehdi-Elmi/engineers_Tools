@@ -44,10 +44,27 @@ OFFICE_FILE_FILTERS: tuple[tuple[str, tuple[str, ...], str], ...] = (
 )
 
 
+def _option_icon(checked: bool) -> QIcon:
+    pixmap = QPixmap(26, 26)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.Antialiasing, True)
+    painter.setPen(QPen(QColor("#18314f"), 2.0))
+    painter.setBrush(QColor("#ffffff"))
+    painter.drawEllipse(4, 4, 18, 18)
+    if checked:
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor("#2f7df6"))
+        painter.drawEllipse(9, 9, 8, 8)
+    painter.end()
+    return QIcon(pixmap)
+
+
 @dataclass(frozen=True)
 class FileDialogResult:
     path: Path
     filter_name: str
+    options: dict[str, bool] | None = None
 
 
 class ProjectFileDialog(QDialog):
@@ -58,6 +75,7 @@ class ProjectFileDialog(QDialog):
         self.mode = mode
         self.filter_kind = filter_kind
         self.selected_result: FileDialogResult | None = None
+        self.save_options = {"save_grid": False, "remove_white_background": False}
         self._history: list[Path] = []
         self._history_index = -1
         self._icon_provider = QFileIconProvider()
@@ -252,6 +270,8 @@ class ProjectFileDialog(QDialog):
             self._file_type.addItem(f"{name} ({suffix_text})", (name, suffixes, default_suffix))
         self._file_type.currentIndexChanged.connect(self._file_type_changed)
         layout.addWidget(self._file_type, 1, 1)
+        if self.mode in {"save", "export"}:
+            layout.addWidget(self._build_save_options_row(), 2, 1)
         action_label = {"open": "Open", "save": "Save", "import": "Import", "export": "Export"}.get(self.mode, "Open")
         action = QPushButton(action_label)
         action.setObjectName("PrimaryDialogButton")
@@ -262,6 +282,31 @@ class ProjectFileDialog(QDialog):
         cancel.clicked.connect(self.reject)
         layout.addWidget(cancel, 1, 2)
         return footer
+
+    def _build_save_options_row(self) -> QWidget:
+        row = QWidget()
+        row.setObjectName("SaveOptionsRow")
+        layout = QHBoxLayout(row)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
+        layout.addWidget(self._build_option_button("Save Grid", "save_grid"))
+        layout.addWidget(self._build_option_button("Remove White Background", "remove_white_background"))
+        layout.addStretch(1)
+        return row
+
+    def _build_option_button(self, label: str, option_key: str) -> QPushButton:
+        button = QPushButton(label)
+        button.setObjectName("SaveOptionButton")
+        button.setCheckable(True)
+        button.setChecked(self.save_options.get(option_key, False))
+        button.setIcon(_option_icon(button.isChecked()))
+        button.setIconSize(QSize(24, 24))
+        button.clicked.connect(lambda checked, key=option_key, source=button: self._set_save_option(key, checked, source))
+        return button
+
+    def _set_save_option(self, option_key: str, checked: bool, button: QPushButton) -> None:
+        self.save_options[option_key] = checked
+        button.setIcon(_option_icon(checked))
 
     def _filters(self) -> tuple[tuple[str, tuple[str, ...], str], ...]:
         return OFFICE_FILE_FILTERS if self.filter_kind == "office" else PROJECT_FILE_FILTERS
@@ -435,7 +480,8 @@ class ProjectFileDialog(QDialog):
             path = self._make_unique_path(path)
         if self.mode in {"open", "import"} and (not path.exists() or path.is_dir()):
             return
-        self.selected_result = FileDialogResult(path=path, filter_name=self._selected_filter_name())
+        options = dict(self.save_options) if self.mode in {"save", "export"} else None
+        self.selected_result = FileDialogResult(path=path, filter_name=self._selected_filter_name(), options=options)
         self.accept()
 
     def _make_unique_path(self, path: Path) -> Path:
