@@ -12,10 +12,11 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from PySide6.QtCore import QPoint, QPointF, QRect, QRectF, QSize, Qt, Signal
-from PySide6.QtGui import QColor, QIcon, QKeySequence, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap, QPolygonF, QShortcut
+from PySide6.QtGui import QColor, QIcon, QKeySequence, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap, QPolygonF, QRegion, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
+    QDoubleSpinBox,
     QFileDialog,
     QHBoxLayout,
     QLabel,
@@ -28,6 +29,14 @@ from PySide6.QtWidgets import (
 
 from ..ui.start_bar import DEFAULT_START_BAR_TOOLS, StartBar, StartBarTool
 from .modules import LauncherModule
+
+
+def _apply_rounded_mask(widget: QWidget, radius: float) -> None:
+    if widget.width() <= 0 or widget.height() <= 0:
+        return
+    path = QPainterPath()
+    path.addRoundedRect(QRectF(0, 0, widget.width(), widget.height()), radius, radius)
+    widget.setMask(QRegion(path.toFillPolygon().toPolygon()))
 
 
 @dataclass(frozen=True)
@@ -109,6 +118,61 @@ class ProjectDialog(QDialog):
         QFileDialog.getOpenFileName(self, "Open File", "", "All Files (*.*)")
 
 
+class ProjectHelpDialog(QDialog):
+    """Project-styled help page opened by the Help command."""
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setObjectName("ProjectHelpDialog")
+        self.setWindowTitle("Help")
+        self.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setModal(True)
+        self.setMinimumSize(480, 300)
+
+        shell = QWidget()
+        shell.setObjectName("ProjectHelpShell")
+        root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.addWidget(shell)
+
+        layout = QVBoxLayout(shell)
+        layout.setContentsMargins(14, 12, 14, 14)
+        layout.setSpacing(12)
+
+        header = QWidget()
+        header.setObjectName("HelpHeader")
+        header_layout = QHBoxLayout(header)
+        header_layout.setContentsMargins(12, 0, 8, 0)
+        header_layout.setSpacing(8)
+
+        title = QLabel("Engineer Tools Help")
+        title.setObjectName("HelpTitle")
+        header_layout.addWidget(title, 1)
+
+        close = QPushButton("×")
+        close.setObjectName("MenuDialogClose")
+        close.setFixedSize(28, 26)
+        close.clicked.connect(self.accept)
+        header_layout.addWidget(close)
+        layout.addWidget(header)
+
+        body = QLabel(
+            "Common workspace commands are available from the top command bar.\n\n"
+            "File manages project documents. Edit handles object and clipboard operations. "
+            "View controls shared workspace visibility such as Grid, Ruler and Snap. "
+            "Insert is reserved for adding design content."
+        )
+        body.setObjectName("HelpBody")
+        body.setWordWrap(True)
+        body.setAlignment(Qt.AlignTop | Qt.AlignLeft)
+        layout.addWidget(body, 1)
+
+    def resizeEvent(self, event) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        _apply_rounded_mask(self, 16)
+
+
 class ProjectMenuDialog(QDialog):
     """Rounded dropdown menu used by the Command Bar."""
 
@@ -127,12 +191,8 @@ class ProjectMenuDialog(QDialog):
         root.addWidget(shell)
 
         layout = QVBoxLayout(shell)
-        layout.setContentsMargins(10, 9, 10, 10)
+        layout.setContentsMargins(9, 9, 9, 9)
         layout.setSpacing(6)
-
-        heading = QLabel(title)
-        heading.setObjectName("MenuDropdownTitle")
-        layout.addWidget(heading)
 
         if not items:
             empty = QLabel("No tools defined yet.")
@@ -160,6 +220,10 @@ class ProjectMenuDialog(QDialog):
 
         return run
 
+    def resizeEvent(self, event) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        _apply_rounded_mask(self, 13)
+
 
 class ModuleWindow(QMainWindow):
     back_requested = Signal()
@@ -179,6 +243,7 @@ class ModuleWindow(QMainWindow):
         self._start_bar_widget: StartBar | None = None
         self._canvas: GridCanvas | None = None
         self._status_items: list[QLabel] = []
+        self._zoom_input: QDoubleSpinBox | None = None
         self._view_state = {"start_bar": True, "grid": True, "ruler": False, "snap": False}
 
         root = QWidget()
@@ -289,7 +354,7 @@ class ModuleWindow(QMainWindow):
             ("View", self._show_view_menu),
             ("Insert", self._show_insert_menu),
             ("Draw", self._show_draw_menu),
-            ("Help", self._show_help_menu),
+            ("Help", lambda source: self._open_help_page()),
         )
         for label, handler in menu_map:
             button = QPushButton(label)
@@ -372,16 +437,41 @@ class ModuleWindow(QMainWindow):
     def _build_status_bar(self) -> QWidget:
         bar = QWidget()
         bar.setObjectName("StatusBar")
-        bar.setFixedHeight(32)
+        bar.setFixedHeight(34)
         layout = QHBoxLayout(bar)
         layout.setContentsMargins(14, 0, 14, 0)
-        layout.setSpacing(18)
+        layout.setSpacing(14)
         self._status_items = []
-        for text in ("Tool Select: Ready", "X: 0  Y: 0", "Zoom: 100%", "Unit: mm"):
-            item = QLabel(text)
-            item.setObjectName("StatusItem")
-            layout.addWidget(item)
-            self._status_items.append(item)
+
+        tool_item = QLabel("Tool Select: Ready")
+        tool_item.setObjectName("StatusItem")
+        layout.addWidget(tool_item)
+        self._status_items.append(tool_item)
+
+        coordinate_item = QLabel("X: 0  Y: 0")
+        coordinate_item.setObjectName("StatusItem")
+        layout.addWidget(coordinate_item)
+        self._status_items.append(coordinate_item)
+
+        zoom_label = QLabel("Zoom:")
+        zoom_label.setObjectName("StatusItem")
+        layout.addWidget(zoom_label)
+
+        self._zoom_input = QDoubleSpinBox()
+        self._zoom_input.setObjectName("ZoomInput")
+        self._zoom_input.setRange(5.0, 3200.0)
+        self._zoom_input.setDecimals(2)
+        self._zoom_input.setSingleStep(5.0)
+        self._zoom_input.setValue(100.0)
+        self._zoom_input.setSuffix(" %")
+        self._zoom_input.setFixedWidth(98)
+        self._zoom_input.valueChanged.connect(self._set_zoom)
+        layout.addWidget(self._zoom_input)
+
+        unit_item = QLabel("Unit: mm")
+        unit_item.setObjectName("StatusItem")
+        layout.addWidget(unit_item)
+        self._status_items.append(unit_item)
         layout.addStretch(1)
         return bar
 
@@ -441,17 +531,16 @@ class ModuleWindow(QMainWindow):
         self._show_menu(
             "Edit",
             (
+                MenuItemSpec("Copy", self._copy, "Ctrl+C"),
+                MenuItemSpec("Cut", self._cut, "Ctrl+X"),
+                MenuItemSpec("Paste", self._paste, "Ctrl+V"),
+                MenuItemSpec("Move", self._move),
                 MenuItemSpec("Undo", self._undo, "Ctrl+Z"),
                 MenuItemSpec("Redo", self._redo, "Ctrl+Y"),
-                MenuItemSpec("Cut", self._cut, "Ctrl+X"),
-                MenuItemSpec("Copy", self._copy, "Ctrl+C"),
-                MenuItemSpec("Paste", self._paste, "Ctrl+V"),
-                MenuItemSpec("Delete", self._delete, "Del"),
                 MenuItemSpec("Repeat Last Tools", self._repeat_last_tools, "Ctrl+R"),
                 MenuItemSpec("Select All", self._select_all, "Ctrl+A"),
                 MenuItemSpec("Group", self._group, "Ctrl+G"),
                 MenuItemSpec("Ungroup", self._ungroup, "Ctrl+Shift+G"),
-                MenuItemSpec("Move", self._move),
             ),
             anchor,
         )
@@ -469,13 +558,14 @@ class ModuleWindow(QMainWindow):
         )
 
     def _show_insert_menu(self, anchor: QWidget) -> None:
-        self._show_menu("Insert", (MenuItemSpec("Image", self._insert_image), MenuItemSpec("Text", self._insert_text)), anchor)
+        self._show_menu("Insert", (MenuItemSpec("Text", self._insert_text),), anchor)
 
     def _show_draw_menu(self, anchor: QWidget) -> None:
         self._show_menu("Draw", (), anchor)
 
-    def _show_help_menu(self, anchor: QWidget) -> None:
-        self._show_menu("Help", (MenuItemSpec("Shortcuts", self._show_shortcuts), MenuItemSpec("About", self._show_about)), anchor)
+    def _open_help_page(self) -> None:
+        ProjectHelpDialog(self).exec()
+        self._set_status("Help opened")
 
     def _new_file(self) -> None:
         self._set_status("New file created")
@@ -577,18 +667,11 @@ class ModuleWindow(QMainWindow):
         self._view_state["snap"] = not self._view_state["snap"]
         self._set_status(f"Snap {'On' if self._view_state['snap'] else 'Off'}")
 
-    def _insert_image(self) -> None:
-        QFileDialog.getOpenFileName(self, "Insert Image", "", "Images (*.png *.jpg *.jpeg *.bmp *.svg);;All Files (*.*)")
-        self._set_status("Image inserted")
-
     def _insert_text(self) -> None:
         self._set_status("Text tool ready")
 
-    def _show_shortcuts(self) -> None:
-        self._set_status("Shortcuts opened")
-
-    def _show_about(self) -> None:
-        self._set_status("About Engineer Tools")
+    def _set_zoom(self, value: float) -> None:
+        self._set_status(f"Zoom {value:.2f}%")
 
     def _set_status(self, text: str) -> None:
         if self._status_items:
@@ -632,31 +715,38 @@ class ModuleWindow(QMainWindow):
         base = QPainterPath()
         base.addRoundedRect(QRectF(5.0, 4.5, 36.0, 25.0), 9.0, 9.0)
         base_gradient = QLinearGradient(5, 4, 41, 30)
-        base_gradient.setColorAt(0.0, QColor("#ffffff"))
-        base_gradient.setColorAt(0.46, QColor("#dbeaff"))
-        base_gradient.setColorAt(1.0, QColor("#4e76aa"))
+        base_gradient.setColorAt(0.0, QColor("#fff6de"))
+        base_gradient.setColorAt(0.46, QColor("#9fe7ff"))
+        base_gradient.setColorAt(1.0, QColor("#4163c7"))
         painter.fillPath(base, base_gradient)
         painter.setPen(QPen(QColor("#ffffff"), 1.2))
         painter.drawPath(base)
 
-        roof = QPolygonF([QPointF(11.0, 16.7), QPointF(23.0, 7.0), QPointF(35.0, 16.7), QPointF(31.8, 19.6), QPointF(23.0, 12.5), QPointF(14.2, 19.6)])
+        roof = QPolygonF([QPointF(10.5, 16.8), QPointF(23.0, 6.8), QPointF(35.5, 16.8), QPointF(32.0, 20.0), QPointF(23.0, 12.4), QPointF(14.0, 20.0)])
+        roof_gradient = QLinearGradient(11, 7, 35, 20)
+        roof_gradient.setColorAt(0.0, QColor("#ff8a35"))
+        roof_gradient.setColorAt(1.0, QColor("#d91f5c"))
         painter.setPen(QPen(QColor("#ffffff"), 1.35))
-        painter.setBrush(QColor("#1f416f"))
+        painter.setBrush(roof_gradient)
         painter.drawPolygon(roof)
 
         body = QPainterPath()
         body.addRoundedRect(QRectF(15.0, 16.0, 16.0, 10.8), 2.8, 2.8)
         body_gradient = QLinearGradient(15, 16, 31, 27)
         body_gradient.setColorAt(0.0, QColor("#ffffff"))
-        body_gradient.setColorAt(0.42, QColor("#86b7f2"))
-        body_gradient.setColorAt(1.0, QColor("#18355d"))
+        body_gradient.setColorAt(0.45, QColor("#43d3bd"))
+        body_gradient.setColorAt(1.0, QColor("#1f4f8f"))
         painter.fillPath(body, body_gradient)
         painter.setPen(QPen(QColor("#ffffff"), 1.2))
         painter.drawPath(body)
-        painter.drawRoundedRect(QRectF(21.0, 19.5, 4.0, 7.0), 1.0, 1.0)
+        painter.drawRoundedRect(QRectF(21.0, 19.4, 4.0, 7.0), 1.0, 1.0)
         painter.drawLine(QPointF(17.6, 18.7), QPointF(28.4, 18.7))
         painter.end()
         return QIcon(pixmap)
+
+    def resizeEvent(self, event) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        _apply_rounded_mask(self, 18)
 
     def mousePressEvent(self, event) -> None:  # noqa: N802
         if event.button() == Qt.LeftButton and event.position().y() <= 46:
