@@ -91,7 +91,7 @@ if errorlevel 1 (
     exit /b 1
 )
 
-"%PYTHON_EXE%" -c "from pathlib import Path; from modules.mechanics_dynamics_statics.workspace import EngineeringDesignWorkspace; from src.engineers_tools.app.module_window import ModuleWindow; from src.engineers_tools.app.project_file_dialog import ProjectFileDialog; root=Path.cwd(); print('canonical app root: ' + str(root)); print('active workspace class: ' + EngineeringDesignWorkspace.__module__ + '.' + EngineeringDesignWorkspace.__name__); print('shared window class: ' + ModuleWindow.__module__ + '.' + ModuleWindow.__name__); print('file dialog class: ' + ProjectFileDialog.__module__ + '.' + ProjectFileDialog.__name__)"
+"%PYTHON_EXE%" -c "from pathlib import Path; from modules.mechanics_dynamics_statics.workspace import EngineeringDesignWorkspace; from src.engineers_tools.app.module_window import ModuleWindow, UI_BUILD_MARKER; from src.engineers_tools.app.project_file_dialog import ProjectFileDialog; root=Path.cwd(); print('canonical app root: ' + str(root)); print('active workspace class: ' + EngineeringDesignWorkspace.__module__ + '.' + EngineeringDesignWorkspace.__name__); print('shared window class: ' + ModuleWindow.__module__ + '.' + ModuleWindow.__name__); print('file dialog class: ' + ProjectFileDialog.__module__ + '.' + ProjectFileDialog.__name__); print('active ui marker: ' + UI_BUILD_MARKER)"
 if errorlevel 1 (
     echo Active runtime verification failed.
     pause
