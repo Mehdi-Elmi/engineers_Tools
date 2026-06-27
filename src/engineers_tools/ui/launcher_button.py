@@ -114,55 +114,61 @@ class LauncherButton(QPushButton):
 
     def _paint_circuit_icon(self, painter: QPainter, rect: QRectF) -> None:
         painter.save()
-        shadow_pen = QPen(QColor(19, 34, 56, 95), 5.0, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
-        trace_pen = QPen(QColor("#ffffff"), 3.0, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
-        chip_rect = QRectF(rect.center().x() - 20, rect.center().y() - 22, 40, 44)
+        painter.setRenderHint(QPainter.Antialiasing, True)
+        board = rect.adjusted(11, 11, -11, -11)
+        board_path = QPainterPath()
+        board_path.addRoundedRect(board, 13, 13)
+        board_gradient = QLinearGradient(board.topLeft(), board.bottomRight())
+        board_gradient.setColorAt(0.0, QColor(255, 255, 255, 64))
+        board_gradient.setColorAt(1.0, QColor(19, 34, 56, 72))
+        painter.fillPath(board_path, board_gradient)
+        painter.setPen(QPen(QColor("#ffffff"), 1.8))
+        painter.drawPath(board_path)
 
-        def draw_traces(pen: QPen) -> None:
+        trace = QPen(QColor("#ffffff"), 3.0, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+        glow = QPen(QColor(19, 34, 56, 82), 5.2, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+        left = board.left() + 8
+        right = board.right() - 8
+        top = board.top() + 15
+        mid = board.center().y()
+        bottom = board.bottom() - 14
+
+        def draw_network(pen: QPen) -> None:
             painter.setPen(pen)
-            left_x = rect.left() + 13
-            right_x = rect.right() - 13
-            top_y = rect.top() + 16
-            mid_y = rect.center().y()
-            low_y = rect.bottom() - 17
-            painter.drawLine(QLineF(left_x, top_y, chip_rect.left(), chip_rect.top() + 8))
-            painter.drawLine(QLineF(left_x, mid_y, chip_rect.left(), chip_rect.center().y()))
-            painter.drawLine(QLineF(left_x, low_y, chip_rect.left(), chip_rect.bottom() - 8))
-            painter.drawLine(QLineF(chip_rect.right(), chip_rect.top() + 8, right_x, top_y))
-            painter.drawLine(QLineF(chip_rect.right(), chip_rect.center().y(), right_x, mid_y))
-            painter.drawLine(QLineF(chip_rect.right(), chip_rect.bottom() - 8, right_x, low_y))
-            painter.drawLine(QLineF(left_x, top_y, left_x, mid_y))
-            painter.drawLine(QLineF(right_x, mid_y, right_x, low_y))
+            painter.drawLine(QLineF(left, mid, left + 13, mid))
+            resistor = [QPointF(left + 13, mid), QPointF(left + 18, mid - 7), QPointF(left + 24, mid + 7), QPointF(left + 30, mid - 7), QPointF(left + 36, mid + 7), QPointF(left + 42, mid)]
+            for start, end in zip(resistor, resistor[1:]):
+                painter.drawLine(QLineF(start, end))
+            painter.drawLine(QLineF(left + 42, mid, board.center().x() - 9, mid))
+            for index in range(3):
+                painter.drawArc(QRectF(board.center().x() - 9 + index * 7, mid - 7, 12, 14), 0, 180 * 16)
+            painter.drawLine(QLineF(board.center().x() + 17, mid, right - 18, mid))
+            painter.drawLine(QLineF(right - 15, mid - 13, right - 15, mid + 13))
+            painter.drawLine(QLineF(right - 8, mid - 13, right - 8, mid + 13))
+            painter.drawLine(QLineF(right - 8, mid, right, mid))
+            painter.drawLine(QLineF(left, top, board.center().x() - 12, top))
+            painter.drawLine(QLineF(board.center().x() - 12, top, board.center().x() - 12, mid - 18))
+            painter.drawLine(QLineF(right, bottom, board.center().x() + 12, bottom))
+            painter.drawLine(QLineF(board.center().x() + 12, bottom, board.center().x() + 12, mid + 18))
 
-        draw_traces(shadow_pen)
-        draw_traces(trace_pen)
+        draw_network(glow)
+        draw_network(trace)
 
-        painter.setPen(QPen(QColor("#ffffff"), 2.2, Qt.SolidLine, Qt.RoundCap))
-        for y_offset in (8, 18, 28, 38):
-            painter.drawLine(QLineF(chip_rect.left() - 7, chip_rect.top() + y_offset, chip_rect.left(), chip_rect.top() + y_offset))
-            painter.drawLine(QLineF(chip_rect.right(), chip_rect.top() + y_offset, chip_rect.right() + 7, chip_rect.top() + y_offset))
-
-        chip_path = QPainterPath()
-        chip_path.addRoundedRect(chip_rect, 8, 8)
-        chip_gradient = QLinearGradient(chip_rect.topLeft(), chip_rect.bottomRight())
-        chip_gradient.setColorAt(0.0, QColor(255, 255, 255, 68))
-        chip_gradient.setColorAt(1.0, QColor(19, 34, 56, 90))
-        painter.fillPath(chip_path, chip_gradient)
-        painter.setPen(QPen(QColor("#ffffff"), 2.4))
-        painter.drawPath(chip_path)
-
-        painter.setPen(QPen(QColor("#ffffff"), 2.0, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
-        painter.drawLine(QLineF(chip_rect.left() + 9, chip_rect.center().y() - 5, chip_rect.left() + 16, chip_rect.center().y() + 5))
-        painter.drawLine(QLineF(chip_rect.left() + 16, chip_rect.center().y() + 5, chip_rect.left() + 23, chip_rect.center().y() - 5))
-        painter.drawLine(QLineF(chip_rect.left() + 23, chip_rect.center().y() - 5, chip_rect.left() + 31, chip_rect.center().y() + 5))
-
-        painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(QColor("#ffffff"))
-        for point in (
-            QPointF(rect.left() + 13, rect.top() + 16), QPointF(rect.left() + 13, rect.center().y()), QPointF(rect.left() + 13, rect.bottom() - 17),
-            QPointF(rect.right() - 13, rect.top() + 16), QPointF(rect.right() - 13, rect.center().y()), QPointF(rect.right() - 13, rect.bottom() - 17),
-        ):
+        painter.setPen(Qt.PenStyle.NoPen)
+        for point in (QPointF(left, mid), QPointF(right, mid), QPointF(left, top), QPointF(right, bottom)):
             painter.drawEllipse(point, 3.6, 3.6)
+
+        signal = QPainterPath()
+        x0 = board.left() + 15
+        y0 = board.bottom() - 11
+        signal.moveTo(x0, y0)
+        for step in range(1, 10):
+            x = x0 + step * 5
+            y = y0 - math.sin(step * 0.9) * 6
+            signal.lineTo(x, y)
+        painter.setPen(QPen(QColor("#fff1bf"), 1.9, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+        painter.drawPath(signal)
         painter.restore()
 
     def _paint_flowchart_icon(self, painter: QPainter, rect: QRectF) -> None:
