@@ -40,9 +40,11 @@ def apply_app_theme(app: QApplication) -> None:
         QLabel#WindowTitle {{ background:transparent; color:#eef4fb; font-size:16px; font-weight:800; }}
         QLabel#WindowMark {{ background:#2f4664; border:1px solid #ffffff; border-radius:8px; color:#ffffff; font-size:12px; font-weight:800; }}
         QLabel#WindowLogoMark {{ background:transparent; border:0; border-radius:0; }}
-        QPushButton#WindowButton, QPushButton#CloseButton {{ background:transparent; border:0; border-radius:6px; color:#eef4fb; font-size:16px; font-weight:800; font-style:italic; }}
-        QPushButton#WindowButton:hover {{ background:#243a59; }}
-        QPushButton#CloseButton:hover {{ background:#e65252; color:#ffffff; }}
+        QPushButton#WindowButton, QPushButton#CloseButton {{ background:transparent; border:0; border-radius:9px; color:#eef4fb; font-size:16px; font-weight:800; font-style:italic; }}
+        QPushButton#WindowButton:hover {{ background:rgba(255,255,255,42); border:1px solid rgba(255,255,255,80); }}
+        QPushButton#WindowButton:pressed {{ background:#0b1729; padding-top:2px; }}
+        QPushButton#CloseButton:hover {{ background:qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 #ff7d7d, stop:1 #c9243b); border:1px solid rgba(255,255,255,130); color:#ffffff; }}
+        QPushButton#CloseButton:pressed {{ background:#9f1e2d; padding-top:2px; }}
 
         QWidget#LauncherHeader {{ background:{NAVY}; border:1px solid #ffffff; border-radius:12px; }}
         QLabel#HeaderTitle {{ background:transparent; color:#ffffff; font-size:24px; font-weight:800; }}
@@ -99,6 +101,9 @@ def apply_app_theme(app: QApplication) -> None:
         QPushButton#SecondaryDialogButton {{ background:qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #ffffff, stop:1 #d8e3f0); }}
         QPushButton#ConfirmButton:hover, QPushButton#ToolButton:hover, QPushButton#FileNavButton:hover, QPushButton#PrimaryDialogButton:hover, QPushButton#SecondaryDialogButton:hover {{ border-color:#2f7df6; background:#ffffff; }}
         QPushButton#ConfirmButton:pressed, QPushButton#ToolButton:pressed, QPushButton#FileNavButton:pressed, QPushButton#PrimaryDialogButton:pressed, QPushButton#SecondaryDialogButton:pressed {{ padding-top:6px; border-bottom:1px solid #7188a5; }}
+        QPushButton#SaveOptionButton {{ background:rgba(255,255,255,155); border:1px solid #b8c5d4; border-radius:8px; color:#1f3148; font-size:12px; font-style:normal; font-weight:800; padding:3px 8px; text-align:left; }}
+        QPushButton#SaveOptionButton:hover {{ background:#fff3d4; border-color:#ff8a35; }}
+        QPushButton#SaveOptionButton:checked {{ background:#eaf6ff; border-color:#2f7df6; }}
 
         QDialog#ProjectMenuDialog, QDialog#ProjectHelpDialog, QDialog#ProjectFileDialog {{ background:transparent; }}
         QWidget#ProjectMenuShell {{ background:qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 #ffffff, stop:0.40 #eef8ff, stop:1 #fff3d4); border:1px solid #8fa2bb; border-radius:12px; }}
