@@ -36,14 +36,32 @@ Mehdi-Elmi/engineers_Tools
 - `PageBar`: مدیریت صفحه‌ها.
 - `StatusBar`: مختصات، zoom، unit و وضعیت tool select. رنگ آن باید با TopBar هماهنگ و سرمه‌ای باشد.
 
+## قانون لوگو
+
+لوگوی اصلی برنامه باید در پوشه زیر قرار بگیرد:
+
+```text
+logo/
+```
+
+پنجره مادر در زمان اجرا اولین فایل تصویری معتبر داخل این پوشه را به عنوان لوگوی `TopBar` می‌خواند. پس چت‌های بعدی نباید دوباره متن `AT` را به‌عنوان لوگوی اصلی طراحی کنند. اگر فایل تصویری در پوشه وجود نداشت یا قابل خواندن نبود، فقط برای fallback متن `AT` نمایش داده می‌شود.
+
+فرمت‌های معتبر فعلی:
+
+- `.png`
+- `.jpg`
+- `.jpeg`
+- `.bmp`
+- `.webp`
+
 ## قانون منوهای پنجره مادر
 
-منوهای پنجره مادر در `src/engineers_tools/app/module_window.py` تعریف می‌شوند و ظاهر آن‌ها از `src/engineers_tools/app/theme.py` می‌آید. هر منو باید داخل پنجره گرد و پروژه‌ای باز شود، نه به شکل منوی خام و ناهماهنگ.
+منوهای پنجره مادر در `src/engineers_tools/app/module_window.py` تعریف می‌شوند و ظاهر آن‌ها از `src/engineers_tools/app/theme.py` می‌آید. هر منو باید مثل منوی ویندوز، دقیقاً زیر همان دکمه‌ای که کاربر کلیک کرده به صورت dropdown باز شود. خود dropdown باید یک باکس گرد، شکیل و هماهنگ با پروژه باشد. منو نباید مثل دیالوگ وسط صفحه باز شود.
 
 محتوای ثابت فعلی:
 
 - `File`: `New`, `Open`, `Save`, `Save As`, `Page Setup`, `Print Setup`, `Import`, `Export`, `Properties`.
-- `Edit`: `Undo`, `Redo`, `Cut`, `Copy`, `Paste`, `Delete`, `Repeat Last Tool`, `Select All`, `Group`, `Ungroup`, `Move`.
+- `Edit`: `Undo`, `Redo`, `Cut`, `Copy`, `Paste`, `Delete`, `Repeat Last Tools`, `Select All`, `Group`, `Ungroup`, `Move`.
 - `View`: `Start Bar`, `Grid`, `Ruler`, `Snap` با حالت فعال و غیرفعال.
 - `Insert`: `Image`, `Text`.
 - `Draw`: فعلاً خالی است تا ابزار قلم نوری و طراحی بعداً مشخص شود.
@@ -54,7 +72,7 @@ Mehdi-Elmi/engineers_Tools
 - `Undo`, `Redo`, `Cut`, `Copy`, `Paste`, `Select All` اگر ویجت فعال این عملیات را داشته باشد همان عملیات واقعی را صدا می‌زنند.
 - `Grid` واقعاً Canvas را روشن و خاموش می‌کند.
 - `Start Bar` واقعاً نوار ابزار سریع را روشن و خاموش می‌کند.
-- `Ruler`, `Snap`, `Repeat Last Tool`, `Group`, `Ungroup`, `Move` تا زمان ساخت موتور آبجکت‌ها وضعیت خود را در `StatusBar` اعلام می‌کنند و بعداً به منطق واقعی وصل می‌شوند.
+- `Ruler`, `Snap`, `Repeat Last Tools`, `Group`, `Ungroup`, `Move` تا زمان ساخت موتور آبجکت‌ها وضعیت خود را در `StatusBar` اعلام می‌کنند و بعداً به منطق واقعی وصل می‌شوند.
 
 ## قانون گوشه‌ها و نوارها
 
