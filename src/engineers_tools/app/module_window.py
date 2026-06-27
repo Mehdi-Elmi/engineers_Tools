@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import math
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -37,6 +38,25 @@ def _apply_rounded_mask(widget: QWidget, radius: float) -> None:
     widget.setMask(QRegion(path.toFillPolygon().toPolygon()))
 
 
+def _paint_rotation_glyph(painter: QPainter, center: QPointF, radius: float, color: QColor) -> None:
+    painter.save()
+    painter.setRenderHint(QPainter.Antialiasing, True)
+    painter.setBrush(Qt.NoBrush)
+    painter.setPen(QPen(color, 2.0, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+    painter.drawArc(QRectF(center.x() - radius, center.y() - radius, radius * 2, radius * 2), 35 * 16, 285 * 16)
+    painter.setBrush(color)
+    painter.drawPolygon(
+        QPolygonF(
+            [
+                QPointF(center.x() + radius - 1, center.y() - radius * 0.48),
+                QPointF(center.x() + radius + 6, center.y() - radius * 0.12),
+                QPointF(center.x() + radius - 2, center.y() + radius * 0.18),
+            ]
+        )
+    )
+    painter.restore()
+
+
 def _select_icon(checked: bool) -> QIcon:
     pixmap = QPixmap(28, 28)
     pixmap.fill(Qt.GlobalColor.transparent)
@@ -69,7 +89,6 @@ def _layer_icon(kind: str, active: bool = True) -> QIcon:
     painter.drawPath(base)
     painter.setPen(QPen(QColor("#132238"), 1.9, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
     painter.setBrush(Qt.NoBrush)
-
     if kind == "eye":
         eye = QPainterPath()
         eye.moveTo(6, 15)
@@ -91,9 +110,7 @@ def _layer_icon(kind: str, active: bool = True) -> QIcon:
         painter.setBrush(QColor("#132238"))
         painter.drawEllipse(QPointF(15, 18), 1.6, 1.6)
     else:
-        painter.drawArc(QRectF(7, 7, 16, 16), 40 * 16, 280 * 16)
-        painter.setBrush(QColor("#132238"))
-        painter.drawPolygon(QPolygonF([QPointF(21, 8), QPointF(24, 15), QPointF(17, 12)]))
+        _paint_rotation_glyph(painter, QPointF(15, 15), 7.5, QColor("#132238"))
         if not active:
             painter.setPen(QPen(QColor("#d44777"), 2.0, Qt.SolidLine, Qt.RoundCap))
             painter.drawLine(QPointF(7, 23), QPointF(23, 7))
@@ -121,6 +138,11 @@ class GridCanvas(QWidget):
         self._file_path: Path | None = None
         self._file_pixmap = QPixmap()
         self._object_rect: QRectF | None = None
+        self._rotation_degrees = 0.0
+        self._drag_action: str | None = None
+        self._drag_start = QPointF()
+        self._drag_start_rect = QRectF()
+        self._drag_start_rotation = 0.0
         self.setMouseTracking(True)
 
     def set_grid_visible(self, visible: bool) -> None:
@@ -134,6 +156,7 @@ class GridCanvas(QWidget):
     def load_file(self, path: Path) -> None:
         self._file_path = path
         self._file_pixmap = QPixmap(str(path))
+        self._rotation_degrees = 0.0
         if self.width() <= 0 or self.height() <= 0:
             return
         if not self._file_pixmap.isNull():
@@ -151,17 +174,113 @@ class GridCanvas(QWidget):
         self._object_rect = QRectF((self.width() - width) / 2, (self.height() - height) / 2, width, height)
         self.update()
 
-    def _to_canvas_coordinates(self, point: QPointF) -> tuple[float, float]:
+    def _to_canvas_coordinates(self, point: QPointF) -> QPointF:
         center_x = self.width() / 2.0
         center_y = self.height() / 2.0
         x = ((point.x() - center_x) / self._zoom) + center_x
         y = ((point.y() - center_y) / self._zoom) + center_y
-        return x, y
+        return QPointF(x, y)
+
+    def _rotation_center(self) -> QPointF | None:
+        if self._object_rect is None:
+            return None
+        return QPointF(self._object_rect.center().x(), self._object_rect.top() - 33)
+
+    def _hit_test(self, point: QPointF) -> str | None:
+        rect = self._object_rect
+        if rect is None:
+            return None
+        rotate_center = self._rotation_center()
+        if rotate_center is not None and math.hypot(point.x() - rotate_center.x(), point.y() - rotate_center.y()) <= 14:
+            return "rotate"
+        tolerance = 9.0
+        handles = {
+            "resize_nw": rect.topLeft(), "resize_n": QPointF(rect.center().x(), rect.top()), "resize_ne": rect.topRight(),
+            "resize_e": QPointF(rect.right(), rect.center().y()), "resize_se": rect.bottomRight(), "resize_s": QPointF(rect.center().x(), rect.bottom()),
+            "resize_sw": rect.bottomLeft(), "resize_w": QPointF(rect.left(), rect.center().y()),
+        }
+        for action, handle in handles.items():
+            if abs(point.x() - handle.x()) <= tolerance and abs(point.y() - handle.y()) <= tolerance:
+                return action
+        if rect.adjusted(-4, -4, 4, 4).contains(point):
+            return "move"
+        return None
+
+    def _apply_drag(self, point: QPointF) -> None:
+        if self._object_rect is None or self._drag_action is None:
+            return
+        dx = point.x() - self._drag_start.x()
+        dy = point.y() - self._drag_start.y()
+        if self._drag_action == "move":
+            self._object_rect = self._drag_start_rect.translated(dx, dy)
+        elif self._drag_action == "rotate":
+            center = self._drag_start_rect.center()
+            start_angle = math.degrees(math.atan2(self._drag_start.y() - center.y(), self._drag_start.x() - center.x()))
+            current_angle = math.degrees(math.atan2(point.y() - center.y(), point.x() - center.x()))
+            self._rotation_degrees = self._drag_start_rotation + current_angle - start_angle
+        elif self._drag_action.startswith("resize"):
+            rect = QRectF(self._drag_start_rect)
+            if "w" in self._drag_action:
+                rect.setLeft(rect.left() + dx)
+            if "e" in self._drag_action:
+                rect.setRight(rect.right() + dx)
+            if "n" in self._drag_action:
+                rect.setTop(rect.top() + dy)
+            if "s" in self._drag_action:
+                rect.setBottom(rect.bottom() + dy)
+            if rect.width() < 35:
+                if "w" in self._drag_action:
+                    rect.setLeft(rect.right() - 35)
+                else:
+                    rect.setRight(rect.left() + 35)
+            if rect.height() < 35:
+                if "n" in self._drag_action:
+                    rect.setTop(rect.bottom() - 35)
+                else:
+                    rect.setBottom(rect.top() + 35)
+            self._object_rect = rect.normalized()
+        self.update()
+
+    def mousePressEvent(self, event) -> None:  # noqa: N802
+        if event.button() == Qt.LeftButton:
+            point = self._to_canvas_coordinates(event.position())
+            action = self._hit_test(point)
+            if action is not None and self._object_rect is not None:
+                self._drag_action = action
+                self._drag_start = point
+                self._drag_start_rect = QRectF(self._object_rect)
+                self._drag_start_rotation = self._rotation_degrees
+                event.accept()
+                return
+        super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event) -> None:  # noqa: N802
-        x, y = self._to_canvas_coordinates(event.position())
-        self.mouse_position_changed.emit(x, y)
+        point = self._to_canvas_coordinates(event.position())
+        self.mouse_position_changed.emit(point.x(), point.y())
+        if self._drag_action is not None:
+            self._apply_drag(point)
+            event.accept()
+            return
+        hover = self._hit_test(point)
+        if hover == "move":
+            self.setCursor(Qt.SizeAllCursor)
+        elif hover == "rotate":
+            self.setCursor(Qt.CrossCursor)
+        elif hover in {"resize_n", "resize_s"}:
+            self.setCursor(Qt.SizeVerCursor)
+        elif hover in {"resize_e", "resize_w"}:
+            self.setCursor(Qt.SizeHorCursor)
+        elif hover in {"resize_ne", "resize_sw"}:
+            self.setCursor(Qt.SizeBDiagCursor)
+        elif hover in {"resize_nw", "resize_se"}:
+            self.setCursor(Qt.SizeFDiagCursor)
+        else:
+            self.unsetCursor()
         super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event) -> None:  # noqa: N802
+        self._drag_action = None
+        super().mouseReleaseEvent(event)
 
     def contextMenuEvent(self, event) -> None:  # noqa: N802
         self.context_actions_requested.emit(event.globalPos())
@@ -198,20 +317,25 @@ class GridCanvas(QWidget):
         if self._object_rect is None or self._file_path is None:
             return
         rect = self._object_rect
+        painter.save()
+        painter.translate(rect.center())
+        painter.rotate(self._rotation_degrees)
+        local = QRectF(-rect.width() / 2, -rect.height() / 2, rect.width(), rect.height())
         painter.setPen(QPen(QColor("#d6e2f0"), 1.2))
         painter.setBrush(QColor("#ffffff"))
-        painter.drawRect(rect)
+        painter.drawRect(local)
         if not self._file_pixmap.isNull():
-            painter.drawPixmap(rect.toRect(), self._file_pixmap)
+            painter.drawPixmap(local.toRect(), self._file_pixmap)
         else:
             painter.setPen(QPen(QColor("#465d78"), 1.2))
-            painter.drawText(rect.adjusted(10, 10, -10, -10), Qt.AlignCenter, self._file_path.name)
+            painter.drawText(local.adjusted(10, 10, -10, -10), Qt.AlignCenter, self._file_path.name)
+        painter.restore()
         self._paint_selection_frame(painter, rect)
 
     def _paint_selection_frame(self, painter: QPainter, rect: QRectF) -> None:
         select = QColor("#2f7df6")
         painter.setBrush(Qt.NoBrush)
-        painter.setPen(QPen(select, 1.6, Qt.DashLine))
+        painter.setPen(QPen(select, 1.5, Qt.DashLine))
         painter.drawRect(rect.adjusted(-5, -5, 5, 5))
         handles = (
             rect.topLeft(), QPointF(rect.center().x(), rect.top()), rect.topRight(),
@@ -222,19 +346,14 @@ class GridCanvas(QWidget):
         painter.setBrush(select)
         for point in handles:
             painter.drawRoundedRect(QRectF(point.x() - 4, point.y() - 4, 8, 8), 2, 2)
-        rotate_center = QPointF(rect.center().x(), rect.top() - 32)
-        painter.setPen(QPen(select, 1.5))
-        painter.drawLine(QPointF(rect.center().x(), rect.top() - 5), QPointF(rotate_center.x(), rotate_center.y() + 10))
-        painter.setBrush(QColor("#ffffff"))
-        painter.drawEllipse(rotate_center, 10, 10)
-        painter.setBrush(select)
-        for offset in (-4, 0, 4):
-            painter.drawEllipse(QPointF(rotate_center.x() + offset, rotate_center.y()), 1.5, 1.5)
-        painter.setBrush(Qt.NoBrush)
-        painter.setPen(QPen(QColor("#ff8a35"), 1.6, Qt.SolidLine, Qt.RoundCap))
-        painter.drawArc(QRectF(rotate_center.x() - 16, rotate_center.y() - 16, 32, 32), 35 * 16, 250 * 16)
-        painter.setBrush(QColor("#ff8a35"))
-        painter.drawPolygon(QPolygonF([QPointF(rotate_center.x() + 13, rotate_center.y() - 7), QPointF(rotate_center.x() + 18, rotate_center.y() - 2), QPointF(rotate_center.x() + 11, rotate_center.y() + 1)]))
+        rotate_center = QPointF(rect.center().x(), rect.top() - 34)
+        painter.setPen(QPen(select, 1.2, Qt.DashLine))
+        painter.drawLine(QPointF(rect.center().x() - 5, rect.top() - 5), QPointF(rotate_center.x() - 5, rotate_center.y() + 11))
+        painter.drawLine(QPointF(rect.center().x() + 5, rect.top() - 5), QPointF(rotate_center.x() + 5, rotate_center.y() + 11))
+        painter.setBrush(QColor("#fff9de"))
+        painter.setPen(QPen(QColor("#7e5b10"), 1.4))
+        painter.drawEllipse(rotate_center, 13, 13)
+        _paint_rotation_glyph(painter, rotate_center, 7.4, QColor("#ff8a35"))
 
 
 class ProjectHelpDialog(QDialog):
@@ -300,7 +419,7 @@ class ProjectMenuDialog(QDialog):
         for item in items:
             button = QPushButton(self._build_button_text(item))
             button.setObjectName("MenuItemButton")
-            button.setMinimumHeight(26)
+            button.setMinimumHeight(24)
             if item.checkable:
                 button.setIcon(_select_icon(item.checked))
                 button.setIconSize(QSize(24, 24))
@@ -311,10 +430,10 @@ class ProjectMenuDialog(QDialog):
 
     def _preferred_width(self, items: tuple[MenuItemSpec, ...]) -> int:
         if not items:
-            return 172
+            return 150
         longest = max(self.fontMetrics().horizontalAdvance(self._build_button_text(item)) for item in items)
-        icon_padding = 34 if any(item.checkable for item in items) else 0
-        return max(172, min(226, longest + icon_padding + 38))
+        icon_padding = 32 if any(item.checkable for item in items) else 0
+        return max(142, min(204, longest + icon_padding + 34))
 
     def _build_button_text(self, item: MenuItemSpec) -> str:
         shortcut = f"    {item.shortcut}" if item.shortcut else ""
@@ -354,8 +473,10 @@ class ModuleWindow(QMainWindow):
         self._last_file_dir: Path | None = None
         self._view_state = {"start_bar": True, "grid": True, "ruler": False, "snap": False}
         self._pages: list[str] = ["Page 1"]
+        self._layers: list[str] = ["Page 1"]
         self._active_page_index = 0
         self._page_buttons_layout: QHBoxLayout | None = None
+        self._layer_list_layout: QVBoxLayout | None = None
         root = QWidget()
         root.setObjectName("WindowRoot")
         self.setCentralWidget(root)
@@ -460,9 +581,9 @@ class ModuleWindow(QMainWindow):
         layout = QHBoxLayout(area)
         layout.setContentsMargins(14, 14, 14, 10)
         layout.setSpacing(12)
-        properties = self._build_side_panel("Properties", ("Selection", "Coordinates", "Size", "Style", "Behavior"))
-        properties.setFixedWidth(220)
-        layout.addWidget(properties)
+        layers = self._build_layers_panel()
+        layers.setFixedWidth(236)
+        layout.addWidget(layers)
         canvas_shell = QWidget()
         canvas_shell.setObjectName("CanvasShell")
         canvas_layout = QVBoxLayout(canvas_shell)
@@ -474,9 +595,9 @@ class ModuleWindow(QMainWindow):
         self._canvas.context_actions_requested.connect(self._show_canvas_context_menu)
         canvas_layout.addWidget(self._canvas, 1)
         layout.addWidget(canvas_shell, 1)
-        layers = self._build_layers_panel()
-        layers.setFixedWidth(236)
-        layout.addWidget(layers)
+        properties = self._build_side_panel("Properties", ("Selection", "Coordinates", "Size", "Style", "Behavior"))
+        properties.setFixedWidth(220)
+        layout.addWidget(properties)
         return area
 
     def _build_layers_panel(self) -> QWidget:
@@ -488,18 +609,46 @@ class ModuleWindow(QMainWindow):
         heading = QLabel("Layers")
         heading.setObjectName("PanelTitle")
         layout.addWidget(heading)
-        layout.addWidget(self._build_layer_row("Page 1", visible=True, locked=False, rotation=True))
-        layout.addWidget(self._build_layer_row("Object 1", visible=True, locked=False, rotation=True))
-        layout.addWidget(self._build_layer_row("Group 1", visible=True, locked=True, rotation=False))
+        self._layer_list_layout = QVBoxLayout()
+        self._layer_list_layout.setSpacing(6)
+        layout.addLayout(self._layer_list_layout)
         layout.addStretch(1)
+        self._refresh_layers()
         return panel
 
-    def _build_layer_row(self, name: str, visible: bool, locked: bool, rotation: bool) -> QWidget:
+    def _refresh_layers(self) -> None:
+        if self._layer_list_layout is None:
+            return
+        while self._layer_list_layout.count():
+            item = self._layer_list_layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+        for layer in self._layers:
+            self._layer_list_layout.addWidget(self._build_layer_row(layer, visible=True, locked=False, rotation=True, grouped=layer.startswith("Group")))
+
+    def _add_layer(self, name: str) -> None:
+        candidate = name or "Object"
+        existing = set(self._layers)
+        label = candidate
+        counter = 1
+        while label in existing:
+            counter += 1
+            label = f"{candidate} {counter}"
+        self._layers.append(label)
+        self._refresh_layers()
+
+    def _build_layer_row(self, name: str, visible: bool, locked: bool, rotation: bool, grouped: bool = False) -> QWidget:
         row = QWidget()
         row.setObjectName("LayerRow")
         layout = QHBoxLayout(row)
         layout.setContentsMargins(5, 4, 5, 4)
         layout.setSpacing(4)
+        if grouped:
+            expander = QPushButton("▾")
+            expander.setObjectName("LayerExpandButton")
+            expander.setFixedSize(18, 24)
+            layout.addWidget(expander)
         for kind, state, tooltip in (("eye", visible, "Show or hide layer"), ("lock", locked, "Lock layer"), ("rotation", rotation, "Show rotation handle")):
             button = QPushButton()
             button.setObjectName("LayerIconButton")
@@ -536,15 +685,15 @@ class ModuleWindow(QMainWindow):
     def _build_page_bar(self) -> QWidget:
         bar = QWidget()
         bar.setObjectName("PageBar")
-        bar.setFixedHeight(44)
+        bar.setFixedHeight(38)
         layout = QHBoxLayout(bar)
-        layout.setContentsMargins(14, 5, 14, 5)
-        layout.setSpacing(6)
+        layout.setContentsMargins(12, 4, 12, 4)
+        layout.setSpacing(5)
         page_strip = QWidget()
         page_strip.setObjectName("PageStrip")
         self._page_buttons_layout = QHBoxLayout(page_strip)
         self._page_buttons_layout.setContentsMargins(0, 0, 0, 0)
-        self._page_buttons_layout.setSpacing(5)
+        self._page_buttons_layout.setSpacing(4)
         layout.addWidget(page_strip)
         self._refresh_page_buttons()
         layout.addStretch(1)
@@ -555,7 +704,7 @@ class ModuleWindow(QMainWindow):
 
     def _build_page_action_button(self, label: str, handler: Callable[[], None]) -> QPushButton:
         button = QPushButton(label)
-        button.setMinimumWidth(76)
+        button.setMinimumWidth(62)
         button.clicked.connect(handler)
         return button
 
@@ -578,11 +727,7 @@ class ModuleWindow(QMainWindow):
 
     def _show_page_context_menu(self, index: int, anchor: QWidget) -> None:
         self._select_page(index)
-        self._show_menu("Page", (
-            MenuItemSpec("Copy", self._copy_page),
-            MenuItemSpec("Duplicate Page", self._duplicate_page),
-            MenuItemSpec("Delete Page", self._delete_page),
-        ), anchor)
+        self._show_menu("Page", (MenuItemSpec("Copy", self._copy_page), MenuItemSpec("Duplicate Page", self._duplicate_page), MenuItemSpec("Delete Page", self._delete_page)), anchor)
 
     def _child_page_label(self) -> str:
         current = self._pages[self._active_page_index]
@@ -592,6 +737,25 @@ class ModuleWindow(QMainWindow):
         while f"{base}-{counter}" in existing:
             counter += 1
         return f"{base}-{counter}"
+
+    def _renumber_pages(self) -> None:
+        root_map: dict[str, str] = {}
+        child_counters: dict[str, int] = {}
+        next_root = 1
+        renamed: list[str] = []
+        for page in self._pages:
+            root = page.split("-")[0]
+            if root not in root_map:
+                root_map[root] = f"Page {next_root}"
+                child_counters[root_map[root]] = 0
+                next_root += 1
+            new_root = root_map[root]
+            if "-" in page:
+                child_counters[new_root] += 1
+                renamed.append(f"{new_root}-{child_counters[new_root]}")
+            else:
+                renamed.append(new_root)
+        self._pages = renamed
 
     def _select_page(self, index: int) -> None:
         self._active_page_index = max(0, min(index, len(self._pages) - 1))
@@ -628,6 +792,7 @@ class ModuleWindow(QMainWindow):
             return
         removed = self._pages.pop(self._active_page_index)
         self._active_page_index = min(self._active_page_index, len(self._pages) - 1)
+        self._renumber_pages()
         self._refresh_page_buttons()
         self._set_status(f"Deleted {removed}")
 
@@ -671,14 +836,15 @@ class ModuleWindow(QMainWindow):
 
     def _show_canvas_context_menu(self, global_pos: QPoint) -> None:
         self._show_menu_at("Object", (
-            MenuItemSpec("Repeat", self._repeat_last_tools, "Ctrl+R"),
-            MenuItemSpec("Copy", self._copy, "Ctrl+C"),
-            MenuItemSpec("Cut", self._cut, "Ctrl+X"),
-            MenuItemSpec("Paste", self._paste, "Ctrl+V"),
-            MenuItemSpec("Rotation", self._rotation),
+            MenuItemSpec("Repeat", self._repeat_last_tools),
+            MenuItemSpec("Copy", self._copy),
+            MenuItemSpec("Cut", self._cut),
+            MenuItemSpec("Paste", self._paste),
             MenuItemSpec("Rotate", self._rotation),
-            MenuItemSpec("Group", self._group, "Ctrl+G"),
-            MenuItemSpec("Ungroup", self._ungroup, "Ctrl+Shift+G"),
+            MenuItemSpec("Bring to Front", self._bring_to_front),
+            MenuItemSpec("Send to Back", self._send_to_back),
+            MenuItemSpec("Group", self._group),
+            MenuItemSpec("Ungroup", self._ungroup),
         ), global_pos)
 
     def _show_file_menu(self, anchor: QWidget) -> None:
@@ -723,6 +889,7 @@ class ModuleWindow(QMainWindow):
         self._last_file_dir = result.path.parent
         if self._canvas is not None:
             self._canvas.load_file(result.path)
+        self._add_layer(result.path.stem)
         self._set_status(f"Opened {result.path.name}")
 
     def _save_file(self) -> None:
@@ -764,6 +931,7 @@ class ModuleWindow(QMainWindow):
         result = ProjectFileDialog.get_import_file(self, self._last_file_dir)
         if result and self._canvas is not None:
             self._canvas.load_file(result.path)
+            self._add_layer(result.path.stem)
         self._set_status(f"Imported {result.path.name}" if result else "Import canceled")
 
     def _export_file(self) -> None:
@@ -794,10 +962,16 @@ class ModuleWindow(QMainWindow):
     def _delete(self) -> None: self._set_status("Delete")
     def _repeat_last_tools(self) -> None: self._set_status("Repeat Last Tools")
     def _select_all(self) -> None: self._run_focus_command("selectAll"); self._set_status("Select All")
-    def _group(self) -> None: self._set_status("Group")
+    def _group(self) -> None:
+        if not any(layer.startswith("Group") for layer in self._layers):
+            self._layers.append("Group 1")
+            self._refresh_layers()
+        self._set_status("Group")
     def _ungroup(self) -> None: self._set_status("Ungroup")
     def _move(self) -> None: self._set_status("Move")
-    def _rotation(self) -> None: self._set_status("Rotation tool ready")
+    def _rotation(self) -> None: self._set_status("Rotate tool ready")
+    def _bring_to_front(self) -> None: self._set_status("Bring to Front")
+    def _send_to_back(self) -> None: self._set_status("Send to Back")
 
     def _toggle_start_bar(self) -> None:
         self._view_state["start_bar"] = not self._view_state["start_bar"]
