@@ -38,11 +38,7 @@ install_from_github.cmd
 run_engineers_tools.cmd
 ```
 
-فایل alias برای اجرا:
-
-```bat
-run_engineer_tools.cmd
-```
+فقط همین یک فایل run باید در root پروژه وجود داشته باشد. فایل alias یا نسخه تکراری مثل `run_engineer_tools.cmd` نباید دوباره ساخته شود.
 
 ## قانون نصب
 
