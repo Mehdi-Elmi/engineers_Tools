@@ -7,7 +7,7 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
-from PySide6.QtCore import QFileInfo, QPoint, QRectF, QSize, QStandardPaths, Qt
+from PySide6.QtCore import QFileInfo, QPoint, QPointF, QRectF, QSize, QStandardPaths, Qt
 from PySide6.QtGui import QAction, QColor, QIcon, QKeySequence, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap, QPolygonF, QRegion, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -87,6 +87,7 @@ class ProjectFileDialog(QDialog):
         self._icon_provider = QFileIconProvider()
         self._current_dir = self._resolve_start_dir(start_dir)
         self._drag_position: QPoint | None = None
+        self._shortcuts: list[QShortcut] = []
 
         title = self._dialog_title()
         self.setObjectName("ProjectFileDialog")
@@ -145,6 +146,8 @@ class ProjectFileDialog(QDialog):
             shortcut = QShortcut(QKeySequence(sequence), self)
             shortcut.setContext(Qt.WindowShortcut)
             shortcut.activated.connect(callback)
+            shortcut.activatedAmbiguously.connect(callback)
+            self._shortcuts.append(shortcut)
 
     def _dialog_title(self) -> str:
         return {"open": "Open", "save": "Save As", "import": "Import", "export": "Export"}.get(self.mode, "Open")
