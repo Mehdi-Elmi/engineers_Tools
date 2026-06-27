@@ -2,11 +2,41 @@
 setlocal EnableExtensions EnableDelayedExpansion
 
 set "APP_ROOT=%~dp0"
+set "EXPECTED_APP_ROOT=%LOCALAPPDATA%\EngineerTools\"
 set "VENV_DIR=%APP_ROOT%.venv"
 set "PYTHON_EXE=%VENV_DIR%\Scripts\python.exe"
 set "REQ_FILE=%APP_ROOT%requirements.txt"
 set "REQ_STAMP=%VENV_DIR%\requirements.stamp"
 set "NEED_INSTALL=0"
+
+if /I not "%APP_ROOT%"=="%EXPECTED_APP_ROOT%" (
+    echo Wrong Engineer Tools launch path detected.
+    echo Current path: %APP_ROOT%
+    echo Expected path: %EXPECTED_APP_ROOT%
+    if exist "%EXPECTED_APP_ROOT%run_engineers_tools.cmd" (
+        echo Redirecting to the canonical install path...
+        call "%EXPECTED_APP_ROOT%run_engineers_tools.cmd"
+        exit /b %ERRORLEVEL%
+    )
+    echo Canonical install path was not found. Run install_from_github.cmd from Mehdi-Elmi/engineers_Tools.
+    pause
+    exit /b 1
+)
+
+if not exist "%APP_ROOT%README.md" (
+    echo Runtime verification failed.
+    echo Missing README.md in the canonical install path.
+    pause
+    exit /b 1
+)
+
+findstr /C:"Mehdi-Elmi/engineers_Tools" "%APP_ROOT%README.md" >nul
+if errorlevel 1 (
+    echo Runtime verification failed.
+    echo This folder is not the active Mehdi-Elmi/engineers_Tools installation.
+    pause
+    exit /b 1
+)
 
 cd /d "%APP_ROOT%"
 set "PYTHONPATH=%APP_ROOT%;%PYTHONPATH%"
@@ -61,7 +91,7 @@ if errorlevel 1 (
     exit /b 1
 )
 
-"%PYTHON_EXE%" -c "from modules.mechanics_dynamics_statics.workspace import EngineeringDesignWorkspace; from src.engineers_tools.app.module_window import ModuleWindow; from src.engineers_tools.app.project_file_dialog import ProjectFileDialog; print('active workspace class: ' + EngineeringDesignWorkspace.__module__ + '.' + EngineeringDesignWorkspace.__name__); print('shared window class: ' + ModuleWindow.__module__ + '.' + ModuleWindow.__name__); print('file dialog class: ' + ProjectFileDialog.__module__ + '.' + ProjectFileDialog.__name__)"
+"%PYTHON_EXE%" -c "from pathlib import Path; from modules.mechanics_dynamics_statics.workspace import EngineeringDesignWorkspace; from src.engineers_tools.app.module_window import ModuleWindow; from src.engineers_tools.app.project_file_dialog import ProjectFileDialog; root=Path.cwd(); print('canonical app root: ' + str(root)); print('active workspace class: ' + EngineeringDesignWorkspace.__module__ + '.' + EngineeringDesignWorkspace.__name__); print('shared window class: ' + ModuleWindow.__module__ + '.' + ModuleWindow.__name__); print('file dialog class: ' + ProjectFileDialog.__module__ + '.' + ProjectFileDialog.__name__)"
 if errorlevel 1 (
     echo Active runtime verification failed.
     pause
