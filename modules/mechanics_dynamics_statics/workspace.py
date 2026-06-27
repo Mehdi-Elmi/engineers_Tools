@@ -13,7 +13,7 @@ from PySide6.QtWidgets import QAbstractSpinBox, QDoubleSpinBox, QHBoxLayout, QLa
 from src.engineers_tools.app.module_window import MenuItemSpec, ModuleWindow
 from src.engineers_tools.app.modules import LauncherModule
 
-ENGINEERING_WORKSPACE_UI_MARKER = "ENGINEERING_WORKSPACE_VIEW_STARTBAR_2026_06_27_C"
+ENGINEERING_WORKSPACE_UI_MARKER = "ENGINEERING_WORKSPACE_VIEW_STARTBAR_2026_06_27_D"
 
 
 class EngineeringDesignWorkspace(ModuleWindow):
@@ -61,10 +61,10 @@ class EngineeringDesignWorkspace(ModuleWindow):
     def _build_zoom_control(self) -> QWidget:
         control = QWidget()
         control.setObjectName("ZoomControl")
-        control.setFixedSize(128, 28)
+        control.setFixedSize(126, 28)
         control_layout = QHBoxLayout(control)
         control_layout.setContentsMargins(0, 0, 0, 0)
-        control_layout.setSpacing(3)
+        control_layout.setSpacing(2)
 
         self._zoom_input = QDoubleSpinBox()
         self._zoom_input.setObjectName("ZoomInput")
@@ -74,11 +74,11 @@ class EngineeringDesignWorkspace(ModuleWindow):
         self._zoom_input.setSingleStep(5.0)
         self._zoom_input.setValue(100.0)
         self._zoom_input.setSuffix(" %")
-        self._zoom_input.setFixedSize(90, 26)
+        self._zoom_input.setFixedSize(92, 26)
         self._zoom_input.setStyleSheet(
             "QDoubleSpinBox#ZoomInput {"
-            "background:#ffffff; border:1px solid #8fb3dc; border-radius:8px;"
-            "color:#132238; font-size:11px; padding:2px 6px;"
+            "background:#eef4fb; border:1px solid #9fb0c5; border-radius:8px;"
+            "color:#132238; font-size:11px; font-style:normal; font-weight:700; padding:2px 6px;"
             "selection-background-color:#43d3bd; }"
         )
         self._zoom_input.valueChanged.connect(self._set_zoom)
@@ -102,16 +102,16 @@ class EngineeringDesignWorkspace(ModuleWindow):
     def _build_zoom_arrow_button(self, direction: str) -> QPushButton:
         button = QPushButton()
         button.setObjectName("ZoomArrowButton")
-        button.setFixedSize(30, 12)
+        button.setFixedSize(28, 12)
         button.setIcon(self._build_zoom_arrow_icon(direction))
         button.setIconSize(QSize(22, 10))
         button.setToolTip("Zoom in" if direction == "up" else "Zoom out")
         button.setStyleSheet(
             "QPushButton#ZoomArrowButton {"
-            "background:qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #fff9de, stop:1 #ffc35a);"
-            "border:1px solid #7e5b10; border-radius:4px; padding:0px; }"
-            "QPushButton#ZoomArrowButton:hover { background:#ff8a35; border-color:#ffffff; }"
-            "QPushButton#ZoomArrowButton:pressed { background:#d46a16; padding-top:1px; }"
+            "background:qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #ffffff, stop:1 #c9d8e8);"
+            "border:1px solid #9fb0c5; border-radius:4px; padding:0px; }"
+            "QPushButton#ZoomArrowButton:hover { background:#dff6ff; border-color:#2f7df6; }"
+            "QPushButton#ZoomArrowButton:pressed { background:#b8c9dc; padding-top:1px; }"
         )
         return button
 
@@ -120,7 +120,7 @@ class EngineeringDesignWorkspace(ModuleWindow):
         pixmap.fill(Qt.GlobalColor.transparent)
         painter = QPainter(pixmap)
         painter.setRenderHint(QPainter.Antialiasing, True)
-        painter.setPen(QPen(QColor("#ffffff"), 1.0))
+        painter.setPen(QPen(QColor("#ffffff"), 0.8))
         painter.setBrush(QColor("#132238"))
         if direction == "up":
             points = QPolygonF([QPointF(11, 1), QPointF(20, 9), QPointF(2, 9)])
