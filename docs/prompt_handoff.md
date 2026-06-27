@@ -49,6 +49,11 @@ modules/mechanics_dynamics_statics/workspace.py
 entry point فعال:
 modules.mechanics_dynamics_statics.module_entry:create_window
 
+قانون __init__.py:
+__init__.py فقط برای package/import است.
+منطق Toolbar، Properties، Canvas، Select یا File Dialog داخل __init__.py نوشته نشود.
+چت Toolbar فقط وقتی با __init__.py کار دارد که package جدید ساخته شود یا مسیر import تغییر کند.
+
 قانون طراحی:
 UI انگلیسی باشد.
 گزارش فارسی RTL باشد.
