@@ -65,27 +65,38 @@ src/engineers_tools/app/theme.py
 TopBar و StatusBar باید سرمه‌ای هماهنگ باشند.
 StatusBar باید گوشه‌های پایین را گرد کند.
 Close باید علامت واقعی × باشد، نه x.
-Home باید دکمه گرافیکی واضح با آیکن خانه سه‌بعدی باشد.
+Home باید دکمه گرافیکی واضح با آیکن خانه سه‌بعدی و رنگی باشد.
 File/Edit/View/Insert/Draw/Help باید متن ساده شبیه منوی ویندوز باشند، نه دکمه برجسته.
-وقتی کاربر روی File/Edit/View/Insert/Draw/Help کلیک می‌کند، منو باید دقیقاً زیر همان دکمه مثل dropdown ویندوز پایین بیاید؛ نباید مثل دیالوگ وسط صفحه باز شود.
+وقتی کاربر روی File/Edit/View/Insert/Draw کلیک می‌کند، منو باید دقیقاً زیر همان دکمه مثل dropdown ویندوز پایین بیاید؛ نباید مثل دیالوگ وسط صفحه باز شود.
+داخل dropdown نباید عنوان تکراری مثل File یا Edit نمایش داده شود.
 خود dropdown باید باکس گرد، شکیل و هماهنگ با پروژه باشد.
+پنجره مادر و dropdownها باید با mask واقعی گرد شوند تا هیچ مستطیل تیز پشت گوشه‌ها دیده نشود.
+Help dropdown ندارد؛ فقط یک کلید است و باید صفحه Help برنامه را باز کند.
 Modify حذف شده و نباید بدون دستور جدید کاربر برگردد.
 Add Page و دکمه‌های Yes/No/Apply/Confirm باید از الگوی ConfirmButton استفاده کنند.
 هر پنجره، دیالوگ و منوی بازشونده باید گوشه گرد و ظاهر هماهنگ با پروژه داشته باشد.
 
 منوهای ثابت پنجره مادر:
 File: New, Open, Save, Save As, Page Setup, Print Setup, Import, Export, Properties
-Edit: Undo, Redo, Cut, Copy, Paste, Delete, Repeat Last Tools, Select All, Group, Ungroup, Move
+Edit: Copy, Cut, Paste, Move, Undo, Redo, Repeat Last Tools, Select All, Group, Ungroup
 View: Start Bar, Grid, Ruler, Snap
-Insert: Image, Text
+Insert: فعلاً فقط Text
 Draw: فعلاً خالی است.
-Help: Shortcuts, About
+Help: صفحه Help مستقل باز می‌کند.
 
 قانون عملکرد منوها:
 Undo/Redo/Cut/Copy/Paste/Select All اگر ویجت فعال عملیات واقعی داشته باشد همان را اجرا می‌کند.
+کلید Delete همچنان در سطح پنجره ثبت است، حتی اگر در dropdown فعلی Edit نمایش داده نشود.
 Grid واقعاً Canvas را روشن و خاموش می‌کند.
 Start Bar واقعاً نوار ابزار سریع را روشن و خاموش می‌کند.
 Ruler, Snap, Repeat Last Tools, Group, Ungroup, Move تا زمان ساخت موتور آبجکت‌ها وضعیت را در StatusBar اعلام می‌کنند و بعداً به منطق واقعی وصل می‌شوند.
+
+قانون Zoom:
+StatusBar یک کنترل Zoom دارد.
+مقدار پیش‌فرض 100% است.
+کاربر باید بتواند عدد اعشاری مثل 100.25% وارد کند.
+فلش‌های بالا و پایین مقدار را با پله 5% تغییر می‌دهند.
+این کنترل فعلاً وضعیت را اعلام می‌کند و بعداً به موتور بزرگ‌نمایی Canvas وصل می‌شود.
 
 قانون Minimize/Maximize:
 پنجره‌های ماژول frameless هستند.
