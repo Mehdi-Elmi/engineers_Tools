@@ -89,11 +89,20 @@ class LauncherWindow(QMainWindow):
     def _build_header(self) -> QWidget:
         outer = QWidget()
         outer.setObjectName("LauncherHeaderOuter")
+        outer.setStyleSheet("QWidget#LauncherHeaderOuter { background: transparent; }")
         layout = QHBoxLayout(outer)
         layout.setContentsMargins(34, 7, 34, 0)
 
         header = QWidget()
         header.setObjectName("LauncherHeader")
+        header.setStyleSheet(
+            "QWidget#LauncherHeader {"
+            "background:qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 #10233d, stop:0.55 #2f4d72, stop:1 #132238);"
+            "border:1px solid #ffffff; border-bottom:4px solid #8fa2bb; border-radius:12px;"
+            "}"
+            "QLabel#HeaderTitle { background:transparent; color:#ffffff; font-size:24px; font-weight:900; font-style:italic; }"
+            "QLabel#HeaderSubtitle { background:transparent; color:#fff1bf; font-size:13px; font-weight:800; font-style:italic; }"
+        )
         header_layout = QVBoxLayout(header)
         header_layout.setContentsMargins(24, 12, 24, 12)
         header_layout.setSpacing(2)
@@ -112,6 +121,7 @@ class LauncherWindow(QMainWindow):
     def _build_grid(self) -> QWidget:
         area = QWidget()
         area.setObjectName("LauncherGridArea")
+        area.setStyleSheet("QWidget#LauncherGridArea { background: transparent; }")
         grid = QGridLayout(area)
         grid.setContentsMargins(44, 4, 44, 0)
         grid.setHorizontalSpacing(16)
