@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import os
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
 from PySide6.QtCore import QFileInfo, QPoint, QPointF, QRectF, QSize, QStandardPaths, Qt
-from PySide6.QtGui import QColor, QIcon, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap, QPolygonF, QRegion
+from PySide6.QtGui import QAction, QColor, QIcon, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap, QPolygonF, QRegion
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
@@ -19,6 +20,7 @@ from PySide6.QtWidgets import (
     QListView,
     QListWidget,
     QListWidgetItem,
+    QMenu,
     QPushButton,
     QVBoxLayout,
     QWidget,
@@ -70,6 +72,8 @@ class FileDialogResult:
 
 class ProjectFileDialog(QDialog):
     """Rounded file picker with project styling and Windows-like behavior."""
+
+    _pending_file_action: tuple[str, Path] | None = None
 
     def __init__(self, mode: str, parent: QWidget | None = None, start_dir: Path | None = None, filter_kind: str = "project") -> None:
         super().__init__(parent)
@@ -242,12 +246,14 @@ class ProjectFileDialog(QDialog):
         layout.addWidget(self._places)
         self._files = QListWidget()
         self._files.setObjectName("FilesList")
-        self._files.setViewMode(QListView.IconMode)
+        self._files.setViewMode(QListView.ListMode)
         self._files.setResizeMode(QListView.Adjust)
         self._files.setMovement(QListView.Static)
-        self._files.setWrapping(True)
-        self._files.setSpacing(8)
-        self._files.setIconSize(QSize(26, 26))
+        self._files.setWrapping(False)
+        self._files.setSpacing(2)
+        self._files.setIconSize(QSize(24, 24))
+        self._files.setContextMenuPolicy(Qt.CustomContextMenu)
+        self._files.customContextMenuRequested.connect(self._show_files_context_menu)
         self._files.itemDoubleClicked.connect(self._file_double_clicked)
         self._files.itemClicked.connect(self._file_clicked)
         layout.addWidget(self._files, 1)
@@ -404,8 +410,8 @@ class ProjectFileDialog(QDialog):
             self._files.addItem(item)
 
     def _file_item_size(self, name: str) -> QSize:
-        width = max(92, min(210, self.fontMetrics().horizontalAdvance(name) + 48))
-        return QSize(width, 42)
+        width = max(120, min(360, self.fontMetrics().horizontalAdvance(name) + 58))
+        return QSize(width, 32)
 
     def _file_type_changed(self, _index: int) -> None:
         if self.mode in {"save", "export"} and (not self._file_name.text().strip() or self._file_name.text().startswith("EngineerTools")):
@@ -453,6 +459,61 @@ class ProjectFileDialog(QDialog):
         self._file_name.setText(path.name)
         if self.mode in {"open", "import"}:
             self._accept_selection()
+
+    def _show_files_context_menu(self, position: QPoint) -> None:
+        item = self._files.itemAt(position)
+        selected_path = Path(item.data(Qt.UserRole)) if item is not None else None
+        menu = QMenu(self)
+        copy_action = QAction("Copy", self)
+        cut_action = QAction("Cut", self)
+        paste_action = QAction("Paste", self)
+        delete_action = QAction("Delete", self)
+        copy_action.setEnabled(selected_path is not None)
+        cut_action.setEnabled(selected_path is not None)
+        delete_action.setEnabled(selected_path is not None)
+        paste_action.setEnabled(ProjectFileDialog._pending_file_action is not None)
+        copy_action.triggered.connect(lambda checked=False, path=selected_path: self._remember_file_action("copy", path))
+        cut_action.triggered.connect(lambda checked=False, path=selected_path: self._remember_file_action("cut", path))
+        paste_action.triggered.connect(self._paste_file_action)
+        delete_action.triggered.connect(lambda checked=False, path=selected_path: self._delete_file_action(path))
+        menu.addAction(copy_action)
+        menu.addAction(cut_action)
+        menu.addAction(paste_action)
+        menu.addSeparator()
+        menu.addAction(delete_action)
+        menu.exec(self._files.mapToGlobal(position))
+
+    def _remember_file_action(self, action: str, path: Path | None) -> None:
+        if path is not None and path.exists():
+            ProjectFileDialog._pending_file_action = (action, path)
+
+    def _paste_file_action(self) -> None:
+        pending = ProjectFileDialog._pending_file_action
+        if pending is None:
+            return
+        action, source = pending
+        if not source.exists():
+            ProjectFileDialog._pending_file_action = None
+            return
+        destination = self._make_unique_path(self._current_dir / source.name)
+        if action == "cut":
+            shutil.move(str(source), str(destination))
+            ProjectFileDialog._pending_file_action = None
+        elif source.is_dir():
+            shutil.copytree(source, destination)
+        else:
+            shutil.copy2(source, destination)
+        self._refresh_files()
+
+    def _delete_file_action(self, path: Path | None) -> None:
+        if path is None or not path.exists():
+            return
+        if path.is_dir():
+            shutil.rmtree(path)
+        else:
+            path.unlink()
+        self._file_name.clear()
+        self._refresh_files()
 
     def _go_back(self) -> None:
         if self._history_index <= 0:
@@ -517,6 +578,12 @@ class ProjectFileDialog(QDialog):
     def keyPressEvent(self, event) -> None:  # noqa: N802
         if event.key() == Qt.Key_Backspace and not self._file_name.hasFocus():
             self._go_back()
+            event.accept()
+            return
+        if event.key() == Qt.Key_Delete:
+            item = self._files.currentItem()
+            path = Path(item.data(Qt.UserRole)) if item is not None else None
+            self._delete_file_action(path)
             event.accept()
             return
         super().keyPressEvent(event)
