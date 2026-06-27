@@ -296,6 +296,56 @@ class StartBar(QWidget):
         button.clicked.connect(callback)
         return button
 
+    def _host(self) -> QWidget:
+        return self.window()
+
+    def _set_host_status(self, message: str) -> None:
+        setter = getattr(self._host(), "_set_status", None)
+        if callable(setter):
+            setter(message)
+
+    def _apply_grid_to_host(self) -> None:
+        host = self._host()
+        view_state = getattr(host, "_view_state", None)
+        if isinstance(view_state, dict):
+            view_state["grid"] = self._grid_enabled
+        canvas = getattr(host, "_canvas", None)
+        if canvas is not None and hasattr(canvas, "set_grid_visible"):
+            canvas.set_grid_visible(self._grid_enabled)
+        self._set_host_status(f"Grid {'On' if self._grid_enabled else 'Off'} | spacing {self._grid_spacing:.3f} {self._unit}")
+
+    def _apply_ruler_to_host(self) -> None:
+        host = self._host()
+        view_state = getattr(host, "_view_state", None)
+        if isinstance(view_state, dict):
+            view_state["ruler"] = self._ruler_enabled
+        self._set_host_status(f"Ruler {'On' if self._ruler_enabled else 'Off'} | unit {self._unit}")
+
+    def _apply_unit_to_host(self) -> None:
+        host = self._host()
+        for item in getattr(host, "_status_items", []):
+            if hasattr(item, "text") and item.text().startswith("Unit:"):
+                item.setText(f"Unit: {self._unit}")
+                break
+        self._set_host_status(f"Unit {self._unit}")
+
+    def _apply_zoom_to_host(self, mode: str) -> None:
+        host = self._host()
+        canvas = getattr(host, "_canvas", None)
+        current_zoom = getattr(canvas, "_zoom", 1.0) * 100.0 if canvas is not None else 100.0
+        if mode == "zoom_fit":
+            value = 100.0
+        elif mode == "zoom_in":
+            value = min(500.0, current_zoom * 1.25)
+        else:
+            value = max(5.0, current_zoom / 1.25)
+        setter = getattr(host, "_set_zoom", None)
+        if callable(setter):
+            setter(value)
+        elif canvas is not None and hasattr(canvas, "set_zoom"):
+            canvas.set_zoom(value)
+            self._set_host_status(f"Zoom {value:.2f}%")
+
     def _show_zoom_popup(self, key: str) -> None:
         popup, layout = self._popup_base("Zoom", 176)
         for label, action in (("Zoom In", "zoom_in"), ("Zoom Out", "zoom_out"), ("Zoom Fit", "zoom_fit")):
@@ -303,6 +353,7 @@ class StartBar(QWidget):
         self._show_popup_near(key, popup)
 
     def _activate_zoom(self, mode: str) -> None:
+        self._apply_zoom_to_host(mode)
         self.zoom_requested.emit(mode)
         self.tool_requested.emit(mode)
         if self._popup is not None:
@@ -317,6 +368,7 @@ class StartBar(QWidget):
 
     def _set_ruler(self, enabled: bool) -> None:
         self._ruler_enabled = enabled
+        self._apply_ruler_to_host()
         self.ruler_changed.emit(enabled, self._unit)
         self.tool_requested.emit("ruler_on" if enabled else "ruler_off")
         self._refresh_tooltips()
@@ -341,6 +393,7 @@ class StartBar(QWidget):
 
     def _set_grid_enabled(self, enabled: bool) -> None:
         self._grid_enabled = enabled
+        self._apply_grid_to_host()
         self.grid_changed.emit(self._grid_enabled, self._grid_spacing, self._unit)
         self.tool_requested.emit("grid_on" if enabled else "grid_off")
         self._refresh_tooltips()
@@ -349,6 +402,7 @@ class StartBar(QWidget):
 
     def _set_grid_spacing(self, value: float) -> None:
         self._grid_spacing = value
+        self._apply_grid_to_host()
         self.grid_changed.emit(self._grid_enabled, self._grid_spacing, self._unit)
         self._refresh_tooltips()
 
@@ -370,6 +424,8 @@ class StartBar(QWidget):
         spacing_mm = self._grid_spacing * UNIT_TO_MM[self._unit]
         self._unit = unit
         self._grid_spacing = spacing_mm / UNIT_TO_MM[self._unit]
+        self._apply_unit_to_host()
+        self._apply_grid_to_host()
         self.unit_changed.emit(unit)
         self.grid_changed.emit(self._grid_enabled, self._grid_spacing, self._unit)
         self.tool_requested.emit(f"unit_{unit}")
