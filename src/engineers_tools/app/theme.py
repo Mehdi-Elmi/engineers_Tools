@@ -101,9 +101,7 @@ def apply_app_theme(app: QApplication) -> None:
         QWidget#LayerRow {{
             background: rgba(255,255,255,170); border: 1px solid #c6d3e2; border-radius: 9px;
         }}
-        QPushButton#LayerIconButton {{
-            background: transparent; border: 0; border-radius: 7px; padding: 0px;
-        }}
+        QPushButton#LayerIconButton {{ background: transparent; border: 0; border-radius: 7px; padding: 0px; }}
         QPushButton#LayerIconButton:hover {{ background: #fff1bf; }}
         QLineEdit#LayerNameInput {{
             background: #f9fbff; border: 1px solid #c3d0df; border-radius: 7px;
@@ -115,8 +113,8 @@ def apply_app_theme(app: QApplication) -> None:
         QWidget#PageBar {{ background: #d8e3f0; border-top: 1px solid #b9c7d6; }}
         QWidget#PageStrip {{ background: transparent; }}
         QPushButton#PageButton, QPushButton#PageButtonActive {{
-            min-width: 80px; min-height: 27px; border-radius: 9px; padding: 4px 10px;
-            color: #223650; font-size: 12px; font-weight: 800;
+            min-width: 58px; min-height: 22px; border-radius: 7px; padding: 2px 7px;
+            color: #223650; font-size: 11px; font-weight: 800;
         }}
         QPushButton#PageButton {{
             background: qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #ffffff, stop:1 #cddbeb);
@@ -128,12 +126,13 @@ def apply_app_theme(app: QApplication) -> None:
         }}
         QPushButton#PageButton:hover, QPushButton#PageButtonActive:hover {{ border-color: #2f7df6; }}
         QPushButton#AddPageButton {{
+            min-width: 76px; min-height: 23px;
             background: qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 #ffffff, stop:0.42 #fff1bf, stop:1 #43d3bd);
-            border: 1px solid #4b778b; border-bottom: 3px solid #28556a;
-            border-radius: 11px; color: #132238; font-size: 12px; font-weight: 900; padding: 5px 14px;
+            border: 1px solid #4b778b; border-bottom: 2px solid #28556a;
+            border-radius: 8px; color: #132238; font-size: 11px; font-weight: 900; padding: 2px 9px;
         }}
         QPushButton#AddPageButton:hover {{ background: qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 #ffffff, stop:0.45 #ffe0a3, stop:1 #73e6d5); border-color: #ff8a35; }}
-        QPushButton#AddPageButton:pressed {{ padding-top: 7px; border-bottom: 1px solid #28556a; }}
+        QPushButton#AddPageButton:pressed {{ padding-top: 4px; border-bottom: 1px solid #28556a; }}
 
         QWidget#StatusBar {{
             background: {NAVY}; border-top: 1px solid #0b1729;
@@ -153,9 +152,7 @@ def apply_app_theme(app: QApplication) -> None:
             background: qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 #ffffff, stop:0.42 #fff1bf, stop:1 #ff8a35);
             border-color: #7e5b10; border-bottom-color: #7e5b10;
         }}
-        QPushButton#SecondaryDialogButton {{
-            background: qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #ffffff, stop:1 #d8e3f0);
-        }}
+        QPushButton#SecondaryDialogButton {{ background: qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #ffffff, stop:1 #d8e3f0); }}
         QPushButton#ConfirmButton:hover, QPushButton#ToolButton:hover, QPushButton#FileNavButton:hover,
         QPushButton#PrimaryDialogButton:hover, QPushButton#SecondaryDialogButton:hover {{ border-color: #2f7df6; background: #ffffff; }}
         QPushButton#ConfirmButton:pressed, QPushButton#ToolButton:pressed, QPushButton#FileNavButton:pressed,
@@ -189,9 +186,7 @@ def apply_app_theme(app: QApplication) -> None:
                 stop:0 #ffffff, stop:0.50 #edf6ff, stop:1 #dbe6f4);
             border: 1px solid #8fa2bb; border-radius: 16px;
         }}
-        QWidget#HelpHeader, QWidget#FileDialogHeader {{
-            background: {NAVY}; border-top-left-radius: 16px; border-top-right-radius: 16px;
-        }}
+        QWidget#HelpHeader, QWidget#FileDialogHeader {{ background: {NAVY}; border-top-left-radius: 16px; border-top-right-radius: 16px; }}
         QWidget#FileDialogHeader {{ min-height: 42px; max-height: 42px; }}
         QLabel#HelpTitle, QLabel#FileDialogTitle {{ background: transparent; color: #ffffff; font-size: 15px; font-weight: 800; padding: 6px 2px; }}
         QWidget#FileDialogNavBar {{ background: #0f1725; border-top: 1px solid #243752; border-bottom: 1px solid #0a101a; }}
