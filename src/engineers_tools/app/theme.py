@@ -78,7 +78,7 @@ def apply_app_theme(app: QApplication) -> None:
         QPushButton#WindowButton:hover {{ background: #243a59; }}
         QPushButton#CloseButton:hover {{ background: #e65252; color: #ffffff; }}
         QWidget#LauncherHeader {{
-            background: #2f4664;
+            background: {NAVY};
             border: 1px solid #ffffff;
             border-radius: 12px;
         }}
@@ -181,8 +181,44 @@ def apply_app_theme(app: QApplication) -> None:
             border-radius: 7px;
             color: #132238;
             font-size: 11px;
-            padding: 2px 4px;
+            padding: 2px 20px 2px 6px;
             selection-background-color: #43d3bd;
+        }}
+        QDoubleSpinBox#ZoomInput::up-button {{
+            subcontrol-origin: border;
+            subcontrol-position: top right;
+            width: 18px;
+            border-left: 1px solid #ffffff;
+            border-top-right-radius: 7px;
+            background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #2f7df6, stop:1 #0f365f);
+        }}
+        QDoubleSpinBox#ZoomInput::down-button {{
+            subcontrol-origin: border;
+            subcontrol-position: bottom right;
+            width: 18px;
+            border-left: 1px solid #ffffff;
+            border-bottom-right-radius: 7px;
+            background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #1f5f99, stop:1 #132238);
+        }}
+        QDoubleSpinBox#ZoomInput::up-arrow {{
+            image: none;
+            width: 0px;
+            height: 0px;
+            border-left: 5px solid transparent;
+            border-right: 5px solid transparent;
+            border-bottom: 7px solid #ffffff;
+        }}
+        QDoubleSpinBox#ZoomInput::down-arrow {{
+            image: none;
+            width: 0px;
+            height: 0px;
+            border-left: 5px solid transparent;
+            border-right: 5px solid transparent;
+            border-top: 7px solid #ffffff;
+        }}
+        QDoubleSpinBox#ZoomInput::up-button:hover, QDoubleSpinBox#ZoomInput::down-button:hover {{
+            background: #ff8a35;
+            border-left: 1px solid #ffffff;
         }}
         QLabel#DialogNote {{ background: transparent; color: #2b405d; font-size: 12px; }}
         QDialog#ProjectDialog {{ background: #dfe7f2; }}
