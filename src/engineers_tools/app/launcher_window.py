@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from PySide6.QtCore import QPoint, Signal, Qt
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QMainWindow, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QGridLayout, QHBoxLayout, QLabel, QMainWindow, QPushButton, QSizePolicy, QVBoxLayout, QWidget
 
 from .modules import MODULES, LauncherModule
+from ..ui.launcher_button import LauncherButton
 
 
 class LauncherWindow(QMainWindow):
@@ -18,17 +19,18 @@ class LauncherWindow(QMainWindow):
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setFixedSize(960, 620)
         self._drag_position: QPoint | None = None
+        self._cards: list[LauncherButton] = []
 
         root = QWidget()
         root.setObjectName("WindowRoot")
         self.setCentralWidget(root)
 
         layout = QVBoxLayout(root)
-        layout.setContentsMargins(0, 0, 0, 28)
+        layout.setContentsMargins(0, 0, 0, 26)
         layout.setSpacing(24)
         layout.addWidget(self._build_top_bar())
         layout.addWidget(self._build_header())
-        layout.addWidget(self._build_cards(), 1)
+        layout.addWidget(self._build_grid(), 1)
 
     def _build_top_bar(self) -> QWidget:
         bar = QWidget()
@@ -77,28 +79,30 @@ class LauncherWindow(QMainWindow):
 
         title = QLabel("Engineer Tools Launcher")
         title.setObjectName("HeaderTitle")
-        subtitle = QLabel("Select the active engineering workspace")
+        subtitle = QLabel("Select the design workspace")
         subtitle.setObjectName("HeaderSubtitle")
         header_layout.addWidget(title)
         header_layout.addWidget(subtitle)
         layout.addWidget(header)
         return outer
 
-    def _build_cards(self) -> QWidget:
+    def _build_grid(self) -> QWidget:
         area = QWidget()
         area.setStyleSheet("background: transparent;")
-        layout = QHBoxLayout(area)
-        layout.setContentsMargins(44, 6, 44, 0)
-        layout.setSpacing(18)
+        grid = QGridLayout(area)
+        grid.setContentsMargins(44, 4, 44, 0)
+        grid.setHorizontalSpacing(16)
+        grid.setVerticalSpacing(16)
 
-        for module in MODULES:
-            card = QPushButton(f"{module.label}\n\n{module.description}")
-            card.setObjectName("LauncherCard")
-            card.setMinimumSize(300, 210)
+        for index, module in enumerate(MODULES):
+            card = LauncherButton(module)
+            card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
             card.clicked.connect(lambda checked=False, item=module: self.module_selected.emit(item))
-            layout.addWidget(card)
+            self._cards.append(card)
+            grid.addWidget(card, index // 3, index % 3)
 
-        layout.addStretch(1)
+        for column in range(3):
+            grid.setColumnStretch(column, 1)
         return area
 
     def mousePressEvent(self, event) -> None:  # noqa: N802
