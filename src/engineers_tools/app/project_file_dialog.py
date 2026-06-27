@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from PySide6.QtCore import QFileInfo, QPoint, QPointF, QRectF, QSize, QStandardPaths, Qt
-from PySide6.QtGui import QColor, QIcon, QPainter, QPainterPath, QPen, QPixmap, QPolygonF, QRegion
+from PySide6.QtGui import QColor, QIcon, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap, QPolygonF, QRegion
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
