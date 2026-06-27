@@ -1,7 +1,9 @@
 """Engineering Design Tools workspace.
 
-This file keeps the approved Engineer Design workspace shell intact and scopes
-canvas interaction changes to the canvas layer only.
+This module owns the shared engineering design workspace behavior for the
+Engineer Design Tools module. The shell remains compatible with ModuleWindow;
+canvas interaction is implemented here so every later engineering tool can reuse
+one predictable selection, grouping, layer, shortcut, and zoom model.
 """
 
 from __future__ import annotations
@@ -10,15 +12,15 @@ import math
 from dataclasses import dataclass, replace
 from pathlib import Path
 
-from PySide6.QtCore import QPointF, QRectF, QSize, Signal, Qt
-from PySide6.QtGui import QColor, QIcon, QKeySequence, QPainter, QPainterPath, QPen, QPixmap, QPolygonF, QShortcut
+from PySide6.QtCore import QPoint, QPointF, QRectF, QSize, Signal, Qt
+from PySide6.QtGui import QColor, QIcon, QKeySequence, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap, QPolygonF, QShortcut
 from PySide6.QtWidgets import QAbstractSpinBox, QCheckBox, QDialog, QDoubleSpinBox, QHBoxLayout, QLabel, QLineEdit, QPushButton, QSizePolicy, QVBoxLayout, QWidget
 
 from src.engineers_tools.app.module_window import GridCanvas, MenuItemSpec, ModuleWindow, _layer_icon
 from src.engineers_tools.app.modules import LauncherModule
 from src.engineers_tools.app.project_file_dialog import ProjectFileDialog
 
-ENGINEERING_WORKSPACE_UI_MARKER = "ENGINEERING_WORKSPACE_VIEW_STARTBAR_2026_06_27_E"
+ENGINEERING_WORKSPACE_UI_MARKER = "ENGINEERING_WORKSPACE_VIEW_STARTBAR_2026_06_27_F"
 
 
 def _rotate_vector(vector: QPointF, degrees: float) -> QPointF:
@@ -31,17 +33,9 @@ def _rotate_vector(vector: QPointF, degrees: float) -> QPointF:
 def _paint_rotation_arc(painter: QPainter, center: QPointF, radius: float, color: QColor) -> None:
     painter.save()
     painter.setRenderHint(QPainter.Antialiasing, True)
-    painter.setPen(QPen(color, 2.2, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
-    path = QPainterPath()
+    painter.setPen(QPen(color, 2.6, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
     arc_rect = QRectF(center.x() - radius, center.y() - radius, radius * 2, radius * 2)
-    path.arcMoveTo(arc_rect, 35)
-    path.arcTo(arc_rect, 35, 280)
-    painter.drawPath(path)
-    tip_angle = math.radians(72)
-    tip = QPointF(center.x() + radius * math.cos(tip_angle), center.y() - radius * math.sin(tip_angle))
-    painter.setBrush(color)
-    painter.setPen(Qt.NoPen)
-    painter.drawPolygon(QPolygonF([tip, tip + QPointF(-7, -1), tip + QPointF(-2, 7)]))
+    painter.drawArc(arc_rect, 30 * 16, 300 * 16)
     painter.restore()
 
 
@@ -86,6 +80,7 @@ class EngineeringCanvas(GridCanvas):
         self._undo_stack: list[list[CanvasObject]] = []
         self._redo_stack: list[list[CanvasObject]] = []
         self._next_group_id = 1
+        self._active_group_edit: int | None = None
 
     def load_file(self, path: Path) -> None:
         self._push_undo()
@@ -104,6 +99,7 @@ class EngineeringCanvas(GridCanvas):
         self.objects.append(CanvasObject(path=path, pixmap=pixmap, rect=rect, name=path.stem or f"Object {len(self.objects) + 1}"))
         self._select_only(len(self.objects) - 1)
         self._last_action = "open"
+        self._active_group_edit = None
         self._emit_object_changes()
         self.update()
 
@@ -134,6 +130,7 @@ class EngineeringCanvas(GridCanvas):
             clone.group_id = None
             self.objects.append(clone)
         self.selected_indices = set(range(start, len(self.objects)))
+        self._active_group_edit = None
         self._last_action = "paste"
         self._emit_object_changes()
         self.update()
@@ -155,6 +152,7 @@ class EngineeringCanvas(GridCanvas):
         if not self.objects:
             return False
         self.selected_indices = {index for index, obj in enumerate(self.objects) if obj.visible}
+        self._active_group_edit = None
         self._emit_selection_changes()
         self.update()
         return True
@@ -205,6 +203,9 @@ class EngineeringCanvas(GridCanvas):
         self._next_group_id += 1
         for index in self.selected_indices:
             self.objects[index].group_id = group_id
+        self.selected_indices = {index for index, obj in enumerate(self.objects) if obj.group_id == group_id and obj.visible}
+        self._active_group_edit = None
+        self._last_action = "group"
         self._emit_object_changes()
         self.update()
         return True
@@ -217,6 +218,8 @@ class EngineeringCanvas(GridCanvas):
         for obj in self.objects:
             if obj.group_id in group_ids:
                 obj.group_id = None
+        self._active_group_edit = None
+        self._last_action = "ungroup"
         self._emit_object_changes()
         self.update()
         return True
@@ -291,6 +294,7 @@ class EngineeringCanvas(GridCanvas):
 
     def select_group(self, group_id: int) -> None:
         self.selected_indices = {index for index, obj in enumerate(self.objects) if obj.group_id == group_id and obj.visible}
+        self._active_group_edit = None
         self._emit_selection_changes()
         self.update()
 
@@ -305,24 +309,31 @@ class EngineeringCanvas(GridCanvas):
         return [(index, self.objects[index]) for index in sorted(self.selected_indices) if 0 <= index < len(self.objects)]
 
     def _select_only(self, index: int) -> None:
-        self.selected_indices = {index}
+        if not 0 <= index < len(self.objects):
+            return
+        group_id = self.objects[index].group_id
+        if group_id is not None and self._active_group_edit != group_id:
+            self.selected_indices = {i for i, obj in enumerate(self.objects) if obj.group_id == group_id and obj.visible}
+        else:
+            self.selected_indices = {index}
         self._emit_selection_changes()
 
-    def _selected_group_id(self) -> int | None:
+    def _selection_group_id(self) -> int | None:
         if not self.selected_indices:
             return None
         group_ids = {self.objects[index].group_id for index in self.selected_indices}
-        if len(group_ids) == 1:
-            group_id = next(iter(group_ids))
-            if group_id is not None:
-                group_members = {index for index, obj in enumerate(self.objects) if obj.group_id == group_id and obj.visible}
-                if group_members == self.selected_indices:
-                    return group_id
-        return None
+        if len(group_ids) != 1:
+            return None
+        group_id = next(iter(group_ids))
+        if group_id is None:
+            return None
+        group_members = {index for index, obj in enumerate(self.objects) if obj.group_id == group_id and obj.visible}
+        return group_id if group_members == self.selected_indices else None
 
     def _delete_selected_objects(self) -> None:
         self.objects = [obj for index, obj in enumerate(self.objects) if index not in self.selected_indices]
         self.selected_indices = set()
+        self._active_group_edit = None
         self._emit_object_changes()
         self.update()
 
@@ -332,6 +343,7 @@ class EngineeringCanvas(GridCanvas):
     def _restore_snapshot(self, snapshot: list[CanvasObject]) -> None:
         self.objects = [obj.clone() for obj in snapshot]
         self.selected_indices = set()
+        self._active_group_edit = None
         self._emit_object_changes()
         self.update()
 
@@ -402,6 +414,12 @@ class EngineeringCanvas(GridCanvas):
             return QRectF()
         return QRectF(QPointF(min(point.x() for point in points), min(point.y() for point in points)), QPointF(max(point.x() for point in points), max(point.y() for point in points)))
 
+    def _object_scene_bounds(self, obj: CanvasObject) -> QRectF:
+        half_w = obj.rect.width() / 2
+        half_h = obj.rect.height() / 2
+        points = [self._object_local_to_scene(obj, point) for point in (QPointF(-half_w, -half_h), QPointF(half_w, -half_h), QPointF(half_w, half_h), QPointF(-half_w, half_h))]
+        return QRectF(QPointF(min(point.x() for point in points), min(point.y() for point in points)), QPointF(max(point.x() for point in points), max(point.y() for point in points)))
+
     def _apply_drag(self, point: QPointF) -> None:
         if self._drag_action is None:
             return
@@ -422,8 +440,9 @@ class EngineeringCanvas(GridCanvas):
                 self.objects[index].rotation = self._drag_start_rotations[index] + delta_angle
             self.update()
             return
-        if len(self.selected_indices) != 1 or not self._drag_action.startswith("resize"):
+        if len(self.selected_indices) != 1 or not self._drag_action.startswith("resize_"):
             return
+        handle = self._drag_action.removeprefix("resize_")
         index = next(iter(self.selected_indices))
         obj = self.objects[index]
         start_rect = self._drag_start_rects[index]
@@ -432,16 +451,16 @@ class EngineeringCanvas(GridCanvas):
         width = start_rect.width()
         height = start_rect.height()
         center_shift = QPointF(0, 0)
-        if "w" in self._drag_action:
+        if "w" in handle:
             width = max(35.0, width - delta_local.x())
             center_shift.setX(delta_local.x() / 2)
-        if "e" in self._drag_action:
+        if "e" in handle:
             width = max(35.0, width + delta_local.x())
             center_shift.setX(delta_local.x() / 2)
-        if "n" in self._drag_action:
+        if "n" in handle:
             height = max(35.0, height - delta_local.y())
             center_shift.setY(delta_local.y() / 2)
-        if "s" in self._drag_action:
+        if "s" in handle:
             height = max(35.0, height + delta_local.y())
             center_shift.setY(delta_local.y() / 2)
         new_center = start_rect.center() + _rotate_vector(center_shift, start_rotation)
@@ -456,6 +475,7 @@ class EngineeringCanvas(GridCanvas):
             if index is None:
                 if not ctrl:
                     self.selected_indices = set()
+                    self._active_group_edit = None
                     self._emit_selection_changes()
                 self._selection_origin = point
                 self._selection_rect = QRectF(point, point)
@@ -463,8 +483,15 @@ class EngineeringCanvas(GridCanvas):
                 self.update()
                 event.accept()
                 return
+            hit_group = self.objects[index].group_id
             if ctrl:
-                if index in self.selected_indices:
+                if hit_group is not None and self._active_group_edit != hit_group:
+                    group_members = {i for i, obj in enumerate(self.objects) if obj.group_id == hit_group and obj.visible}
+                    if group_members.issubset(self.selected_indices):
+                        self.selected_indices.difference_update(group_members)
+                    else:
+                        self.selected_indices.update(group_members)
+                elif index in self.selected_indices:
                     self.selected_indices.remove(index)
                 else:
                     self.selected_indices.add(index)
@@ -474,20 +501,36 @@ class EngineeringCanvas(GridCanvas):
                 return
             if index not in self.selected_indices:
                 self._select_only(index)
-            obj = self.objects[index]
-            if action is not None and not obj.locked:
+            if not self.selected_indices:
+                return
+            if action is not None and not any(self.objects[selected].locked for selected in self.selected_indices):
                 self._push_undo()
                 self._drag_action = action
                 self._drag_start = point
                 self._drag_start_rects = {selected: QRectF(self.objects[selected].rect) for selected in self.selected_indices}
                 self._drag_start_rotations = {selected: self.objects[selected].rotation for selected in self.selected_indices}
-                self._drag_group_center = self._group_bounds().center() if len(self.selected_indices) > 1 else obj.rect.center()
+                self._drag_group_center = self._group_bounds().center() if len(self.selected_indices) > 1 else self.objects[index].rect.center()
                 if action == "rotate":
                     self.setCursor(Qt.ClosedHandCursor)
             self.update()
             event.accept()
             return
         super().mousePressEvent(event)
+
+    def mouseDoubleClickEvent(self, event) -> None:  # noqa: N802
+        if event.button() == Qt.LeftButton:
+            point = self._to_canvas_point(event.position())
+            index, _action = self._hit_test_object(point)
+            if index is not None:
+                group_id = self.objects[index].group_id
+                if group_id is not None:
+                    self._active_group_edit = group_id
+                    self.selected_indices = {index}
+                    self._emit_selection_changes()
+                    self.update()
+                    event.accept()
+                    return
+        super().mouseDoubleClickEvent(event)
 
     def mouseMoveEvent(self, event) -> None:  # noqa: N802
         point = self._to_canvas_point(event.position())
@@ -523,13 +566,25 @@ class EngineeringCanvas(GridCanvas):
     def mouseReleaseEvent(self, event) -> None:  # noqa: N802
         if event.button() == Qt.LeftButton and self._selection_origin is not None:
             if self._selection_rect is not None and self._selection_rect.width() > 6 and self._selection_rect.height() > 6:
-                self.selected_indices = {index for index, obj in enumerate(self.objects) if obj.visible and self._selection_rect.intersects(self._object_scene_bounds(obj))}
+                selected = {index for index, obj in enumerate(self.objects) if obj.visible and self._selection_rect.intersects(self._object_scene_bounds(obj))}
+                expanded: set[int] = set()
+                for index in selected:
+                    group_id = self.objects[index].group_id
+                    if group_id is not None and self._active_group_edit != group_id:
+                        expanded.update(i for i, obj in enumerate(self.objects) if obj.group_id == group_id and obj.visible)
+                    else:
+                        expanded.add(index)
+                self.selected_indices = expanded
                 self._emit_selection_changes()
             self._selection_origin = None
             self._selection_rect = None
             self.update()
         self._drag_action = None
         self.unsetCursor()
+        event.accept()
+
+    def contextMenuEvent(self, event) -> None:  # noqa: N802
+        self.context_actions_requested.emit(event.globalPos())
         event.accept()
 
     def keyPressEvent(self, event) -> None:  # noqa: N802
@@ -543,6 +598,12 @@ class EngineeringCanvas(GridCanvas):
             self.cut_selection()
         elif ctrl and event.key() == Qt.Key_V:
             self.paste_selection()
+        elif ctrl and event.key() == Qt.Key_G and not shift:
+            self.group_selection()
+        elif ctrl and shift and event.key() == Qt.Key_G:
+            self.ungroup_selection()
+        elif ctrl and event.key() == Qt.Key_R:
+            self.repeat_last_action()
         elif ctrl and event.key() == Qt.Key_Z and not shift:
             self.undo()
         elif (ctrl and event.key() == Qt.Key_Y) or (ctrl and shift and event.key() == Qt.Key_Z):
@@ -561,7 +622,7 @@ class EngineeringCanvas(GridCanvas):
         painter.scale(self._zoom, self._zoom)
         painter.translate(-self.width() / 2, -self.height() / 2)
         self._paint_grid(painter)
-        group_id = self._selected_group_id()
+        group_id = self._selection_group_id()
         for index, obj in enumerate(self.objects):
             if obj.visible:
                 self._paint_object(painter, obj)
@@ -575,12 +636,6 @@ class EngineeringCanvas(GridCanvas):
             painter.fillRect(self._selection_rect, fill)
             painter.setPen(QPen(QColor("#2f7df6"), 1.2, Qt.DashLine))
             painter.drawRect(self._selection_rect)
-
-    def _object_scene_bounds(self, obj: CanvasObject) -> QRectF:
-        half_w = obj.rect.width() / 2
-        half_h = obj.rect.height() / 2
-        points = [self._object_local_to_scene(obj, point) for point in (QPointF(-half_w, -half_h), QPointF(half_w, -half_h), QPointF(half_w, half_h), QPointF(-half_w, half_h))]
-        return QRectF(QPointF(min(point.x() for point in points), min(point.y() for point in points)), QPointF(max(point.x() for point in points), max(point.y() for point in points)))
 
     def _paint_object(self, painter: QPainter, obj: CanvasObject) -> None:
         rect = obj.rect
@@ -606,10 +661,9 @@ class EngineeringCanvas(GridCanvas):
         painter.save()
         painter.translate(rect.center())
         painter.rotate(obj.rotation)
-        local = QRectF(-half_w, -half_h, rect.width(), rect.height())
         painter.setBrush(Qt.NoBrush)
         painter.setPen(QPen(select, 1.5, Qt.DashLine))
-        painter.drawRect(local.adjusted(-5, -5, 5, 5))
+        painter.drawRect(QRectF(-half_w - 5, -half_h - 5, rect.width() + 10, rect.height() + 10))
         handles = (QPointF(-half_w, -half_h), QPointF(0, -half_h), QPointF(half_w, -half_h), QPointF(half_w, 0), QPointF(half_w, half_h), QPointF(0, half_h), QPointF(-half_w, half_h), QPointF(-half_w, 0))
         painter.setPen(QPen(QColor("#ffffff"), 1.0))
         painter.setBrush(select)
@@ -651,8 +705,10 @@ class SaveOptionsDialog(QDialog):
         title.setObjectName("PanelTitle")
         layout.addWidget(title)
         self.save_grid = QCheckBox("Save Grid")
+        self.save_grid.setStyleSheet("font-family:'Times New Roman'; font-style:italic; font-weight:700;")
         self.save_grid.setChecked(self.selected.get("save_grid", False))
         self.remove_background = QCheckBox("Remove White Background")
+        self.remove_background.setStyleSheet("font-family:'Times New Roman'; font-style:italic; font-weight:700;")
         self.remove_background.setChecked(self.selected.get("remove_white_background", False))
         layout.addWidget(self.save_grid)
         layout.addWidget(self.remove_background)
@@ -750,7 +806,8 @@ class EngineeringDesignWorkspace(ModuleWindow):
                 loose.append(index)
             else:
                 grouped.setdefault(obj.group_id, []).append(index)
-        for group_id, indices in grouped.items():
+        for group_id in sorted(grouped):
+            indices = grouped[group_id]
             self._layer_list_layout.addWidget(self._build_group_layer_row(canvas, group_id, indices))
             if group_id not in self._collapsed_groups:
                 for index in indices:
@@ -764,8 +821,9 @@ class EngineeringDesignWorkspace(ModuleWindow):
         row_layout = QHBoxLayout(row)
         row_layout.setContentsMargins(3, 2, 3, 2)
         row_layout.setSpacing(3)
-        expander = QPushButton("▸" if group_id in self._collapsed_groups else "▾")
+        expander = QPushButton("+" if group_id in self._collapsed_groups else "-")
         expander.setObjectName("LayerExpandButton")
+        expander.setToolTip("Collapse group" if group_id not in self._collapsed_groups else "Expand group")
         expander.setFixedSize(18, 24)
         expander.clicked.connect(lambda checked=False, gid=group_id: self._toggle_group_collapse(gid))
         members = [canvas.objects[index] for index in indices]
@@ -787,7 +845,7 @@ class EngineeringDesignWorkspace(ModuleWindow):
         row = QWidget()
         row.setObjectName("LayerRow")
         row_layout = QHBoxLayout(row)
-        row_layout.setContentsMargins(18 if child else 3, 2, 3, 2)
+        row_layout.setContentsMargins(24 if child else 3, 2, 3, 2)
         row_layout.setSpacing(3)
         row_layout.addWidget(self._layer_button("eye", obj.visible, "Show", lambda checked=False, i=index: canvas.toggle_object_visible(i)))
         row_layout.addWidget(self._layer_button("lock", obj.locked, "Lock", lambda checked=False, i=index: canvas.toggle_object_locked(i)))
@@ -838,8 +896,14 @@ class EngineeringDesignWorkspace(ModuleWindow):
         button.setObjectName("ToolIconButton")
         button.setToolTip(tooltip)
         button.setIcon(icon)
-        button.setIconSize(QSize(25, 25))
-        button.setFixedSize(40, 32)
+        button.setIconSize(QSize(26, 26))
+        button.setFixedSize(42, 32)
+        button.setStyleSheet(
+            "QPushButton#ToolIconButton {border-radius:10px; border:1px solid #9fb3ca;"
+            "background:qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #ffffff, stop:0.55 #eaf2fb, stop:1 #cddced); padding:1px;}"
+            "QPushButton#ToolIconButton:hover {border-color:#2f7df6; background:#eef6ff;}"
+            "QPushButton#ToolIconButton:pressed {padding-top:2px; background:#c7d8ec;}"
+        )
         button.clicked.connect(callback)
         return button
 
@@ -848,23 +912,26 @@ class EngineeringDesignWorkspace(ModuleWindow):
         pixmap.fill(Qt.transparent)
         painter = QPainter(pixmap)
         painter.setRenderHint(QPainter.Antialiasing, True)
-        base_path = QPainterPath()
-        base_path.addRoundedRect(QRectF(4, 5, 40, 38), 11, 11)
-        painter.fillPath(base_path, QColor("#fff9de"))
-        painter.setPen(QPen(QColor("#7e5b10"), 1.4))
-        painter.drawPath(base_path)
+        badge = QPainterPath()
+        badge.addRoundedRect(QRectF(5, 6, 38, 36), 12, 12)
+        gradient = QLinearGradient(5, 6, 43, 42)
+        gradient.setColorAt(0.0, QColor("#ffffff"))
+        gradient.setColorAt(0.55, QColor("#dff2ff"))
+        gradient.setColorAt(1.0, QColor("#57b8d9" if direction == "undo" else "#43d3bd"))
+        painter.fillPath(badge, gradient)
+        painter.setPen(QPen(QColor("#5d7898"), 1.2))
+        painter.drawPath(badge)
         stroke = QColor("#12345a") if direction == "undo" else QColor("#0f766e")
         painter.setPen(QPen(stroke, 3.2, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
         arc = QRectF(13, 13, 22, 22)
         if direction == "undo":
-            painter.drawArc(arc, 20 * 16, 285 * 16)
-            arrow = QPolygonF([QPointF(12, 18), QPointF(23, 13), QPointF(20, 25)])
+            painter.drawArc(arc, 35 * 16, 275 * 16)
+            painter.drawLine(QPointF(15, 18), QPointF(22, 14))
+            painter.drawLine(QPointF(15, 18), QPointF(21, 24))
         else:
-            painter.drawArc(arc, 160 * 16, -285 * 16)
-            arrow = QPolygonF([QPointF(36, 18), QPointF(25, 13), QPointF(28, 25)])
-        painter.setBrush(stroke)
-        painter.setPen(Qt.NoPen)
-        painter.drawPolygon(arrow)
+            painter.drawArc(arc, 145 * 16, -275 * 16)
+            painter.drawLine(QPointF(33, 18), QPointF(26, 14))
+            painter.drawLine(QPointF(33, 18), QPointF(27, 24))
         painter.end()
         return QIcon(pixmap)
 
