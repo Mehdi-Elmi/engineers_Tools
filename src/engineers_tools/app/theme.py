@@ -65,6 +65,11 @@ def apply_app_theme(app: QApplication) -> None:
             font-size: 12px;
             font-weight: 800;
         }}
+        QLabel#WindowLogoMark {{
+            background: transparent;
+            border: 0;
+            border-radius: 0;
+        }}
         QPushButton#WindowButton, QPushButton#CloseButton {{
             background: transparent;
             border: 0;
@@ -138,7 +143,7 @@ def apply_app_theme(app: QApplication) -> None:
             border-bottom: 3px solid #445a75;
             border-radius: 10px;
             color: #223650;
-            padding: 2px 8px;
+            padding: 1px 8px;
         }}
         QPushButton#HomeButton:hover {{
             border-color: #2f7df6;
@@ -239,44 +244,28 @@ def apply_app_theme(app: QApplication) -> None:
                 stop:0 #f9fbff, stop:0.54 #e8f0fa, stop:1 #d4dfec);
             border: 1px solid #8fa2bb;
             border-bottom: 4px solid #7f91aa;
-            border-radius: 14px;
+            border-radius: 12px;
         }}
-        QWidget#MenuDialogHeader {{
+        QLabel#MenuDropdownTitle {{
             background: {NAVY};
-            border: 1px solid #203553;
-            border-radius: 10px;
-        }}
-        QLabel#MenuDialogTitle {{
-            background: transparent;
+            border-radius: 8px;
             color: #ffffff;
-            font-size: 15px;
+            font-size: 13px;
             font-weight: 800;
-            padding: 5px 2px;
-        }}
-        QPushButton#MenuDialogClose {{
-            background: transparent;
-            border: 0;
-            border-radius: 6px;
-            color: #eef4fb;
-            font-size: 16px;
-            font-weight: 800;
-        }}
-        QPushButton#MenuDialogClose:hover {{
-            background: #e65252;
-            color: #ffffff;
+            padding: 5px 9px;
         }}
         QLabel#MenuDialogEmpty {{
             background: rgba(255, 255, 255, 120);
             border: 1px dashed #9fb0c5;
-            border-radius: 10px;
+            border-radius: 9px;
             color: #39516f;
             font-size: 12px;
-            padding: 14px;
+            padding: 12px;
         }}
         QPushButton#MenuItemButton {{
             background: rgba(255, 255, 255, 145);
             border: 1px solid #b8c5d4;
-            border-radius: 9px;
+            border-radius: 8px;
             color: #1f3148;
             font-size: 13px;
             font-weight: 800;
