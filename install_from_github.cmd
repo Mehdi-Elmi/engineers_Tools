@@ -11,6 +11,7 @@ set "ZIP_FILE=%TEMP%\engineer_tools.zip"
 set "EXTRACT_DIR=%TEMP%\engineer_tools_extract"
 set "REMOTE_SHA_FILE=%TEMP%\engineer_tools_remote_sha.txt"
 set "UPDATE_STATUS_FILE=%TEMP%\engineer_tools_update_status.txt"
+set "FORCE_UPDATE=0"
 
 if not exist "%TOKEN_FILE%" (
     if exist "%FALLBACK_TOKEN_FILE%" (
@@ -87,13 +88,112 @@ if errorlevel 1 (
 
 if not exist "%INSTALL_DIR%" mkdir "%INSTALL_DIR%" >nul 2>nul
 
-for /d %%D in ("%EXTRACT_DIR%\*") do (
-    xcopy "%%D\*" "%INSTALL_DIR%\" /E /I /Y >nul
+echo Install directory: %INSTALL_DIR%
+echo Mirroring GitHub source tree into install directory...
+
+set "SOURCE_DIR="
+for /d %%D in ("%EXTRACT_DIR%\*") do set "SOURCE_DIR=%%D"
+
+if not defined SOURCE_DIR (
+    echo Installation failed: extracted repository folder was not found.
+    pause
+    exit /b 1
+)
+
+robocopy "%SOURCE_DIR%" "%INSTALL_DIR%" /MIR /XD .venv __pycache__ /XF .install_commit >nul
+set "ROBOCOPY_CODE=%ERRORLEVEL%"
+if %ROBOCOPY_CODE% GEQ 8 (
+    echo Robocopy failed with code %ROBOCOPY_CODE%.
+    pause
+    exit /b 1
+)
+
+for /d /r "%INSTALL_DIR%" %%D in (__pycache__) do if exist "%%D" rmdir /s /q "%%D" >nul 2>nul
+
+set "APP_MODULE_DIR=%INSTALL_DIR%\src\engineers_tools\app"
+set "MECH_DIR=%INSTALL_DIR%\modules\mechanics_dynamics_statics"
+
+if not exist "%MECH_DIR%\module_entry.py" (
+    echo Installation verification failed.
+    echo Missing: %MECH_DIR%\module_entry.py
+    pause
+    exit /b 1
+)
+
+if not exist "%MECH_DIR%\workspace.py" (
+    echo Installation verification failed.
+    echo Missing: %MECH_DIR%\workspace.py
+    pause
+    exit /b 1
+)
+
+if not exist "%APP_MODULE_DIR%\module_window.py" (
+    echo Installation verification failed.
+    echo Missing: %APP_MODULE_DIR%\module_window.py
+    pause
+    exit /b 1
+)
+
+if not exist "%APP_MODULE_DIR%\project_file_dialog.py" (
+    echo Installation verification failed.
+    echo Missing: %APP_MODULE_DIR%\project_file_dialog.py
+    pause
+    exit /b 1
+)
+
+findstr /C:"Mehdi-Elmi/engineers_Tools" "%INSTALL_DIR%\README.md" >nul
+if errorlevel 1 (
+    echo Installation verification failed.
+    echo README.md does not identify the active repository path.
+    pause
+    exit /b 1
+)
+
+findstr /C:"from .workspace import EngineeringDesignWorkspace" "%MECH_DIR%\module_entry.py" >nul
+if errorlevel 1 (
+    echo Installation verification failed.
+    echo module_entry.py does not point to the active EngineeringDesignWorkspace.
+    pause
+    exit /b 1
+)
+
+findstr /C:"class EngineeringDesignWorkspace(ModuleWindow)" "%MECH_DIR%\workspace.py" >nul
+if errorlevel 1 (
+    echo Installation verification failed.
+    echo workspace.py does not define the active EngineeringDesignWorkspace class.
+    pause
+    exit /b 1
+)
+
+findstr /C:"class ModuleWindow(QMainWindow)" "%APP_MODULE_DIR%\module_window.py" >nul
+if errorlevel 1 (
+    echo Installation verification failed.
+    echo module_window.py does not contain the shared active workspace window.
+    pause
+    exit /b 1
+)
+
+findstr /C:"class ProjectFileDialog(QDialog)" "%APP_MODULE_DIR%\project_file_dialog.py" >nul
+if errorlevel 1 (
+    echo Installation verification failed.
+    echo project_file_dialog.py does not contain the custom project file dialog.
+    pause
+    exit /b 1
 )
 
 if exist "%REMOTE_SHA_FILE%" copy /y "%REMOTE_SHA_FILE%" "%COMMIT_STAMP%" >nul
 
 echo Installation completed.
+if exist "%COMMIT_STAMP%" (
+    set /p INSTALLED_COMMIT=<"%COMMIT_STAMP%"
+    echo Installed commit: !INSTALLED_COMMIT!
+)
+echo Verified repository: %REPO%
+echo Verified entry: %MECH_DIR%\module_entry.py
+echo Verified workspace: %MECH_DIR%\workspace.py
+echo Verified shared window: %APP_MODULE_DIR%\module_window.py
+echo Verified file dialog: %APP_MODULE_DIR%\project_file_dialog.py
+echo Starting Engineer Tools...
 call "%INSTALL_DIR%\run_engineers_tools.cmd"
 
 :finish
