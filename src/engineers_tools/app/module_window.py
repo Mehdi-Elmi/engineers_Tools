@@ -27,7 +27,7 @@ from ..ui.start_bar import DEFAULT_START_BAR_TOOLS, StartBar, StartBarTool
 from .modules import LauncherModule
 from .project_file_dialog import ProjectFileDialog
 
-UI_BUILD_MARKER = "ENGINEER_TOOLS_ACTIVE_UI_2026_06_27_A"
+UI_BUILD_MARKER = "ENGINEER_TOOLS_ACTIVE_UI_2026_06_27_B"
 
 
 def _apply_rounded_mask(widget: QWidget, radius: float) -> None:
@@ -255,6 +255,9 @@ class ModuleWindow(QMainWindow):
         self._current_file_path: Path | None = None
         self._last_file_dir: Path | None = None
         self._view_state = {"start_bar": True, "grid": True, "ruler": False, "snap": False}
+        self._pages: list[str] = ["Page 1"]
+        self._active_page_index = 0
+        self._page_buttons_layout: QHBoxLayout | None = None
 
         root = QWidget()
         root.setObjectName("WindowRoot")
@@ -375,9 +378,10 @@ class ModuleWindow(QMainWindow):
         layout = QHBoxLayout(area)
         layout.setContentsMargins(14, 14, 14, 10)
         layout.setSpacing(12)
-        properties = self._build_side_panel("Properties", ("Selection", "Coordinates", "Size", "Style", "Behavior"))
-        properties.setFixedWidth(220)
-        layout.addWidget(properties)
+
+        layers = self._build_layers_panel()
+        layers.setFixedWidth(220)
+        layout.addWidget(layers)
 
         canvas_shell = QWidget()
         canvas_shell.setObjectName("CanvasShell")
@@ -391,10 +395,21 @@ class ModuleWindow(QMainWindow):
         canvas_layout.addWidget(self._canvas, 1)
         layout.addWidget(canvas_shell, 1)
 
-        layers = self._build_side_panel("Layers", ("Page 1", "Grid", "Objects", "Annotations"))
-        layers.setFixedWidth(220)
-        layout.addWidget(layers)
+        properties = self._build_side_panel("Properties", ("Selection", "Coordinates", "Size", "Style", "Behavior"))
+        properties.setFixedWidth(220)
+        layout.addWidget(properties)
         return area
+
+    def _build_layers_panel(self) -> QWidget:
+        return self._build_side_panel(
+            "Layers",
+            (
+                "Visible   Lock   Rotation",
+                "◉        🔒      ↻    Page 1",
+                "◉        🔓      ↻    Object 1",
+                "◯        🔒      -    Hidden Group",
+            ),
+        )
 
     def _build_side_panel(self, title: str, rows: tuple[str, ...]) -> QWidget:
         panel = QWidget()
@@ -416,19 +431,102 @@ class ModuleWindow(QMainWindow):
     def _build_page_bar(self) -> QWidget:
         bar = QWidget()
         bar.setObjectName("PageBar")
-        bar.setFixedHeight(44)
+        bar.setFixedHeight(48)
         layout = QHBoxLayout(bar)
-        layout.setContentsMargins(14, 5, 14, 5)
+        layout.setContentsMargins(14, 6, 14, 6)
         layout.setSpacing(8)
-        page = QPushButton("Page 1")
-        page.setObjectName("ToolButton")
-        layout.addWidget(page)
+
+        page_strip = QWidget()
+        page_strip.setObjectName("PageStrip")
+        self._page_buttons_layout = QHBoxLayout(page_strip)
+        self._page_buttons_layout.setContentsMargins(0, 0, 0, 0)
+        self._page_buttons_layout.setSpacing(6)
+        layout.addWidget(page_strip)
+        self._refresh_page_buttons()
+
         layout.addStretch(1)
-        add_page = QPushButton("Add Page")
+        copy_page = self._build_page_action_button("Copy", self._copy_page)
+        duplicate_page = self._build_page_action_button("Duplicate", self._duplicate_page)
+        delete_page = self._build_page_action_button("Delete", self._delete_page)
+        add_page = self._build_page_action_button("Add Page", self._add_page)
         add_page.setObjectName("ConfirmButton")
-        add_page.clicked.connect(lambda: self._set_status("Page added"))
-        layout.addWidget(add_page)
+        for button in (copy_page, duplicate_page, delete_page, add_page):
+            layout.addWidget(button)
         return bar
+
+    def _build_page_action_button(self, label: str, handler: Callable[[], None]) -> QPushButton:
+        button = QPushButton(label)
+        button.setObjectName("ToolButton")
+        button.setMinimumWidth(74)
+        button.clicked.connect(handler)
+        return button
+
+    def _refresh_page_buttons(self) -> None:
+        if self._page_buttons_layout is None:
+            return
+        while self._page_buttons_layout.count():
+            item = self._page_buttons_layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+        for index, label in enumerate(self._pages):
+            page = QPushButton(label)
+            page.setObjectName("ConfirmButton" if index == self._active_page_index else "ToolButton")
+            page.clicked.connect(lambda checked=False, selected=index: self._select_page(selected))
+            self._page_buttons_layout.addWidget(page)
+
+    def _select_page(self, index: int) -> None:
+        self._active_page_index = max(0, min(index, len(self._pages) - 1))
+        self._refresh_page_buttons()
+        self._set_status(f"Selected {self._pages[self._active_page_index]}")
+
+    def _add_page(self) -> None:
+        number = 1
+        existing = set(self._pages)
+        while f"Page {number}" in existing:
+            number += 1
+        self._pages.append(f"Page {number}")
+        self._active_page_index = len(self._pages) - 1
+        self._refresh_page_buttons()
+        self._set_status(f"Added {self._pages[self._active_page_index]}")
+
+    def _copy_page(self) -> None:
+        current = self._pages[self._active_page_index]
+        base = current.split("-")[0]
+        counter = 1
+        existing = set(self._pages)
+        while f"{base}-{counter}" in existing:
+            counter += 1
+        self._pages.insert(self._active_page_index + 1, f"{base}-{counter}")
+        self._active_page_index += 1
+        self._refresh_page_buttons()
+        self._set_status(f"Copied empty page as {self._pages[self._active_page_index]}")
+
+    def _duplicate_page(self) -> None:
+        current = self._pages[self._active_page_index]
+        label = self._unique_page_label(f"{current} Copy")
+        self._pages.insert(self._active_page_index + 1, label)
+        self._active_page_index += 1
+        self._refresh_page_buttons()
+        self._set_status(f"Duplicated page as {label}")
+
+    def _delete_page(self) -> None:
+        if len(self._pages) == 1:
+            self._set_status("At least one page is required")
+            return
+        removed = self._pages.pop(self._active_page_index)
+        self._active_page_index = min(self._active_page_index, len(self._pages) - 1)
+        self._refresh_page_buttons()
+        self._set_status(f"Deleted {removed}")
+
+    def _unique_page_label(self, base: str) -> str:
+        existing = set(self._pages)
+        if base not in existing:
+            return base
+        counter = 1
+        while f"{base} {counter}" in existing:
+            counter += 1
+        return f"{base} {counter}"
 
     def _build_status_bar(self) -> QWidget:
         bar = QWidget()
@@ -602,11 +700,11 @@ class ModuleWindow(QMainWindow):
         self._set_status("Print Setup opened")
 
     def _import_file(self) -> None:
-        result = ProjectFileDialog.get_open_file(self, self._last_file_dir)
+        result = ProjectFileDialog.get_import_file(self, self._last_file_dir)
         self._set_status(f"Imported {result.path.name}" if result else "Import canceled")
 
     def _export_file(self) -> None:
-        result = ProjectFileDialog.get_save_file(self, self._last_file_dir)
+        result = ProjectFileDialog.get_export_file(self, self._last_file_dir)
         if result:
             self._write_document(result.path)
             self._set_status(f"Exported {result.path.name}")
