@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from PySide6.QtCore import QPoint, Signal, Qt
+from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import QGridLayout, QHBoxLayout, QLabel, QMainWindow, QPushButton, QSizePolicy, QVBoxLayout, QWidget
 
 from .modules import MODULES, LauncherModule
@@ -41,11 +44,7 @@ class LauncherWindow(QMainWindow):
         layout.setContentsMargins(16, 0, 10, 0)
         layout.setSpacing(10)
 
-        mark = QLabel("AT")
-        mark.setObjectName("WindowMark")
-        mark.setFixedSize(36, 36)
-        mark.setAlignment(Qt.AlignCenter)
-        layout.addWidget(mark)
+        layout.addWidget(self._build_window_mark())
 
         title = QLabel("Engineer Tools")
         title.setObjectName("WindowTitle")
@@ -58,12 +57,36 @@ class LauncherWindow(QMainWindow):
         minimize.clicked.connect(self.showMinimized)
         layout.addWidget(minimize)
 
-        close = QPushButton("x")
+        close = QPushButton("×")
         close.setObjectName("CloseButton")
         close.setFixedSize(34, 30)
         close.clicked.connect(self.close)
         layout.addWidget(close)
         return bar
+
+    def _build_window_mark(self) -> QLabel:
+        mark = QLabel("AT")
+        mark.setObjectName("WindowMark")
+        mark.setFixedSize(42, 36)
+        mark.setAlignment(Qt.AlignCenter)
+        logo_path = self._find_logo_path()
+        if logo_path is None:
+            return mark
+        pixmap = QPixmap(str(logo_path))
+        if pixmap.isNull():
+            return mark
+        mark.setText("")
+        mark.setObjectName("WindowLogoMark")
+        mark.setPixmap(pixmap.scaled(38, 32, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        return mark
+
+    def _find_logo_path(self) -> Path | None:
+        logo_dir = Path(__file__).resolve().parents[3] / "logo"
+        if not logo_dir.exists():
+            return None
+        allowed_suffixes = {".png", ".jpg", ".jpeg", ".bmp", ".webp"}
+        candidates = sorted(path for path in logo_dir.iterdir() if path.is_file() and path.suffix.lower() in allowed_suffixes)
+        return candidates[0] if candidates else None
 
     def _build_header(self) -> QWidget:
         outer = QWidget()
