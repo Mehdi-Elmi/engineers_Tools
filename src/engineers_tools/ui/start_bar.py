@@ -30,6 +30,7 @@ DEFAULT_START_BAR_TOOLS: tuple[StartBarTool, ...] = (
     StartBarTool("text", "Text", "Add text", ("Content", "Font", "Size", "Direction")),
     StartBarTool("grid", "Grid", "Grid settings", ("Spacing", "Snap", "Visibility", "Unit")),
     StartBarTool("snap", "Snap", "Snap settings", ("Mode", "Tolerance", "Targets")),
+    StartBarTool("unit", "Unit", "Set workspace unit", ("Millimeter", "Centimeter", "Meter", "Pixel", "Inch")),
     StartBarTool("ruler", "Ruler", "Show ruler", ("Unit", "Origin", "Scale")),
     StartBarTool("zoom", "Zoom", "Zoom in, zoom out, or fit", ("Zoom In", "Zoom Out", "Zoom Fit")),
 )
@@ -77,7 +78,8 @@ def _tool_icon(key: str) -> QIcon:
         "text": "#d8b6ff",
         "grid": "#b8d4ef",
         "snap": "#93d6bd",
-        "ruler": "#ffd36e",
+        "unit": "#ffd36e",
+        "ruler": "#ffc35a",
         "zoom": "#9bc8ff",
     }
     _rounded_badge(painter, QRectF(3, 3, 30, 30), QColor(accents.get(key, "#9bc8ff")))
@@ -120,6 +122,19 @@ def _tool_icon(key: str) -> QIcon:
         painter.drawArc(QRectF(10, 8, 16, 16), 180 * 16, -180 * 16)
         painter.setBrush(QColor("#ffffff"))
         painter.drawEllipse(QPointF(18, 12), 2.5, 2.5)
+    elif key == "unit":
+        font = painter.font()
+        font.setFamily("Times New Roman")
+        font.setBold(True)
+        font.setItalic(False)
+        font.setPointSize(11)
+        painter.setFont(font)
+        painter.drawRoundedRect(QRectF(8, 10, 20, 14), 3, 3)
+        painter.drawText(QRectF(7, 8, 22, 18), Qt.AlignCenter, "mm")
+        painter.setPen(QPen(QColor("#7e5b10"), 1.1))
+        painter.drawLine(QPointF(10, 26), QPointF(26, 26))
+        for x in (10, 14, 18, 22, 26):
+            painter.drawLine(QPointF(x, 24), QPointF(x, 28))
     elif key == "ruler":
         painter.drawRoundedRect(QRectF(8, 12, 21, 11), 2, 2)
         painter.setPen(QPen(ink, 1.1))
