@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from PySide6.QtCore import QPoint, QPointF, QRect, QRectF, QSize, Qt, Signal
 from PySide6.QtGui import QColor, QIcon, QKeySequence, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap, QPolygonF, QShortcut
 from PySide6.QtWidgets import (
+    QApplication,
     QDialog,
     QFileDialog,
     QHBoxLayout,
@@ -117,7 +118,7 @@ class ProjectMenuDialog(QDialog):
         self.setWindowFlag(Qt.FramelessWindowHint)
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setModal(True)
-        self.setMinimumWidth(310)
+        self.setMinimumWidth(340)
 
         shell = QWidget()
         shell.setObjectName("ProjectMenuShell")
@@ -129,25 +130,39 @@ class ProjectMenuDialog(QDialog):
         layout.setContentsMargins(14, 12, 14, 14)
         layout.setSpacing(8)
 
+        header = QWidget()
+        header.setObjectName("MenuDialogHeader")
+        header_layout = QHBoxLayout(header)
+        header_layout.setContentsMargins(12, 0, 8, 0)
+        header_layout.setSpacing(8)
+
         heading = QLabel(title)
         heading.setObjectName("MenuDialogTitle")
-        layout.addWidget(heading)
+        header_layout.addWidget(heading, 1)
+
+        close = QPushButton("×")
+        close.setObjectName("MenuDialogClose")
+        close.setFixedSize(28, 26)
+        close.clicked.connect(self.reject)
+        header_layout.addWidget(close)
+        layout.addWidget(header)
 
         if not items:
             empty = QLabel("No tools defined yet.")
             empty.setObjectName("MenuDialogEmpty")
+            empty.setWordWrap(True)
             layout.addWidget(empty)
         for item in items:
             button_text = self._build_button_text(item)
             button = QPushButton(button_text)
             button.setObjectName("MenuItemButton")
-            button.setMinimumHeight(32)
+            button.setMinimumHeight(34)
             if item.handler is not None:
                 button.clicked.connect(self._wrap_handler(item.handler))
             layout.addWidget(button)
 
     def _build_button_text(self, item: MenuItemSpec) -> str:
-        prefix = "[x] " if item.checkable and item.checked else "[ ] " if item.checkable else ""
+        prefix = "✓  " if item.checkable and item.checked else "□  " if item.checkable else ""
         shortcut = f"    {item.shortcut}" if item.shortcut else ""
         return f"{prefix}{item.label}{shortcut}"
 
@@ -244,7 +259,7 @@ class ModuleWindow(QMainWindow):
     def _build_command_bar(self) -> QWidget:
         bar = QWidget()
         bar.setObjectName("CommandBar")
-        bar.setFixedHeight(38)
+        bar.setFixedHeight(40)
         layout = QHBoxLayout(bar)
         layout.setContentsMargins(14, 4, 14, 4)
         layout.setSpacing(10)
@@ -252,9 +267,9 @@ class ModuleWindow(QMainWindow):
         home = QPushButton()
         home.setObjectName("HomeButton")
         home.setToolTip("Back to launcher")
-        home.setFixedSize(42, 30)
+        home.setFixedSize(50, 32)
         home.setIcon(self._build_home_icon())
-        home.setIconSize(QSize(25, 25))
+        home.setIconSize(QSize(31, 27))
         home.clicked.connect(self.back_requested.emit)
         layout.addWidget(home)
 
@@ -362,6 +377,10 @@ class ModuleWindow(QMainWindow):
 
     def _install_shortcuts(self) -> None:
         shortcuts: tuple[tuple[str, Callable[[], None]], ...] = (
+            ("Ctrl+N", self._new_file),
+            ("Ctrl+O", self._open_file),
+            ("Ctrl+S", self._save_file),
+            ("Ctrl+Shift+S", self._save_as_file),
             ("Ctrl+Z", self._undo),
             ("Ctrl+Y", self._redo),
             ("Ctrl+X", self._cut),
@@ -466,19 +485,34 @@ class ModuleWindow(QMainWindow):
     def _file_properties(self) -> None:
         self._set_status("File Properties opened")
 
+    def _run_focus_command(self, command: str) -> bool:
+        focused = QApplication.focusWidget()
+        if focused is None or focused is self:
+            return False
+        action = getattr(focused, command, None)
+        if not callable(action):
+            return False
+        action()
+        return True
+
     def _undo(self) -> None:
+        self._run_focus_command("undo")
         self._set_status("Undo")
 
     def _redo(self) -> None:
+        self._run_focus_command("redo")
         self._set_status("Redo")
 
     def _cut(self) -> None:
+        self._run_focus_command("cut")
         self._set_status("Cut")
 
     def _copy(self) -> None:
+        self._run_focus_command("copy")
         self._set_status("Copy")
 
     def _paste(self) -> None:
+        self._run_focus_command("paste")
         self._set_status("Paste")
 
     def _delete(self) -> None:
@@ -488,6 +522,7 @@ class ModuleWindow(QMainWindow):
         self._set_status("Repeat Last Tool")
 
     def _select_all(self) -> None:
+        self._run_focus_command("selectAll")
         self._set_status("Select All")
 
     def _group(self) -> None:
@@ -566,53 +601,51 @@ class ModuleWindow(QMainWindow):
             self._maximize_button.setToolTip("Maximize")
 
     def _build_home_icon(self) -> QIcon:
-        pixmap = QPixmap(34, 34)
+        pixmap = QPixmap(42, 34)
         pixmap.fill(Qt.transparent)
         painter = QPainter(pixmap)
         painter.setRenderHint(QPainter.Antialiasing, True)
 
+        shadow = QPainterPath()
+        shadow.addRoundedRect(QRectF(5.5, 6.5, 31.0, 24.0), 9.0, 9.0)
+        painter.fillPath(shadow, QColor(4, 13, 26, 80))
+
         base = QPainterPath()
-        base.addRoundedRect(QRectF(3.5, 4.0, 27.0, 26.0), 8.0, 8.0)
-        base_gradient = QLinearGradient(4, 4, 30, 30)
+        base.addRoundedRect(QRectF(4.0, 4.0, 32.0, 24.8), 8.0, 8.0)
+        base_gradient = QLinearGradient(4, 4, 36, 29)
         base_gradient.setColorAt(0.0, QColor("#ffffff"))
-        base_gradient.setColorAt(0.54, QColor("#dcecff"))
-        base_gradient.setColorAt(1.0, QColor("#7ea4d4"))
+        base_gradient.setColorAt(0.42, QColor("#e8f2ff"))
+        base_gradient.setColorAt(1.0, QColor("#5b83b8"))
         painter.fillPath(base, base_gradient)
-        painter.setPen(QPen(QColor("#ffffff"), 1.0))
+        painter.setPen(QPen(QColor("#ffffff"), 1.2))
         painter.drawPath(base)
 
-        shadow = QPainterPath()
-        shadow.addRoundedRect(QRectF(9, 16, 16, 11), 3, 3)
-        painter.fillPath(shadow, QColor(12, 24, 40, 72))
+        roof_shadow = QPolygonF([QPointF(10.0, 17.8), QPointF(21.0, 8.6), QPointF(32.0, 17.8), QPointF(28.6, 20.7), QPointF(21.0, 14.4), QPointF(13.4, 20.7)])
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QColor(13, 30, 54, 78))
+        painter.drawPolygon(roof_shadow)
 
-        roof = QPolygonF(
-            [
-                QPointF(7.5, 16.0),
-                QPointF(17.0, 8.0),
-                QPointF(26.5, 16.0),
-                QPointF(24.0, 18.2),
-                QPointF(17.0, 12.2),
-                QPointF(10.0, 18.2),
-            ]
-        )
-        roof_gradient = QLinearGradient(8, 8, 26, 18)
+        roof = QPolygonF([QPointF(9.0, 16.0), QPointF(21.0, 6.2), QPointF(33.0, 16.0), QPointF(29.8, 18.9), QPointF(21.0, 11.6), QPointF(12.2, 18.9)])
+        roof_gradient = QLinearGradient(9, 6, 33, 19)
         roof_gradient.setColorAt(0.0, QColor("#ffffff"))
-        roof_gradient.setColorAt(0.45, QColor("#9fc4f3"))
-        roof_gradient.setColorAt(1.0, QColor("#315e9a"))
-        painter.setPen(QPen(QColor("#ffffff"), 1.1))
+        roof_gradient.setColorAt(0.48, QColor("#9fc7f7"))
+        roof_gradient.setColorAt(1.0, QColor("#234a7e"))
+        painter.setPen(QPen(QColor("#ffffff"), 1.25))
         painter.setBrush(roof_gradient)
         painter.drawPolygon(roof)
 
-        body_gradient = QLinearGradient(10, 15, 24, 28)
+        body_gradient = QLinearGradient(13, 15, 29, 28)
         body_gradient.setColorAt(0.0, QColor("#ffffff"))
-        body_gradient.setColorAt(0.52, QColor("#8fb8f0"))
-        body_gradient.setColorAt(1.0, QColor("#274a78"))
+        body_gradient.setColorAt(0.48, QColor("#98c1f2"))
+        body_gradient.setColorAt(1.0, QColor("#1f416f"))
         painter.setBrush(body_gradient)
-        painter.drawRoundedRect(QRectF(10.2, 15.4, 13.6, 10.8), 2.4, 2.4)
+        painter.drawRoundedRect(QRectF(13.0, 15.6, 16.0, 10.8), 2.8, 2.8)
 
-        painter.setPen(QPen(QColor("#ffffff"), 1.0))
-        painter.drawRoundedRect(QRectF(15.2, 19.0, 3.6, 7.0), 1.0, 1.0)
-        painter.drawLine(QPointF(12.8, 17.9), QPointF(21.2, 17.9))
+        painter.setPen(QPen(QColor("#ffffff"), 1.2))
+        painter.drawRoundedRect(QRectF(19.0, 19.0, 4.0, 7.1), 1.1, 1.1)
+        painter.drawLine(QPointF(15.5, 18.3), QPointF(26.5, 18.3))
+        painter.setPen(QPen(QColor(255, 255, 255, 155), 1.0))
+        painter.drawLine(QPointF(12.2, 8.6), QPointF(28.4, 8.6))
         painter.end()
         return QIcon(pixmap)
 
