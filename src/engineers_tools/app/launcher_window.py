@@ -30,7 +30,7 @@ class LauncherWindow(QMainWindow):
 
         layout = QVBoxLayout(root)
         layout.setContentsMargins(0, 0, 0, 26)
-        layout.setSpacing(24)
+        layout.setSpacing(22)
         layout.addWidget(self._build_top_bar())
         layout.addWidget(self._build_header())
         layout.addWidget(self._build_grid(), 1)
@@ -39,11 +39,9 @@ class LauncherWindow(QMainWindow):
         bar = QWidget()
         bar.setObjectName("TopBar")
         bar.setFixedHeight(46)
-
         layout = QHBoxLayout(bar)
         layout.setContentsMargins(16, 0, 10, 0)
         layout.setSpacing(10)
-
         layout.addWidget(self._build_window_mark())
 
         title = QLabel("Engineer Tools")
@@ -90,20 +88,22 @@ class LauncherWindow(QMainWindow):
 
     def _build_header(self) -> QWidget:
         outer = QWidget()
-        outer.setStyleSheet("background: transparent;")
+        outer.setObjectName("LauncherHeaderOuter")
         layout = QHBoxLayout(outer)
-        layout.setContentsMargins(44, 6, 44, 0)
+        layout.setContentsMargins(34, 7, 34, 0)
 
         header = QWidget()
         header.setObjectName("LauncherHeader")
         header_layout = QVBoxLayout(header)
-        header_layout.setContentsMargins(22, 13, 22, 13)
-        header_layout.setSpacing(4)
+        header_layout.setContentsMargins(24, 12, 24, 12)
+        header_layout.setSpacing(2)
 
         title = QLabel("Engineer Tools Launcher")
         title.setObjectName("HeaderTitle")
-        subtitle = QLabel("Select the design workspace")
+        title.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        subtitle = QLabel("Select Design Workspace")
         subtitle.setObjectName("HeaderSubtitle")
+        subtitle.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         header_layout.addWidget(title)
         header_layout.addWidget(subtitle)
         layout.addWidget(header)
@@ -111,7 +111,7 @@ class LauncherWindow(QMainWindow):
 
     def _build_grid(self) -> QWidget:
         area = QWidget()
-        area.setStyleSheet("background: transparent;")
+        area.setObjectName("LauncherGridArea")
         grid = QGridLayout(area)
         grid.setContentsMargins(44, 4, 44, 0)
         grid.setHorizontalSpacing(16)
