@@ -105,7 +105,7 @@ def _tool_icon(key: str) -> QIcon:
         font = painter.font()
         font.setFamily("Times New Roman")
         font.setBold(True)
-        font.setItalic(True)
+        font.setItalic(False)
         font.setPointSize(18)
         painter.setFont(font)
         painter.drawText(QRectF(6, 4, 24, 27), Qt.AlignCenter, "T")
