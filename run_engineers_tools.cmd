@@ -16,7 +16,7 @@ if /I not "%APP_ROOT%"=="%EXPECTED_APP_ROOT%" (
     if exist "%EXPECTED_APP_ROOT%run_engineers_tools.cmd" (
         echo Redirecting to the canonical install path...
         call "%EXPECTED_APP_ROOT%run_engineers_tools.cmd"
-        exit /b %ERRORLEVEL%
+        exit /b !ERRORLEVEL!
     )
     echo Canonical install path was not found. Run install_from_github.cmd from Mehdi-Elmi/engineers_Tools.
     pause
@@ -91,7 +91,7 @@ if errorlevel 1 (
     exit /b 1
 )
 
-"%PYTHON_EXE%" -c "from pathlib import Path; from modules.mechanics_dynamics_statics.workspace import EngineeringDesignWorkspace; from src.engineers_tools.app.module_window import ModuleWindow, UI_BUILD_MARKER; from src.engineers_tools.app.project_file_dialog import ProjectFileDialog; root=Path.cwd(); print('canonical app root: ' + str(root)); print('active workspace class: ' + EngineeringDesignWorkspace.__module__ + '.' + EngineeringDesignWorkspace.__name__); print('shared window class: ' + ModuleWindow.__module__ + '.' + ModuleWindow.__name__); print('file dialog class: ' + ProjectFileDialog.__module__ + '.' + ProjectFileDialog.__name__); print('active ui marker: ' + UI_BUILD_MARKER)"
+"%PYTHON_EXE%" -c "from pathlib import Path; from modules.mechanics_dynamics_statics.workspace import EngineeringDesignWorkspace; from src.engineers_tools.app.module_window import ModuleWindow, UI_BUILD_MARKER; from src.engineers_tools.app.project_file_dialog import ProjectFileDialog; root=Path.cwd(); print('canonical app root: ' + str(root)); print('active workspace class: ' + EngineeringDesignWorkspace.__module__ + '.' + EngineeringDesignWorkspace.__name__); print('shared window class: ' + ModuleWindow.__module__ + '.' + ModuleWindow.__name__); print('file dialog class: ' + ProjectFileDialog.__module__ + '.' + ProjectDialog.__name__ if False else 'file dialog class: ' + ProjectFileDialog.__module__ + '.' + ProjectFileDialog.__name__); print('active ui marker: ' + UI_BUILD_MARKER)"
 if errorlevel 1 (
     echo Active runtime verification failed.
     pause
