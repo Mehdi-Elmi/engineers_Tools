@@ -52,6 +52,17 @@ src/engineers_tools/app/modules.py
 پنجره مادر:
 src/engineers_tools/app/module_window.py
 
+Theme:
+src/engineers_tools/app/theme.py
+
+قانون ظاهر پنجره مادر:
+TopBar و StatusBar باید سرمه‌ای هماهنگ باشند.
+StatusBar باید گوشه‌های پایین را گرد کند.
+Close باید علامت واقعی × باشد، نه x.
+Home باید دکمه گرافیکی با آیکن خانه باشد.
+File/Edit/View/Insert/Draw/Modify باید متن ساده شبیه منوی ویندوز باشند، نه دکمه برجسته.
+Add Page و دکمه‌های Yes/No/Apply/Confirm باید از الگوی ConfirmButton استفاده کنند.
+
 قانون Minimize/Maximize:
 پنجره‌های ماژول frameless هستند.
 minimize باید از _minimize_window استفاده کند.
@@ -66,6 +77,7 @@ Start Bar مستقل از پنجره مادر است.
 پنجره مادر فقط StartBar را صدا می‌زند.
 برای ابزارهای اختصاصی هر ماژول، متد get_start_bar_tools() در workspace همان ماژول override شود.
 چت اختصاصی Toolbar نباید برای تغییر آیتم‌ها ساختار module_window.py را خراب کند مگر اینکه قانون عمومی کل پروژه تغییر کند.
+ابزارهای Grid, Snap, Unit بعد از طراحی و تأیید باید به ابزارهای ثابت مشترک تبدیل شوند.
 
 مسیر فعال Engineering Design Tools:
 modules/mechanics_dynamics_statics/module_entry.py
@@ -83,6 +95,7 @@ __init__.py فقط برای package/import است.
 UI انگلیسی باشد.
 گزارش فارسی RTL باشد.
 هر پنجره جدید ادامه docs/window_pattern.md باشد.
+طراح و برنامه‌نویس باید حرفه‌ای و خلاقانه تصمیم بگیرد؛ اگر الگوی فعلی مناسب نبود، تغییر مسیر با ثبت مستندات مجاز است.
 File/Open/Save باید پنجره ظاهری خود پروژه را داشته باشد و فقط پشت پرده از QFileDialog استفاده کند.
 Canvas نباید عنوان اضافه مثل Engineering Design Workspace داخل خودش داشته باشد.
 Properties باید بر اساس ابزار یا آبجکت انتخاب‌شده تغییر کند.
