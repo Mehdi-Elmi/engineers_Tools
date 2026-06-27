@@ -10,6 +10,7 @@ from pathlib import Path
 from PySide6.QtCore import QFileInfo, QPoint, QPointF, QRectF, QSize, QStandardPaths, Qt
 from PySide6.QtGui import QAction, QColor, QIcon, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap, QPolygonF, QRegion
 from PySide6.QtWidgets import (
+    QAbstractItemView,
     QComboBox,
     QDialog,
     QFileIconProvider,
@@ -247,11 +248,14 @@ class ProjectFileDialog(QDialog):
         self._files = QListWidget()
         self._files.setObjectName("FilesList")
         self._files.setViewMode(QListView.ListMode)
+        self._files.setSelectionMode(QAbstractItemView.SingleSelection)
         self._files.setResizeMode(QListView.Adjust)
         self._files.setMovement(QListView.Static)
         self._files.setWrapping(False)
         self._files.setSpacing(2)
         self._files.setIconSize(QSize(24, 24))
+        self._files.setFocusPolicy(Qt.NoFocus)
+        self._files.setStyleSheet("QListWidget#FilesList { outline:0; } QListWidget#FilesList::item:selected { background:transparent; color:#1f3148; border:0; } QListWidget#FilesList::item:focus { outline:0; border:0; }")
         self._files.setContextMenuPolicy(Qt.CustomContextMenu)
         self._files.customContextMenuRequested.connect(self._show_files_context_menu)
         self._files.itemDoubleClicked.connect(self._file_double_clicked)
@@ -386,10 +390,8 @@ class ProjectFileDialog(QDialog):
         self._path_label.setText("This PC")
         self._files.clear()
         for label, path in self._drive_paths():
-            item = QListWidgetItem(self._icon_provider.icon(QFileInfo(str(path))), label)
-            item.setData(Qt.UserRole, str(path))
-            item.setSizeHint(self._file_item_size(label))
-            self._files.addItem(item)
+            self._add_file_item(label, path)
+        self._sync_file_selection(None)
         self._back_button.setEnabled(self._history_index > 0)
         self._forward_button.setEnabled(self._history_index < len(self._history) - 1)
         self._up_button.setEnabled(False)
@@ -404,13 +406,59 @@ class ProjectFileDialog(QDialog):
         for child in children:
             if child.is_file() and not self._matches_filter(child, suffixes):
                 continue
-            item = QListWidgetItem(self._icon_provider.icon(QFileInfo(str(child))), child.name)
-            item.setData(Qt.UserRole, str(child))
-            item.setSizeHint(self._file_item_size(child.name))
-            self._files.addItem(item)
+            self._add_file_item(child.name, child)
+        self._sync_file_selection(None)
+
+    def _add_file_item(self, label: str, path: Path) -> None:
+        item = QListWidgetItem("")
+        item.setData(Qt.UserRole, str(path))
+        item.setSizeHint(self._file_item_size(label))
+        self._files.addItem(item)
+        row = self._build_file_item_widget(label, path)
+        row.setFixedWidth(self._file_item_size(label).width())
+        self._files.setItemWidget(item, row)
+
+    def _build_file_item_widget(self, label: str, path: Path) -> QWidget:
+        row = QWidget()
+        row.setObjectName("FileItemRow")
+        row.setProperty("selected", False)
+        row.setFixedHeight(30)
+        layout = QHBoxLayout(row)
+        layout.setContentsMargins(6, 2, 8, 2)
+        layout.setSpacing(7)
+        icon_label = QLabel()
+        icon_label.setObjectName("FileItemIcon")
+        icon_label.setFixedSize(22, 22)
+        icon = self._icon_provider.icon(QFileInfo(str(path)))
+        icon_label.setPixmap(icon.pixmap(22, 22))
+        layout.addWidget(icon_label)
+        text = QLabel(label)
+        text.setObjectName("FileItemText")
+        text.setFixedHeight(24)
+        text.setStyleSheet("background:transparent; color:#1f3148; font-style:normal; font-weight:700;")
+        layout.addWidget(text)
+        layout.addStretch(1)
+        row.setStyleSheet(
+            "QWidget#FileItemRow {background:transparent; border:1px solid transparent; border-radius:7px;}"
+            "QWidget#FileItemRow[selected=\"true\"] {background:#cfe7ff; border:1px solid #74aef2;}"
+            "QWidget#FileItemRow:hover {background:#fff3d4; border:1px solid #e8bd67;}"
+        )
+        return row
+
+    def _sync_file_selection(self, selected_item: QListWidgetItem | None) -> None:
+        for row_index in range(self._files.count()):
+            item = self._files.item(row_index)
+            widget = self._files.itemWidget(item)
+            if widget is None:
+                continue
+            is_selected = item is selected_item
+            widget.setProperty("selected", is_selected)
+            widget.style().unpolish(widget)
+            widget.style().polish(widget)
+            widget.update()
 
     def _file_item_size(self, name: str) -> QSize:
-        width = max(120, min(360, self.fontMetrics().horizontalAdvance(name) + 58))
+        width = max(120, min(360, self.fontMetrics().horizontalAdvance(name) + 64))
         return QSize(width, 32)
 
     def _file_type_changed(self, _index: int) -> None:
@@ -447,11 +495,15 @@ class ProjectFileDialog(QDialog):
         self._navigate_to(Path(data), add_history=True)
 
     def _file_clicked(self, item: QListWidgetItem) -> None:
+        self._files.setCurrentItem(item)
+        self._sync_file_selection(item)
         path = Path(item.data(Qt.UserRole))
         if path.is_file():
             self._file_name.setText(path.name)
 
     def _file_double_clicked(self, item: QListWidgetItem) -> None:
+        self._files.setCurrentItem(item)
+        self._sync_file_selection(item)
         path = Path(item.data(Qt.UserRole))
         if path.is_dir():
             self._navigate_to(path, add_history=True)
@@ -462,8 +514,19 @@ class ProjectFileDialog(QDialog):
 
     def _show_files_context_menu(self, position: QPoint) -> None:
         item = self._files.itemAt(position)
+        if item is not None:
+            self._files.setCurrentItem(item)
+            self._sync_file_selection(item)
         selected_path = Path(item.data(Qt.UserRole)) if item is not None else None
         menu = QMenu(self)
+        menu.setObjectName("ProjectContextMenu")
+        menu.setStyleSheet(
+            "QMenu#ProjectContextMenu {background:qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 #ffffff, stop:0.42 #eef8ff, stop:1 #fff3d4); border:1px solid #8fa2bb; border-radius:10px; padding:6px;}"
+            "QMenu#ProjectContextMenu::item {background:rgba(255,255,255,205); border:1px solid #b8c5d4; border-left:3px solid #43d3bd; border-radius:7px; color:#1f3148; font-size:12px; font-style:italic; font-weight:800; padding:5px 28px 5px 10px; margin:2px;}"
+            "QMenu#ProjectContextMenu::item:selected {background:#fff4cf; border-color:#ff8a35; border-left-color:#d91f5c;}"
+            "QMenu#ProjectContextMenu::item:disabled {color:#8a98a8; background:rgba(238,244,250,130); border-left-color:#b8c5d4;}"
+            "QMenu#ProjectContextMenu::separator {height:1px; background:#b8c5d4; margin:5px 8px;}"
+        )
         copy_action = QAction("Copy", self)
         cut_action = QAction("Cut", self)
         paste_action = QAction("Paste", self)
@@ -496,22 +559,28 @@ class ProjectFileDialog(QDialog):
             ProjectFileDialog._pending_file_action = None
             return
         destination = self._make_unique_path(self._current_dir / source.name)
-        if action == "cut":
-            shutil.move(str(source), str(destination))
-            ProjectFileDialog._pending_file_action = None
-        elif source.is_dir():
-            shutil.copytree(source, destination)
-        else:
-            shutil.copy2(source, destination)
+        try:
+            if action == "cut":
+                shutil.move(str(source), str(destination))
+                ProjectFileDialog._pending_file_action = None
+            elif source.is_dir():
+                shutil.copytree(source, destination)
+            else:
+                shutil.copy2(source, destination)
+        except OSError:
+            return
         self._refresh_files()
 
     def _delete_file_action(self, path: Path | None) -> None:
         if path is None or not path.exists():
             return
-        if path.is_dir():
-            shutil.rmtree(path)
-        else:
-            path.unlink()
+        try:
+            if path.is_dir():
+                shutil.rmtree(path)
+            else:
+                path.unlink()
+        except OSError:
+            return
         self._file_name.clear()
         self._refresh_files()
 
