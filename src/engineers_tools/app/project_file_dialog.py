@@ -7,12 +7,11 @@ through Python and Qt models. It intentionally avoids native QFileDialog visuals
 from __future__ import annotations
 
 import os
-import string
 from dataclasses import dataclass
 from pathlib import Path
 
-from PySide6.QtCore import QFileInfo, QPoint, QRectF, QSize, QStandardPaths, Qt
-from PySide6.QtGui import QPainterPath, QRegion
+from PySide6.QtCore import QFileInfo, QPoint, QPointF, QRectF, QSize, QStandardPaths, Qt
+from PySide6.QtGui import QColor, QIcon, QPainter, QPainterPath, QPen, QPixmap, QPolygonF, QRegion
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
@@ -30,11 +29,22 @@ from PySide6.QtWidgets import (
 
 
 PROJECT_FILE_FILTERS: tuple[tuple[str, tuple[str, ...], str], ...] = (
-    ("Engineer Tools Files", (".etools", ".etool"), ".etools"),
-    ("PDF Files", (".pdf",), ".pdf"),
-    ("Image Files", (".png", ".jpg", ".jpeg", ".bmp", ".webp", ".svg"), ".png"),
-    ("SVG Files", (".svg",), ".svg"),
-    ("All Supported Files", (".etools", ".etool", ".pdf", ".png", ".jpg", ".jpeg", ".bmp", ".webp", ".svg"), ".etools"),
+    ("Engineer Tools", (".etools", ".etool"), ".etools"),
+    ("PDF", (".pdf",), ".pdf"),
+    ("PNG", (".png",), ".png"),
+    ("JPEG", (".jpg", ".jpeg"), ".jpg"),
+    ("BMP", (".bmp",), ".bmp"),
+    ("WebP", (".webp",), ".webp"),
+    ("SVG", (".svg",), ".svg"),
+    ("All Files", (".*",), ".etools"),
+)
+
+OFFICE_FILE_FILTERS: tuple[tuple[str, tuple[str, ...], str], ...] = (
+    ("Engineer Tools", (".etools", ".etool"), ".etools"),
+    ("Word", (".doc", ".docx", ".dot", ".dotx", ".rtf"), ".docx"),
+    ("PowerPoint", (".ppt", ".pptx", ".pot", ".potx", ".pps", ".ppsx"), ".pptx"),
+    ("Excel", (".xls", ".xlsx", ".xlsm", ".xlt", ".xltx", ".csv"), ".xlsx"),
+    ("PDF", (".pdf",), ".pdf"),
     ("All Files", (".*",), ".etools"),
 )
 
@@ -48,16 +58,17 @@ class FileDialogResult:
 class ProjectFileDialog(QDialog):
     """Rounded file picker with project styling and Windows-like behavior."""
 
-    def __init__(self, mode: str, parent: QWidget | None = None, start_dir: Path | None = None) -> None:
+    def __init__(self, mode: str, parent: QWidget | None = None, start_dir: Path | None = None, filter_kind: str = "project") -> None:
         super().__init__(parent)
         self.mode = mode
+        self.filter_kind = filter_kind
         self.selected_result: FileDialogResult | None = None
         self._history: list[Path] = []
         self._history_index = -1
         self._icon_provider = QFileIconProvider()
         self._current_dir = self._resolve_start_dir(start_dir)
 
-        title = "Open" if mode == "open" else "Save As"
+        title = self._dialog_title()
         self.setObjectName("ProjectFileDialog")
         self.setWindowTitle(title)
         self.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint)
@@ -81,16 +92,31 @@ class ProjectFileDialog(QDialog):
         layout.addWidget(self._build_footer())
 
         self._navigate_to(self._current_dir, add_history=True)
+        if self.mode in {"save", "export"}:
+            self._set_default_file_name(force=True)
 
     @classmethod
     def get_open_file(cls, parent: QWidget | None = None, start_dir: Path | None = None) -> FileDialogResult | None:
-        dialog = cls("open", parent, start_dir)
+        dialog = cls("open", parent, start_dir, "project")
         return dialog.selected_result if dialog.exec() == QDialog.Accepted else None
 
     @classmethod
     def get_save_file(cls, parent: QWidget | None = None, start_dir: Path | None = None) -> FileDialogResult | None:
-        dialog = cls("save", parent, start_dir)
+        dialog = cls("save", parent, start_dir, "project")
         return dialog.selected_result if dialog.exec() == QDialog.Accepted else None
+
+    @classmethod
+    def get_import_file(cls, parent: QWidget | None = None, start_dir: Path | None = None) -> FileDialogResult | None:
+        dialog = cls("import", parent, start_dir, "office")
+        return dialog.selected_result if dialog.exec() == QDialog.Accepted else None
+
+    @classmethod
+    def get_export_file(cls, parent: QWidget | None = None, start_dir: Path | None = None) -> FileDialogResult | None:
+        dialog = cls("export", parent, start_dir, "office")
+        return dialog.selected_result if dialog.exec() == QDialog.Accepted else None
+
+    def _dialog_title(self) -> str:
+        return {"open": "Open", "save": "Save As", "import": "Import", "export": "Export"}.get(self.mode, "Open")
 
     def _build_header(self, title: str) -> QWidget:
         header = QWidget()
@@ -98,12 +124,7 @@ class ProjectFileDialog(QDialog):
         layout = QHBoxLayout(header)
         layout.setContentsMargins(14, 0, 10, 0)
         layout.setSpacing(10)
-
-        mark = QLabel("AT")
-        mark.setObjectName("WindowMark")
-        mark.setFixedSize(34, 30)
-        mark.setAlignment(Qt.AlignCenter)
-        layout.addWidget(mark)
+        layout.addWidget(self._build_window_mark())
 
         label = QLabel(title)
         label.setObjectName("FileDialogTitle")
@@ -116,6 +137,30 @@ class ProjectFileDialog(QDialog):
         layout.addWidget(close)
         return header
 
+    def _build_window_mark(self) -> QLabel:
+        mark = QLabel("AT")
+        mark.setObjectName("WindowMark")
+        mark.setFixedSize(36, 30)
+        mark.setAlignment(Qt.AlignCenter)
+        logo_path = self._find_logo_path()
+        if logo_path is None:
+            return mark
+        pixmap = QPixmap(str(logo_path))
+        if pixmap.isNull():
+            return mark
+        mark.setText("")
+        mark.setObjectName("WindowLogoMark")
+        mark.setPixmap(pixmap.scaled(32, 26, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        return mark
+
+    def _find_logo_path(self) -> Path | None:
+        logo_dir = Path(__file__).resolve().parents[3] / "logo"
+        if not logo_dir.exists():
+            return None
+        suffixes = {".png", ".jpg", ".jpeg", ".bmp", ".webp"}
+        candidates = sorted(path for path in logo_dir.iterdir() if path.is_file() and path.suffix.lower() in suffixes)
+        return candidates[0] if candidates else None
+
     def _build_navigation_bar(self) -> QWidget:
         bar = QWidget()
         bar.setObjectName("FileDialogNavBar")
@@ -123,13 +168,15 @@ class ProjectFileDialog(QDialog):
         layout.setContentsMargins(12, 6, 12, 6)
         layout.setSpacing(8)
 
-        self._back_button = QPushButton("Back")
-        self._back_button.setObjectName("FileNavButton")
+        self._back_button = self._build_nav_button("back", "Back")
         self._back_button.clicked.connect(self._go_back)
         layout.addWidget(self._back_button)
 
-        self._up_button = QPushButton("Up")
-        self._up_button.setObjectName("FileNavButton")
+        self._forward_button = self._build_nav_button("forward", "Forward")
+        self._forward_button.clicked.connect(self._go_forward)
+        layout.addWidget(self._forward_button)
+
+        self._up_button = self._build_nav_button("up", "Up")
         self._up_button.clicked.connect(self._go_up)
         layout.addWidget(self._up_button)
 
@@ -137,6 +184,32 @@ class ProjectFileDialog(QDialog):
         self._path_label.setObjectName("FilePathLabel")
         layout.addWidget(self._path_label, 1)
         return bar
+
+    def _build_nav_button(self, direction: str, tooltip: str) -> QPushButton:
+        button = QPushButton()
+        button.setObjectName("FileNavButton")
+        button.setToolTip(tooltip)
+        button.setFixedSize(34, 28)
+        button.setIcon(self._build_nav_icon(direction))
+        button.setIconSize(QSize(24, 22))
+        return button
+
+    def _build_nav_icon(self, direction: str) -> QIcon:
+        pixmap = QPixmap(26, 22)
+        pixmap.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.Antialiasing, True)
+        painter.setPen(QPen(QColor("#ffffff"), 1.0))
+        painter.setBrush(QColor("#132238"))
+        if direction == "back":
+            points = QPolygonF([QPointF(7, 11), QPointF(16, 4), QPointF(16, 8), QPointF(22, 8), QPointF(22, 14), QPointF(16, 14), QPointF(16, 18)])
+        elif direction == "forward":
+            points = QPolygonF([QPointF(19, 11), QPointF(10, 4), QPointF(10, 8), QPointF(4, 8), QPointF(4, 14), QPointF(10, 14), QPointF(10, 18)])
+        else:
+            points = QPolygonF([QPointF(13, 4), QPointF(21, 12), QPointF(17, 12), QPointF(17, 18), QPointF(9, 18), QPointF(9, 12), QPointF(5, 12)])
+        painter.drawPolygon(points)
+        painter.end()
+        return QIcon(pixmap)
 
     def _build_body(self) -> QWidget:
         body = QWidget()
@@ -182,13 +255,13 @@ class ProjectFileDialog(QDialog):
 
         self._file_type = QComboBox()
         self._file_type.setObjectName("FileTypeCombo")
-        for name, suffixes, _default_suffix in PROJECT_FILE_FILTERS:
+        for name, suffixes, _default_suffix in self._filters():
             suffix_text = " ".join(f"*{suffix}" for suffix in suffixes)
             self._file_type.addItem(f"{name} ({suffix_text})", (name, suffixes, _default_suffix))
-        self._file_type.currentIndexChanged.connect(lambda _index: self._refresh_files())
+        self._file_type.currentIndexChanged.connect(self._file_type_changed)
         layout.addWidget(self._file_type, 1, 1)
 
-        action_label = "Open" if self.mode == "open" else "Save"
+        action_label = {"open": "Open", "save": "Save", "import": "Import", "export": "Export"}.get(self.mode, "Open")
         action = QPushButton(action_label)
         action.setObjectName("ConfirmButton")
         action.clicked.connect(self._accept_selection)
@@ -200,11 +273,17 @@ class ProjectFileDialog(QDialog):
         layout.addWidget(cancel, 1, 2)
         return footer
 
+    def _filters(self) -> tuple[tuple[str, tuple[str, ...], str], ...]:
+        return OFFICE_FILE_FILTERS if self.filter_kind == "office" else PROJECT_FILE_FILTERS
+
     def _populate_places(self) -> None:
         for label, path in self._places_paths():
             item = QListWidgetItem(self._icon_provider.icon(QFileInfo(str(path))), label)
             item.setData(Qt.UserRole, str(path))
             self._places.addItem(item)
+        this_pc = QListWidgetItem(self._icon_provider.icon(QFileIconProvider.Computer), "This PC")
+        this_pc.setData(Qt.UserRole, "__THIS_PC__")
+        self._places.addItem(this_pc)
 
     def _places_paths(self) -> list[tuple[str, Path]]:
         paths: list[tuple[str, Path]] = []
@@ -224,17 +303,16 @@ class ProjectFileDialog(QDialog):
         one_drive = os.environ.get("OneDrive") or os.environ.get("OneDriveCommercial")
         if one_drive and Path(one_drive).exists():
             paths.append(("OneDrive", Path(one_drive)))
-        paths.extend(self._drive_paths())
         return paths
 
     def _drive_paths(self) -> list[tuple[str, Path]]:
         if os.name != "nt":
             return [("Root", Path("/"))]
         drives: list[tuple[str, Path]] = []
-        for letter in string.ascii_uppercase:
+        for letter in "ABCDEFGHIJKLMNOPQRSTUVWXYZ":
             path = Path(f"{letter}:\\")
             if path.exists():
-                drives.append((f"Drive {letter}:", path))
+                drives.append((f"Local Disk ({letter}:)", path))
         return drives
 
     def _resolve_start_dir(self, start_dir: Path | None) -> Path:
@@ -256,6 +334,19 @@ class ProjectFileDialog(QDialog):
         self._path_label.setText(str(path))
         self._refresh_files()
         self._update_nav_state()
+        if self.mode in {"save", "export"} and not self._file_name.text().strip():
+            self._set_default_file_name(force=True)
+
+    def _show_this_pc(self) -> None:
+        self._path_label.setText("This PC")
+        self._files.clear()
+        for label, path in self._drive_paths():
+            item = QListWidgetItem(self._icon_provider.icon(QFileInfo(str(path))), label)
+            item.setData(Qt.UserRole, str(path))
+            self._files.addItem(item)
+        self._back_button.setEnabled(self._history_index > 0)
+        self._forward_button.setEnabled(self._history_index < len(self._history) - 1)
+        self._up_button.setEnabled(False)
 
     def _refresh_files(self) -> None:
         self._files.clear()
@@ -270,6 +361,17 @@ class ProjectFileDialog(QDialog):
             item = QListWidgetItem(self._icon_provider.icon(QFileInfo(str(child))), child.name)
             item.setData(Qt.UserRole, str(child))
             self._files.addItem(item)
+
+    def _file_type_changed(self, _index: int) -> None:
+        if self.mode in {"save", "export"} and (not self._file_name.text().strip() or self._file_name.text().startswith("EngineerTools")):
+            self._set_default_file_name(force=True)
+        self._refresh_files()
+
+    def _set_default_file_name(self, force: bool = False) -> None:
+        if not force and self._file_name.text().strip():
+            return
+        candidate = self._make_unique_path(self._current_dir / f"EngineerTools{self._selected_default_suffix()}")
+        self._file_name.setText(candidate.name)
 
     def _selected_suffixes(self) -> tuple[str, ...]:
         data = self._file_type.currentData()
@@ -287,7 +389,11 @@ class ProjectFileDialog(QDialog):
         return ".*" in suffixes or path.suffix.lower() in suffixes
 
     def _place_clicked(self, item: QListWidgetItem) -> None:
-        self._navigate_to(Path(item.data(Qt.UserRole)), add_history=True)
+        data = str(item.data(Qt.UserRole))
+        if data == "__THIS_PC__":
+            self._show_this_pc()
+            return
+        self._navigate_to(Path(data), add_history=True)
 
     def _file_clicked(self, item: QListWidgetItem) -> None:
         path = Path(item.data(Qt.UserRole))
@@ -300,13 +406,19 @@ class ProjectFileDialog(QDialog):
             self._navigate_to(path, add_history=True)
             return
         self._file_name.setText(path.name)
-        if self.mode == "open":
+        if self.mode in {"open", "import"}:
             self._accept_selection()
 
     def _go_back(self) -> None:
         if self._history_index <= 0:
             return
         self._history_index -= 1
+        self._navigate_to(self._history[self._history_index], add_history=False)
+
+    def _go_forward(self) -> None:
+        if self._history_index >= len(self._history) - 1:
+            return
+        self._history_index += 1
         self._navigate_to(self._history[self._history_index], add_history=False)
 
     def _go_up(self) -> None:
@@ -316,21 +428,39 @@ class ProjectFileDialog(QDialog):
 
     def _update_nav_state(self) -> None:
         self._back_button.setEnabled(self._history_index > 0)
+        self._forward_button.setEnabled(self._history_index < len(self._history) - 1)
         self._up_button.setEnabled(self._current_dir.parent != self._current_dir)
 
     def _accept_selection(self) -> None:
         raw_name = self._file_name.text().strip()
+        if not raw_name and self.mode in {"save", "export"}:
+            self._set_default_file_name(force=True)
+            raw_name = self._file_name.text().strip()
         if not raw_name:
             return
         path = Path(raw_name)
         if not path.is_absolute():
             path = self._current_dir / raw_name
-        if self.mode == "save" and not path.suffix:
-            path = path.with_suffix(self._selected_default_suffix())
-        if self.mode == "open" and (not path.exists() or path.is_dir()):
+        if self.mode in {"save", "export"}:
+            if not path.suffix:
+                path = path.with_suffix(self._selected_default_suffix())
+            path = self._make_unique_path(path)
+        if self.mode in {"open", "import"} and (not path.exists() or path.is_dir()):
             return
         self.selected_result = FileDialogResult(path=path, filter_name=self._selected_filter_name())
         self.accept()
+
+    def _make_unique_path(self, path: Path) -> Path:
+        if not path.exists():
+            return path
+        stem = path.stem
+        suffix = path.suffix
+        counter = 1
+        while True:
+            candidate = path.with_name(f"{stem}_{counter}{suffix}")
+            if not candidate.exists():
+                return candidate
+            counter += 1
 
     def resizeEvent(self, event) -> None:  # noqa: N802
         super().resizeEvent(event)
