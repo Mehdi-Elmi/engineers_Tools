@@ -10,37 +10,7 @@ set "REQ_FILE=%APP_ROOT%requirements.txt"
 set "REQ_STAMP=%VENV_DIR%\requirements.stamp"
 set "NEED_INSTALL=0"
 
-if /I not "%APP_ROOT%"=="%EXPECTED_APP_ROOT%" (
-    echo Wrong Engineer Tools launch path detected.
-    echo Current path: %APP_ROOT%
-    echo Expected path: %EXPECTED_APP_ROOT%
-    if exist "%EXPECTED_APP_ROOT%run_engineers_tools.cmd" (
-        echo Redirecting to the canonical install path...
-        call "%EXPECTED_APP_ROOT%run_engineers_tools.cmd"
-        exit /b !ERRORLEVEL!
-    )
-    echo Canonical install path was not found. Run install_from_github.cmd from Mehdi-Elmi/engineers_Tools.
-    pause
-    exit /b 1
-)
-
-if not exist "%APP_ROOT%README.md" (
-    echo Runtime verification failed.
-    echo Missing README.md in the canonical install path.
-    pause
-    exit /b 1
-)
-
-findstr /C:"Mehdi-Elmi/engineers_Tools" "%APP_ROOT%README.md" >nul
-if errorlevel 1 (
-    echo Runtime verification failed.
-    echo This folder is not the active Mehdi-Elmi/engineers_Tools installation.
-    pause
-    exit /b 1
-)
-
 cd /d "%APP_ROOT%"
-set "PYTHONPATH=%APP_ROOT%;%PYTHONPATH%"
 
 if not exist "%PYTHON_EXE%" (
     echo Creating Python virtual environment...
@@ -87,18 +57,13 @@ if "%NEED_INSTALL%"=="1" (
     echo Python environment is ready.
 )
 
-echo App root: %APP_ROOT%
-echo Python: %PYTHON_EXE%
-"%PYTHON_EXE%" -c "import importlib.util as u; mods=('src.engineers_tools.app.module_window','src.engineers_tools.app.project_file_dialog','modules.mechanics_dynamics_statics.module_entry','modules.mechanics_dynamics_statics.workspace'); [print(m + ': ' + str((u.find_spec(m).origin if u.find_spec(m) else 'NOT FOUND'))) for m in mods]"
-if errorlevel 1 (
-    echo Runtime path check failed.
-    pause
-    exit /b 1
+if /I not "%APP_ROOT%"=="%EXPECTED_APP_ROOT%" (
+    echo Warning: app is running from %APP_ROOT%
+    echo Expected install path is %EXPECTED_APP_ROOT%
 )
 
-"%PYTHON_EXE%" -c "from pathlib import Path; from modules.mechanics_dynamics_statics.workspace import EngineeringDesignWorkspace; from src.engineers_tools.app.module_window import ModuleWindow, UI_BUILD_MARKER; from src.engineers_tools.app.project_file_dialog import ProjectFileDialog; root=Path.cwd(); print('canonical app root: ' + str(root)); print('active workspace class: ' + EngineeringDesignWorkspace.__module__ + '.' + EngineeringDesignWorkspace.__name__); print('shared window class: ' + ModuleWindow.__module__ + '.' + ModuleWindow.__name__); print('file dialog class: ' + ProjectFileDialog.__module__ + '.' + ProjectFileDialog.__name__); print('active ui marker: ' + UI_BUILD_MARKER)"
-if errorlevel 1 (
-    echo Active runtime verification failed.
+if not exist "%APP_ROOT%src\engineers_tools\main.py" (
+    echo Missing application entry: %APP_ROOT%src\engineers_tools\main.py
     pause
     exit /b 1
 )
