@@ -6,12 +6,14 @@ and vector design. Future changes for this module must continue this class.
 
 from __future__ import annotations
 
-from PySide6.QtWidgets import QAbstractSpinBox, QDoubleSpinBox, QHBoxLayout, QLabel, QWidget
+from PySide6.QtCore import QPointF, QSize, Qt
+from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap, QPolygonF
+from PySide6.QtWidgets import QAbstractSpinBox, QDoubleSpinBox, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
 from src.engineers_tools.app.module_window import MenuItemSpec, ModuleWindow
 from src.engineers_tools.app.modules import LauncherModule
 
-ENGINEERING_WORKSPACE_UI_MARKER = "ENGINEERING_WORKSPACE_VIEW_STARTBAR_2026_06_27_B"
+ENGINEERING_WORKSPACE_UI_MARKER = "ENGINEERING_WORKSPACE_VIEW_STARTBAR_2026_06_27_C"
 
 
 class EngineeringDesignWorkspace(ModuleWindow):
@@ -53,41 +55,80 @@ class EngineeringDesignWorkspace(ModuleWindow):
         zoom_label = QLabel("Zoom:")
         zoom_label.setObjectName("StatusItem")
         layout.addWidget(zoom_label)
+        layout.addWidget(self._build_zoom_control())
+        return bar
+
+    def _build_zoom_control(self) -> QWidget:
+        control = QWidget()
+        control.setObjectName("ZoomControl")
+        control.setFixedSize(128, 28)
+        control_layout = QHBoxLayout(control)
+        control_layout.setContentsMargins(0, 0, 0, 0)
+        control_layout.setSpacing(3)
 
         self._zoom_input = QDoubleSpinBox()
         self._zoom_input.setObjectName("ZoomInput")
-        self._zoom_input.setButtonSymbols(QAbstractSpinBox.UpDownArrows)
+        self._zoom_input.setButtonSymbols(QAbstractSpinBox.NoButtons)
         self._zoom_input.setRange(5.0, 3200.0)
         self._zoom_input.setDecimals(2)
         self._zoom_input.setSingleStep(5.0)
         self._zoom_input.setValue(100.0)
         self._zoom_input.setSuffix(" %")
-        self._zoom_input.setFixedWidth(104)
+        self._zoom_input.setFixedSize(90, 26)
         self._zoom_input.setStyleSheet(
             "QDoubleSpinBox#ZoomInput {"
             "background:#ffffff; border:1px solid #8fb3dc; border-radius:8px;"
-            "color:#132238; font-size:11px; padding:2px 20px 2px 6px;"
+            "color:#132238; font-size:11px; padding:2px 6px;"
             "selection-background-color:#43d3bd; }"
-            "QDoubleSpinBox#ZoomInput::up-button {"
-            "subcontrol-origin:border; subcontrol-position:top right; width:18px;"
-            "border-left:1px solid #ffffff; border-top-right-radius:7px;"
-            "background:qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #2f7df6, stop:1 #0f365f); }"
-            "QDoubleSpinBox#ZoomInput::down-button {"
-            "subcontrol-origin:border; subcontrol-position:bottom right; width:18px;"
-            "border-left:1px solid #ffffff; border-bottom-right-radius:7px;"
-            "background:qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #1f5f99, stop:1 #132238); }"
-            "QDoubleSpinBox#ZoomInput::up-arrow {"
-            "image:none; width:0px; height:0px; border-left:5px solid transparent;"
-            "border-right:5px solid transparent; border-bottom:7px solid #ffffff; }"
-            "QDoubleSpinBox#ZoomInput::down-arrow {"
-            "image:none; width:0px; height:0px; border-left:5px solid transparent;"
-            "border-right:5px solid transparent; border-top:7px solid #ffffff; }"
-            "QDoubleSpinBox#ZoomInput::up-button:hover, QDoubleSpinBox#ZoomInput::down-button:hover {"
-            "background:#ff8a35; border-left:1px solid #ffffff; }"
         )
         self._zoom_input.valueChanged.connect(self._set_zoom)
-        layout.addWidget(self._zoom_input)
-        return bar
+        control_layout.addWidget(self._zoom_input)
+
+        arrows = QWidget()
+        arrows.setObjectName("ZoomArrowStack")
+        arrows_layout = QVBoxLayout(arrows)
+        arrows_layout.setContentsMargins(0, 0, 0, 0)
+        arrows_layout.setSpacing(2)
+
+        up_button = self._build_zoom_arrow_button("up")
+        down_button = self._build_zoom_arrow_button("down")
+        up_button.clicked.connect(lambda: self._zoom_input.stepUp())
+        down_button.clicked.connect(lambda: self._zoom_input.stepDown())
+        arrows_layout.addWidget(up_button)
+        arrows_layout.addWidget(down_button)
+        control_layout.addWidget(arrows)
+        return control
+
+    def _build_zoom_arrow_button(self, direction: str) -> QPushButton:
+        button = QPushButton()
+        button.setObjectName("ZoomArrowButton")
+        button.setFixedSize(30, 12)
+        button.setIcon(self._build_zoom_arrow_icon(direction))
+        button.setIconSize(QSize(22, 10))
+        button.setToolTip("Zoom in" if direction == "up" else "Zoom out")
+        button.setStyleSheet(
+            "QPushButton#ZoomArrowButton {"
+            "background:qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #fff9de, stop:1 #ffc35a);"
+            "border:1px solid #7e5b10; border-radius:4px; padding:0px; }"
+            "QPushButton#ZoomArrowButton:hover { background:#ff8a35; border-color:#ffffff; }"
+            "QPushButton#ZoomArrowButton:pressed { background:#d46a16; padding-top:1px; }"
+        )
+        return button
+
+    def _build_zoom_arrow_icon(self, direction: str) -> QIcon:
+        pixmap = QPixmap(22, 10)
+        pixmap.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.Antialiasing, True)
+        painter.setPen(QPen(QColor("#ffffff"), 1.0))
+        painter.setBrush(QColor("#132238"))
+        if direction == "up":
+            points = QPolygonF([QPointF(11, 1), QPointF(20, 9), QPointF(2, 9)])
+        else:
+            points = QPolygonF([QPointF(2, 1), QPointF(20, 1), QPointF(11, 9)])
+        painter.drawPolygon(points)
+        painter.end()
+        return QIcon(pixmap)
 
     def _show_view_menu(self, anchor: QWidget) -> None:
         items: list[MenuItemSpec] = [
