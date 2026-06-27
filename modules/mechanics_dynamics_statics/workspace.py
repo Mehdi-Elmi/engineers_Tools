@@ -1,4 +1,8 @@
-"""Engineering Design Tools workspace."""
+"""Engineering Design Tools workspace.
+
+This file keeps the approved Engineer Design workspace shell intact and scopes
+canvas interaction changes to the canvas layer only.
+"""
 
 from __future__ import annotations
 
@@ -6,26 +10,14 @@ import math
 from dataclasses import dataclass, replace
 from pathlib import Path
 
-from PySide6.QtCore import QPoint, QPointF, QRectF, QSize, Signal, Qt
-from PySide6.QtGui import QAction, QColor, QIcon, QPainter, QPainterPath, QPen, QPixmap, QPolygonF
-from PySide6.QtWidgets import (
-    QAbstractSpinBox,
-    QCheckBox,
-    QDialog,
-    QDoubleSpinBox,
-    QHBoxLayout,
-    QLabel,
-    QMenu,
-    QPushButton,
-    QSizePolicy,
-    QVBoxLayout,
-    QWidget,
-)
+from PySide6.QtCore import QPointF, QRectF, QSize, Qt
+from PySide6.QtGui import QColor, QIcon, QPainter, QPainterPath, QPen, QPixmap, QPolygonF
+from PySide6.QtWidgets import QAbstractSpinBox, QDoubleSpinBox, QHBoxLayout, QLabel, QPushButton, QSizePolicy, QVBoxLayout, QWidget
 
 from src.engineers_tools.app.module_window import GridCanvas, MenuItemSpec, ModuleWindow
 from src.engineers_tools.app.modules import LauncherModule
 
-ENGINEERING_WORKSPACE_UI_MARKER = "ENGINEERING_WORKSPACE_VIEW_STARTBAR_2026_06_27_E"
+ENGINEERING_WORKSPACE_UI_MARKER = "ENGINEERING_WORKSPACE_VIEW_STARTBAR_2026_06_27_D"
 
 
 def _rotate_vector(vector: QPointF, degrees: float) -> QPointF:
@@ -73,9 +65,6 @@ class CanvasObject:
 
 
 class EngineeringCanvas(GridCanvas):
-    objects_changed = Signal()
-    selection_changed = Signal()
-
     def __init__(self) -> None:
         super().__init__()
         self.setMouseTracking(True)
@@ -112,7 +101,7 @@ class EngineeringCanvas(GridCanvas):
         self.objects.append(CanvasObject(path=path, pixmap=pixmap, rect=rect, name=path.stem or f"Object {len(self.objects) + 1}"))
         self._select_only(len(self.objects) - 1)
         self._last_action = "open"
-        self.objects_changed.emit()
+        self._emit_object_changes()
         self.update()
 
     def copy_selection(self) -> bool:
@@ -143,8 +132,7 @@ class EngineeringCanvas(GridCanvas):
             self.objects.append(clone)
         self.selected_indices = set(range(start, len(self.objects)))
         self._last_action = "paste"
-        self.objects_changed.emit()
-        self.selection_changed.emit()
+        self._emit_object_changes()
         self.update()
         return True
 
@@ -164,7 +152,7 @@ class EngineeringCanvas(GridCanvas):
         if not self.objects:
             return False
         self.selected_indices = {index for index, obj in enumerate(self.objects) if obj.visible}
-        self.selection_changed.emit()
+        self._emit_selection_changes()
         self.update()
         return True
 
@@ -190,7 +178,7 @@ class EngineeringCanvas(GridCanvas):
         remaining = [obj for index, obj in enumerate(self.objects) if index not in self.selected_indices]
         self.objects = remaining + selected
         self.selected_indices = set(range(len(remaining), len(self.objects)))
-        self.objects_changed.emit()
+        self._emit_object_changes()
         self.update()
         return True
 
@@ -202,7 +190,7 @@ class EngineeringCanvas(GridCanvas):
         remaining = [obj for index, obj in enumerate(self.objects) if index not in self.selected_indices]
         self.objects = selected + remaining
         self.selected_indices = set(range(len(selected)))
-        self.objects_changed.emit()
+        self._emit_object_changes()
         self.update()
         return True
 
@@ -214,7 +202,7 @@ class EngineeringCanvas(GridCanvas):
         self._next_group_id += 1
         for index in self.selected_indices:
             self.objects[index].group_id = group_id
-        self.objects_changed.emit()
+        self._emit_object_changes()
         self.update()
         return True
 
@@ -226,7 +214,7 @@ class EngineeringCanvas(GridCanvas):
         for obj in self.objects:
             if obj.group_id in group_ids:
                 obj.group_id = None
-        self.objects_changed.emit()
+        self._emit_object_changes()
         self.update()
         return True
 
@@ -237,46 +225,30 @@ class EngineeringCanvas(GridCanvas):
         first = self.objects[min(self.selected_indices)].rotation_handle_visible
         for index in self.selected_indices:
             self.objects[index].rotation_handle_visible = not first
-        self.objects_changed.emit()
+        self._emit_object_changes()
         self.update()
         return True
 
-    def toggle_object_visible(self, index: int) -> None:
-        if 0 <= index < len(self.objects):
-            self._push_undo()
-            self.objects[index].visible = not self.objects[index].visible
-            if not self.objects[index].visible:
-                self.selected_indices.discard(index)
+    def _emit_object_changes(self) -> None:
+        if hasattr(self, "objects_changed"):
             self.objects_changed.emit()
+        self._emit_selection_changes()
+
+    def _emit_selection_changes(self) -> None:
+        if hasattr(self, "selection_changed"):
             self.selection_changed.emit()
-            self.update()
-
-    def toggle_object_locked(self, index: int) -> None:
-        if 0 <= index < len(self.objects):
-            self._push_undo()
-            self.objects[index].locked = not self.objects[index].locked
-            self.objects_changed.emit()
-            self.update()
-
-    def toggle_object_rotation_handle(self, index: int) -> None:
-        if 0 <= index < len(self.objects):
-            self._push_undo()
-            self.objects[index].rotation_handle_visible = not self.objects[index].rotation_handle_visible
-            self.objects_changed.emit()
-            self.update()
 
     def _selected_objects(self) -> list[tuple[int, CanvasObject]]:
         return [(index, self.objects[index]) for index in sorted(self.selected_indices) if 0 <= index < len(self.objects)]
 
     def _select_only(self, index: int) -> None:
         self.selected_indices = {index}
-        self.selection_changed.emit()
+        self._emit_selection_changes()
 
     def _delete_selected_objects(self) -> None:
         self.objects = [obj for index, obj in enumerate(self.objects) if index not in self.selected_indices]
         self.selected_indices = set()
-        self.objects_changed.emit()
-        self.selection_changed.emit()
+        self._emit_object_changes()
         self.update()
 
     def _snapshot(self) -> list[CanvasObject]:
@@ -285,8 +257,7 @@ class EngineeringCanvas(GridCanvas):
     def _restore_snapshot(self, snapshot: list[CanvasObject]) -> None:
         self.objects = [obj.clone() for obj in snapshot]
         self.selected_indices = set()
-        self.objects_changed.emit()
-        self.selection_changed.emit()
+        self._emit_object_changes()
         self.update()
 
     def _push_undo(self) -> None:
@@ -410,7 +381,7 @@ class EngineeringCanvas(GridCanvas):
             if index is None:
                 if not ctrl:
                     self.selected_indices = set()
-                    self.selection_changed.emit()
+                    self._emit_selection_changes()
                 self._selection_origin = point
                 self._selection_rect = QRectF(point, point)
                 self._drag_action = None
@@ -422,7 +393,7 @@ class EngineeringCanvas(GridCanvas):
                     self.selected_indices.remove(index)
                 else:
                     self.selected_indices.add(index)
-                self.selection_changed.emit()
+                self._emit_selection_changes()
             elif index not in self.selected_indices:
                 self._select_only(index)
             obj = self.objects[index]
@@ -434,14 +405,6 @@ class EngineeringCanvas(GridCanvas):
                 self._drag_start_rotations = {selected: self.objects[selected].rotation for selected in self.selected_indices}
                 self._drag_group_center = self._group_bounds().center() if len(self.selected_indices) > 1 else obj.rect.center()
             self.update()
-            event.accept()
-            return
-        if event.button() == Qt.RightButton:
-            point = self._to_canvas_point(event.position())
-            index, _action = self._hit_test_object(point)
-            if index is not None and index not in self.selected_indices:
-                self._select_only(index)
-                self.update()
             event.accept()
             return
         super().mousePressEvent(event)
@@ -478,17 +441,12 @@ class EngineeringCanvas(GridCanvas):
     def mouseReleaseEvent(self, event) -> None:  # noqa: N802
         if event.button() == Qt.LeftButton and self._selection_origin is not None:
             if self._selection_rect is not None and self._selection_rect.width() > 6 and self._selection_rect.height() > 6:
-                selected = {index for index, obj in enumerate(self.objects) if obj.visible and self._selection_rect.intersects(self._object_scene_bounds(obj))}
-                self.selected_indices = selected
-                self.selection_changed.emit()
+                self.selected_indices = {index for index, obj in enumerate(self.objects) if obj.visible and self._selection_rect.intersects(self._object_scene_bounds(obj))}
+                self._emit_selection_changes()
             self._selection_origin = None
             self._selection_rect = None
             self.update()
         self._drag_action = None
-        event.accept()
-
-    def contextMenuEvent(self, event) -> None:  # noqa: N802
-        self.context_actions_requested.emit(event.globalPos())
         event.accept()
 
     def keyPressEvent(self, event) -> None:  # noqa: N802
@@ -597,46 +555,10 @@ class EngineeringCanvas(GridCanvas):
         _paint_rotation_arc(painter, rotate_center, 7.2, QColor("#ff8a35"))
 
 
-class SaveOptionsDialog(QDialog):
-    def __init__(self, parent: QWidget, options: dict[str, bool]) -> None:
-        super().__init__(parent)
-        self.setWindowTitle("Save Options")
-        self.setWindowFlag(Qt.FramelessWindowHint)
-        self.selected = dict(options)
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(14, 14, 14, 14)
-        title = QLabel("Save Options")
-        title.setObjectName("PanelTitle")
-        layout.addWidget(title)
-        self.save_grid = QCheckBox("Save Grid")
-        self.save_grid.setChecked(self.selected.get("save_grid", False))
-        self.remove_background = QCheckBox("Remove White Background")
-        self.remove_background.setChecked(self.selected.get("remove_white_background", False))
-        layout.addWidget(self.save_grid)
-        layout.addWidget(self.remove_background)
-        row = QHBoxLayout()
-        row.addStretch(1)
-        apply_button = QPushButton("Continue")
-        apply_button.setObjectName("PageButton")
-        cancel_button = QPushButton("Cancel")
-        cancel_button.setObjectName("PageButton")
-        apply_button.clicked.connect(self.accept)
-        cancel_button.clicked.connect(self.reject)
-        row.addWidget(apply_button)
-        row.addWidget(cancel_button)
-        layout.addLayout(row)
-
-    def accept(self) -> None:  # noqa: D102
-        self.selected["save_grid"] = self.save_grid.isChecked()
-        self.selected["remove_white_background"] = self.remove_background.isChecked()
-        super().accept()
-
-
 class EngineeringDesignWorkspace(ModuleWindow):
     def __init__(self, module: LauncherModule) -> None:
         self._start_bar_tool_state: dict[str, bool] = {}
         self._layer_list_layout: QVBoxLayout | None = None
-        self._save_options = {"save_grid": False, "remove_white_background": False}
         super().__init__(module)
         self._layers = []
         self._refresh_layers()
@@ -659,8 +581,6 @@ class EngineeringDesignWorkspace(ModuleWindow):
         self._canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self._canvas.mouse_position_changed.connect(self._update_canvas_coordinates)
         self._canvas.context_actions_requested.connect(self._show_canvas_context_menu)
-        self._canvas.objects_changed.connect(self._refresh_layers)
-        self._canvas.selection_changed.connect(self._refresh_layers)
         canvas_layout.addWidget(self._canvas, 1)
         layout.addWidget(canvas_shell, 1)
         properties = self._build_side_panel("Properties", ("Selection", "Coordinates", "Size", "Style", "Behavior"))
@@ -700,79 +620,37 @@ class EngineeringDesignWorkspace(ModuleWindow):
             self._layer_list_layout.addWidget(empty)
             return
         for index, obj in enumerate(canvas.objects):
-            row = QWidget()
-            row.setObjectName("LayerRow")
-            row_layout = QHBoxLayout(row)
-            row_layout.setContentsMargins(0, 0, 0, 0)
-            row_layout.setSpacing(4)
-            row_layout.addWidget(self._layer_button("Show" if obj.visible else "Hide", "Show", lambda checked=False, i=index: canvas.toggle_object_visible(i)))
-            row_layout.addWidget(self._layer_button("Lock" if not obj.locked else "Unlock", "Lock", lambda checked=False, i=index: canvas.toggle_object_locked(i)))
-            row_layout.addWidget(self._layer_button("Rotate", "Rotate Handle", lambda checked=False, i=index: canvas.toggle_object_rotation_handle(i)))
-            name = QLabel(("G " if obj.group_id is not None else "") + obj.name)
-            name.setObjectName("PanelItem")
-            name.setMinimumHeight(26)
+            row = QLabel(("[G] " if obj.group_id is not None else "") + obj.name)
+            row.setObjectName("PanelItem")
+            row.setFixedHeight(28)
             if index in canvas.selected_indices:
-                name.setStyleSheet("border:1px solid #2f7df6; border-radius:6px; padding-left:6px; background:#eef6ff;")
-            row_layout.addWidget(name, 1)
+                row.setStyleSheet("border:1px solid #2f7df6; border-radius:6px; padding-left:6px; background:#eef6ff;")
             self._layer_list_layout.addWidget(row)
-
-    def _layer_button(self, text: str, tooltip: str, callback) -> QPushButton:
-        button = QPushButton(text[:1])
-        button.setObjectName("LayerIconButton")
-        button.setToolTip(tooltip)
-        button.setFixedSize(24, 24)
-        button.clicked.connect(callback)
-        return button
 
     def _build_start_bar(self) -> QWidget:
         bar = super()._build_start_bar()
-        layout = bar.layout()
-        if layout is not None:
-            layout.insertWidget(0, self._start_bar_action_button("Redo", self._build_history_icon("redo"), self._redo))
-            layout.insertWidget(0, self._start_bar_action_button("Undo", self._build_history_icon("undo"), self._undo))
         self._start_bar_tool_state = {tool.key: True for tool in self.get_start_bar_tools()}
         return bar
 
-    def _start_bar_action_button(self, tooltip: str, icon: QIcon, callback) -> QPushButton:
-        button = QPushButton()
-        button.setObjectName("ToolIconButton")
-        button.setToolTip(tooltip)
-        button.setIcon(icon)
-        button.setIconSize(QSize(22, 22))
-        button.setFixedSize(38, 30)
-        button.clicked.connect(callback)
-        return button
-
-    def _build_history_icon(self, direction: str) -> QIcon:
-        pixmap = QPixmap(42, 42)
-        pixmap.fill(Qt.transparent)
-        painter = QPainter(pixmap)
-        painter.setRenderHint(QPainter.Antialiasing, True)
-        color = QColor("#1c62b7") if direction == "undo" else QColor("#2fbf9f")
-        painter.setPen(QPen(color, 3.0, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
-        rect = QRectF(10, 10, 22, 22)
-        if direction == "undo":
-            painter.drawArc(rect, 35 * 16, 280 * 16)
-            arrow = QPolygonF([QPointF(10, 18), QPointF(18, 13), QPointF(17, 23)])
-        else:
-            painter.drawArc(rect, 145 * 16, -280 * 16)
-            arrow = QPolygonF([QPointF(32, 18), QPointF(24, 13), QPointF(25, 23)])
-        painter.setBrush(color)
-        painter.drawPolygon(arrow)
-        painter.end()
-        return QIcon(pixmap)
-
-    def _undo(self) -> None:
-        if isinstance(self._canvas, EngineeringCanvas) and self._canvas.undo():
-            self._set_status("Undo")
-            return
-        self._set_status("Nothing to undo")
-
-    def _redo(self) -> None:
-        if isinstance(self._canvas, EngineeringCanvas) and self._canvas.redo():
-            self._set_status("Redo")
-            return
-        self._set_status("Nothing to redo")
+    def _build_status_bar(self) -> QWidget:
+        bar = QWidget()
+        bar.setObjectName("StatusBar")
+        bar.setFixedHeight(34)
+        layout = QHBoxLayout(bar)
+        layout.setContentsMargins(14, 0, 14, 0)
+        layout.setSpacing(12)
+        self._status_items = []
+        for text in ("Tool Select: Ready", "X: 0  Y: 0", "Unit: mm"):
+            item = QLabel(text)
+            item.setObjectName("StatusItem")
+            layout.addWidget(item)
+            self._status_items.append(item)
+        layout.addStretch(1)
+        zoom_label = QLabel("Zoom:")
+        zoom_label.setObjectName("StatusItem")
+        layout.addWidget(zoom_label)
+        layout.addWidget(self._build_zoom_control())
+        return bar
 
     def _copy(self) -> None:
         if isinstance(self._canvas, EngineeringCanvas) and self._canvas.copy_selection():
@@ -804,6 +682,18 @@ class EngineeringDesignWorkspace(ModuleWindow):
             return
         super()._select_all()
 
+    def _undo(self) -> None:
+        if isinstance(self._canvas, EngineeringCanvas) and self._canvas.undo():
+            self._set_status("Undo")
+            return
+        self._set_status("Nothing to undo")
+
+    def _redo(self) -> None:
+        if isinstance(self._canvas, EngineeringCanvas) and self._canvas.redo():
+            self._set_status("Redo")
+            return
+        self._set_status("Nothing to redo")
+
     def _bring_to_front(self) -> None:
         if isinstance(self._canvas, EngineeringCanvas) and self._canvas.bring_to_front():
             self._set_status("Bring to Front")
@@ -834,86 +724,55 @@ class EngineeringDesignWorkspace(ModuleWindow):
             return
         self._set_status("No selected object")
 
-    def _show_canvas_context_menu(self, global_pos: QPoint) -> None:
-        menu = QMenu(self)
-        for label, callback in (("Repeat", self._repeat_last_tools), ("Copy", self._copy), ("Cut", self._cut), ("Paste", self._paste), ("Rotate", self._rotate_selection), ("Bring to Front", self._bring_to_front), ("Send to Back", self._send_to_back), ("Group", self._group_selection), ("Ungroup", self._ungroup_selection)):
-            if label in {"Rotate", "Group"}:
-                menu.addSeparator()
-            action = QAction(label, self)
-            action.triggered.connect(lambda checked=False, selected_callback=callback: selected_callback())
-            menu.addAction(action)
-        menu.exec(global_pos)
-
-    def _save(self):
-        path = getattr(self, "_current_file_path", None) or getattr(self, "current_file_path", None)
-        if not path:
-            return self._save_as()
-        parent_save = getattr(super(), "_save", None) or getattr(super(), "_save_file", None)
-        if parent_save is not None:
-            return parent_save()
-        self._set_status("Save")
-        return True
-
-    def _save_file(self):
-        return self._save()
-
-    def _save_as(self):
-        if not self._capture_save_options():
-            self._set_status("Save As canceled")
-            return False
-        parent_save_as = getattr(super(), "_save_as", None) or getattr(super(), "_save_file_as", None)
-        if parent_save_as is not None:
-            return parent_save_as()
-        self._set_status("Save As")
-        return True
-
-    def _save_file_as(self):
-        return self._save_as()
-
-    def _capture_save_options(self) -> bool:
-        dialog = SaveOptionsDialog(self, self._save_options)
-        if dialog.exec() != QDialog.Accepted:
-            return False
-        self._save_options = dialog.selected
-        return True
-
     def _build_zoom_control(self) -> QWidget:
         control = QWidget()
         control.setObjectName("ZoomControl")
+        control.setFixedSize(126, 28)
         control_layout = QHBoxLayout(control)
         control_layout.setContentsMargins(0, 0, 0, 0)
         control_layout.setSpacing(2)
         self._zoom_input = QDoubleSpinBox()
         self._zoom_input.setObjectName("ZoomInput")
         self._zoom_input.setButtonSymbols(QAbstractSpinBox.NoButtons)
-        self._zoom_input.setRange(10.0, 800.0)
+        self._zoom_input.setRange(5.0, 3200.0)
         self._zoom_input.setDecimals(2)
         self._zoom_input.setSingleStep(5.0)
         self._zoom_input.setValue(100.0)
         self._zoom_input.setSuffix(" %")
         self._zoom_input.setFixedSize(92, 26)
-        self._zoom_input.setStyleSheet("QDoubleSpinBox#ZoomInput {background:#fff9de; border:1px solid #b38621; border-radius:8px;color:#132238; font-size:11px; font-style:normal; font-weight:700; padding:2px 6px; selection-background-color:#43d3bd; }")
+        self._zoom_input.setStyleSheet(
+            "QDoubleSpinBox#ZoomInput {background:#fff9de; border:1px solid #b38621; border-radius:8px;"
+            "color:#132238; font-size:11px; font-style:normal; font-weight:700; padding:2px 6px; selection-background-color:#43d3bd; }"
+        )
         self._zoom_input.valueChanged.connect(self._set_zoom)
         control_layout.addWidget(self._zoom_input)
         arrows = QWidget()
         arrows.setObjectName("ZoomArrowStack")
         arrows_layout = QVBoxLayout(arrows)
         arrows_layout.setContentsMargins(0, 0, 0, 0)
-        arrows_layout.setSpacing(1)
-        arrows_layout.addWidget(self._build_zoom_arrow_button("up"))
-        arrows_layout.addWidget(self._build_zoom_arrow_button("down"))
+        arrows_layout.setSpacing(2)
+        up_button = self._build_zoom_arrow_button("up")
+        down_button = self._build_zoom_arrow_button("down")
+        up_button.clicked.connect(lambda: self._zoom_input.stepUp())
+        down_button.clicked.connect(lambda: self._zoom_input.stepDown())
+        arrows_layout.addWidget(up_button)
+        arrows_layout.addWidget(down_button)
         control_layout.addWidget(arrows)
         return control
 
     def _build_zoom_arrow_button(self, direction: str) -> QPushButton:
         button = QPushButton()
         button.setObjectName("ZoomArrowButton")
-        button.setFixedSize(24, 12)
+        button.setFixedSize(28, 12)
         button.setIcon(self._build_zoom_arrow_icon(direction))
         button.setIconSize(QSize(22, 10))
         button.setToolTip("Zoom in" if direction == "up" else "Zoom out")
-        button.setStyleSheet("QPushButton#ZoomArrowButton {background:qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #fff9de, stop:1 #ffc35a);border:1px solid #7e5b10; border-radius:4px; padding:0px; }QPushButton#ZoomArrowButton:hover { background:#ff8a35; border-color:#ffffff; }QPushButton#ZoomArrowButton:pressed { background:#d46a16; padding-top:1px; }")
-        button.clicked.connect(lambda checked=False, step=5.0 if direction == "up" else -5.0: self._set_zoom(self._zoom_input.value() + step))
+        button.setStyleSheet(
+            "QPushButton#ZoomArrowButton {background:qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #fff9de, stop:1 #ffc35a);"
+            "border:1px solid #7e5b10; border-radius:4px; padding:0px; }"
+            "QPushButton#ZoomArrowButton:hover { background:#ff8a35; border-color:#ffffff; }"
+            "QPushButton#ZoomArrowButton:pressed { background:#d46a16; padding-top:1px; }"
+        )
         return button
 
     def _build_zoom_arrow_icon(self, direction: str) -> QIcon:
@@ -921,9 +780,12 @@ class EngineeringDesignWorkspace(ModuleWindow):
         pixmap.fill(Qt.transparent)
         painter = QPainter(pixmap)
         painter.setRenderHint(QPainter.Antialiasing, True)
-        painter.setPen(Qt.NoPen)
+        painter.setPen(QPen(QColor("#ffffff"), 0.9))
         painter.setBrush(QColor("#132238"))
-        points = QPolygonF([QPointF(11, 1), QPointF(18, 8), QPointF(4, 8)]) if direction == "up" else QPolygonF([QPointF(4, 2), QPointF(18, 2), QPointF(11, 9)])
+        if direction == "up":
+            points = QPolygonF([QPointF(11, 1), QPointF(20, 9), QPointF(2, 9)])
+        else:
+            points = QPolygonF([QPointF(2, 1), QPointF(20, 1), QPointF(11, 9)])
         painter.drawPolygon(points)
         painter.end()
         return QIcon(pixmap)
@@ -935,8 +797,9 @@ class EngineeringDesignWorkspace(ModuleWindow):
         self._show_menu("View", tuple(items), anchor)
 
     def _toggle_start_bar_tool(self, key: str) -> None:
-        self._start_bar_tool_state[key] = not self._start_bar_tool_state.get(key, True)
-        for button in getattr(self, "_start_bar_buttons", []):
-            if button.property("tool_key") == key:
-                button.setVisible(self._start_bar_tool_state[key])
-        self._set_status(f"{key.replace('_', ' ').title()} {'shown' if self._start_bar_tool_state[key] else 'hidden'}")
+        visible = not self._start_bar_tool_state.get(key, True)
+        self._start_bar_tool_state[key] = visible
+        if self._start_bar_widget is not None and hasattr(self._start_bar_widget, "set_tool_visible"):
+            self._start_bar_widget.set_tool_visible(key, visible)
+        label = next((tool.label for tool in self.get_start_bar_tools() if tool.key == key), key)
+        self._set_status(f"{label} {'shown on' if visible else 'removed from'} Start Bar")
