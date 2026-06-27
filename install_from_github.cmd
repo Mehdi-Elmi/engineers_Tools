@@ -13,7 +13,7 @@ set "EXTRACT_DIR=%TEMP%\engineer_tools_extract"
 set "REMOTE_SHA_FILE=%TEMP%\engineer_tools_remote_sha.txt"
 set "UPDATE_STATUS_FILE=%TEMP%\engineer_tools_update_status.txt"
 set "FORCE_UPDATE=0"
-set "UI_MARKER=ENGINEER_TOOLS_ACTIVE_UI_2026_06_27_A"
+set "UI_MARKER=ENGINEER_TOOLS_ACTIVE_UI_2026_06_27_B"
 
 if not exist "%TOKEN_FILE%" (
     if exist "%FALLBACK_TOKEN_FILE%" (
