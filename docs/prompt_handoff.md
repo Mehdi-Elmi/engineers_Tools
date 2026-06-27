@@ -52,6 +52,15 @@ src/engineers_tools/app/modules.py
 پنجره مادر:
 src/engineers_tools/app/module_window.py
 
+Start Bar مشترک:
+src/engineers_tools/ui/start_bar.py
+
+قانون Start Bar:
+Start Bar مستقل از پنجره مادر است.
+پنجره مادر فقط StartBar را صدا می‌زند.
+برای ابزارهای اختصاصی هر ماژول، متد get_start_bar_tools() در workspace همان ماژول override شود.
+چت اختصاصی Toolbar نباید برای تغییر آیتم‌ها ساختار module_window.py را خراب کند مگر اینکه قانون عمومی کل پروژه تغییر کند.
+
 مسیر فعال Engineering Design Tools:
 modules/mechanics_dynamics_statics/module_entry.py
 modules/mechanics_dynamics_statics/workspace.py
@@ -69,7 +78,7 @@ UI انگلیسی باشد.
 گزارش فارسی RTL باشد.
 هر پنجره جدید ادامه docs/window_pattern.md باشد.
 File/Open/Save باید پنجره ظاهری خود پروژه را داشته باشد و فقط پشت پرده از QFileDialog استفاده کند.
-Start Bar محل ابزارهای سریع است.
+Canvas نباید عنوان اضافه مثل Engineering Design Workspace داخل خودش داشته باشد.
 Properties باید بر اساس ابزار یا آبجکت انتخاب‌شده تغییر کند.
 Select باید در کل پروژه یک رفتار واحد داشته باشد.
 
