@@ -137,7 +137,7 @@ class ModuleWindow(QMainWindow):
         minimize.clicked.connect(self.showMinimized)
         layout.addWidget(minimize)
 
-        maximize = QPushButton("□")
+        maximize = QPushButton("[]")
         maximize.setObjectName("WindowButton")
         maximize.setFixedSize(34, 30)
         maximize.clicked.connect(self._toggle_maximize)
@@ -292,13 +292,13 @@ class ModuleWindow(QMainWindow):
             if self._normal_geometry is not None:
                 self.setGeometry(self._normal_geometry)
             if self._maximize_button is not None:
-                self._maximize_button.setText("□")
+                self._maximize_button.setText("[]")
             return
 
         self._normal_geometry = self.geometry()
         self.showMaximized()
         if self._maximize_button is not None:
-            self._maximize_button.setText("❐")
+            self._maximize_button.setText("[ ]")
 
     def mousePressEvent(self, event) -> None:  # noqa: N802
         if event.button() == Qt.LeftButton and event.position().y() <= 46:
