@@ -133,54 +133,50 @@ class LauncherButton(QPushButton):
 
     def _paint_circuit_icon(self, painter: QPainter, rect: QRectF) -> None:
         painter.save()
-        left = rect.left() + 18
-        right = rect.right() - 18
-        top = rect.top() + 25
-        bottom = rect.bottom() - 22
-        middle = rect.center().y()
+        left = rect.left() + 12
+        right = rect.right() - 12
+        y = rect.top() + 43
+        return_y = rect.bottom() - 20
 
-        shadow_pen = QPen(QColor(19, 34, 56, 105), 4.8, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
-        main_pen = QPen(QColor("#ffffff"), 3.1, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+        shadow_pen = QPen(QColor(19, 34, 56, 120), 4.8, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+        main_pen = QPen(QColor("#ffffff"), 3.2, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
 
-        def draw_lines(pen: QPen) -> None:
+        def draw_series(pen: QPen) -> None:
             painter.setPen(pen)
-            painter.drawLine(QLineF(left, top, left + 12, top))
-            painter.drawLine(QLineF(left + 58, top, right, top))
-            painter.drawLine(QLineF(right, top, right, middle - 13))
-            painter.drawLine(QLineF(right, middle + 13, right, bottom))
-            painter.drawLine(QLineF(right, bottom, left + 60, bottom))
-            painter.drawLine(QLineF(left + 18, bottom, left, bottom))
-            painter.drawLine(QLineF(left, bottom, left, top))
-
+            painter.drawLine(QLineF(left, y, left + 9, y))
             resistor = [
-                QPointF(left + 12, top), QPointF(left + 18, top - 7), QPointF(left + 24, top + 7),
-                QPointF(left + 30, top - 7), QPointF(left + 36, top + 7), QPointF(left + 42, top - 7),
-                QPointF(left + 48, top + 7), QPointF(left + 58, top),
+                QPointF(left + 9, y), QPointF(left + 15, y - 8), QPointF(left + 21, y + 8),
+                QPointF(left + 27, y - 8), QPointF(left + 33, y + 8), QPointF(left + 39, y - 8),
+                QPointF(left + 45, y + 8), QPointF(left + 51, y),
             ]
             for start, end in zip(resistor, resistor[1:]):
                 painter.drawLine(QLineF(start, end))
-
-            painter.drawLine(QLineF(right - 15, middle - 8, right + 15, middle - 8))
-            painter.drawLine(QLineF(right - 15, middle + 8, right + 15, middle + 8))
-
+            painter.drawLine(QLineF(left + 51, y, left + 57, y))
             for index in range(3):
-                painter.drawArc(QRectF(left + 18 + index * 14, bottom - 13, 18, 26), 0, 180 * 16)
+                painter.drawArc(QRectF(left + 57 + index * 10, y - 9, 16, 18), 0, 180 * 16)
+            painter.drawLine(QLineF(left + 91, y, right - 20, y))
+            painter.drawLine(QLineF(right - 16, y - 15, right - 16, y + 15))
+            painter.drawLine(QLineF(right - 8, y - 15, right - 8, y + 15))
+            painter.drawLine(QLineF(right - 8, y, right, y))
+            painter.drawLine(QLineF(right, y, right, return_y))
+            painter.drawLine(QLineF(right, return_y, left, return_y))
+            painter.drawLine(QLineF(left, return_y, left, y))
 
-        draw_lines(shadow_pen)
-        draw_lines(main_pen)
+        draw_series(shadow_pen)
+        draw_series(main_pen)
 
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(QColor("#ffffff"))
-        for point in (QPointF(left, top), QPointF(right, top), QPointF(right, bottom), QPointF(left, bottom)):
-            painter.drawEllipse(point, 3.2, 3.2)
+        for point in (QPointF(left, y), QPointF(right, y), QPointF(right, return_y), QPointF(left, return_y)):
+            painter.drawEllipse(point, 3.1, 3.1)
 
         painter.setPen(QColor("#ffffff"))
         label_font = QFont("Times New Roman", 8, QFont.Bold)
         label_font.setItalic(True)
         painter.setFont(label_font)
-        painter.drawText(QRectF(left + 27, top + 10, 14, 12), Qt.AlignCenter, "R")
-        painter.drawText(QRectF(right - 24, middle - 4, 16, 12), Qt.AlignCenter, "C")
-        painter.drawText(QRectF(left + 37, bottom - 29, 14, 12), Qt.AlignCenter, "L")
+        painter.drawText(QRectF(left + 24, y + 11, 14, 12), Qt.AlignCenter, "R")
+        painter.drawText(QRectF(left + 68, y + 11, 14, 12), Qt.AlignCenter, "L")
+        painter.drawText(QRectF(right - 22, y + 18, 14, 12), Qt.AlignCenter, "C")
         painter.restore()
 
     def _paint_flowchart_icon(self, painter: QPainter, rect: QRectF) -> None:
