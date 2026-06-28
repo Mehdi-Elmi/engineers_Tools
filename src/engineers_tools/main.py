@@ -28,6 +28,7 @@ def main() -> int:
 
     try:
         from .app.controller import AppController
+        from .app.interaction_ui_patch import apply_interaction_ui_patch
         from .app.runtime_ui_patch import apply_runtime_ui_patch
         from .app.theme import apply_app_theme
 
@@ -36,6 +37,7 @@ def main() -> int:
         app.setLayoutDirection(Qt.LeftToRight)
         apply_app_theme(app)
         apply_runtime_ui_patch()
+        apply_interaction_ui_patch()
 
         controller = AppController()
         controller.show_launcher()
