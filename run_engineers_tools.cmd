@@ -9,6 +9,8 @@ set "PYTHONW_EXE=%VENV_DIR%\Scripts\pythonw.exe"
 set "REQ_FILE=%APP_ROOT%requirements.txt"
 set "REQ_STAMP=%VENV_DIR%\requirements.stamp"
 set "NEED_INSTALL=0"
+set "PYTHONNOUSERSITE=1"
+set "PYTHONDONTWRITEBYTECODE=1"
 
 cd /d "%APP_ROOT%"
 
@@ -38,14 +40,17 @@ if exist "%REQ_FILE%" (
 
 if "%NEED_INSTALL%"=="1" (
     echo Preparing Python dependencies...
-    "%PYTHON_EXE%" -m pip install --upgrade pip
+    "%PYTHON_EXE%" -m pip --version >nul 2>nul
     if errorlevel 1 (
-        echo Failed to update pip.
-        pause
-        exit /b 1
+        "%PYTHON_EXE%" -m ensurepip --upgrade
+        if errorlevel 1 (
+            echo Failed to prepare pip.
+            pause
+            exit /b 1
+        )
     )
     if exist "%REQ_FILE%" (
-        "%PYTHON_EXE%" -m pip install -r "%REQ_FILE%"
+        "%PYTHON_EXE%" -m pip install --disable-pip-version-check -r "%REQ_FILE%"
         if errorlevel 1 (
             echo Failed to install Python requirements.
             pause
