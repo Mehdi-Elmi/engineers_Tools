@@ -6,7 +6,7 @@ from collections.abc import Callable
 
 from PySide6.QtCore import QEvent, QPoint, QPointF, QRectF, QSize, Qt
 from PySide6.QtGui import QColor, QIcon, QKeySequence, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap, QPolygonF, QShortcut
-from PySide6.QtWidgets import QComboBox, QDialog, QDoubleSpinBox, QGridLayout, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QApplication, QComboBox, QDialog, QDoubleSpinBox, QGridLayout, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
 
 def _triangle_arrow_head(painter: QPainter, tip: QPointF, tail: QPointF, color: QColor, size: float = 7.0) -> None:
@@ -23,8 +23,7 @@ def _triangle_arrow_head(painter: QPainter, tip: QPointF, tail: QPointF, color: 
 
 
 def _solid_arrow_head(painter: QPainter, tip: QPointF, back: QPointF, size: float = 6.0) -> None:
-    color = painter.pen().color()
-    _triangle_arrow_head(painter, tip, back, color, size)
+    _triangle_arrow_head(painter, tip, back, painter.pen().color(), size)
 
 
 def _radio_icon(checked: bool) -> QIcon:
@@ -65,6 +64,26 @@ def _style_numeric_spin(spin: QDoubleSpinBox) -> None:
     )
 
 
+def _style_combo_arrow(combo: QComboBox) -> None:
+    combo.setStyleSheet(
+        """
+        QComboBox#FileTypeCombo {
+            background:#ffffff; border:1px solid #9fb0c5; border-radius:8px;
+            color:#132238; font-size:12px; font-style:normal; font-weight:800; padding:5px 28px 5px 8px;
+        }
+        QComboBox#FileTypeCombo::drop-down {
+            width:24px; border:0; background:#fff9de; border-top-right-radius:7px; border-bottom-right-radius:7px;
+        }
+        QComboBox#FileTypeCombo::down-arrow {
+            width:0; height:0; border-left:6px solid transparent; border-right:6px solid transparent; border-top:7px solid #132238;
+        }
+        QComboBox#FileTypeCombo QAbstractItemView {
+            background:#ffffff; border:1px solid #8fa2bb; border-radius:8px; selection-background-color:#cfe7ff;
+        }
+        """
+    )
+
+
 def _paint_rotation_glyph(painter: QPainter, center: QPointF, radius: float, color: QColor) -> None:
     painter.save()
     painter.setRenderHint(QPainter.Antialiasing, True)
@@ -95,21 +114,6 @@ def _plus_icon() -> QIcon:
     painter.setPen(QPen(QColor("#132238"), 2.4, Qt.SolidLine, Qt.RoundCap))
     painter.drawLine(QPointF(14, 8), QPointF(14, 18))
     painter.drawLine(QPointF(9, 13), QPointF(19, 13))
-    painter.end()
-    return QIcon(pixmap)
-
-
-def _paper_icon(landscape: bool = False) -> QIcon:
-    pixmap = QPixmap(38, 28)
-    pixmap.fill(Qt.transparent)
-    painter = QPainter(pixmap)
-    painter.setRenderHint(QPainter.Antialiasing, True)
-    rect = QRectF(11, 4, 16, 20) if not landscape else QRectF(7, 7, 24, 14)
-    painter.setBrush(QColor("#ffffff"))
-    painter.setPen(QPen(QColor("#132238"), 1.5))
-    painter.drawRoundedRect(rect, 2, 2)
-    painter.setPen(QPen(QColor("#ff8a35"), 1.4))
-    painter.drawLine(rect.left() + 4, rect.top() + 5, rect.right() - 4, rect.top() + 5)
     painter.end()
     return QIcon(pixmap)
 
@@ -146,15 +150,53 @@ def _position_icon(row: int, column: int) -> QIcon:
     painter.setPen(QPen(QColor("#8fa2bb"), 1.2))
     painter.drawRoundedRect(paper, 3, 3)
     object_rect = QRectF(0, 0, 8, 6)
-    object_rect.moveCenter(
-        QPointF(
-            paper.left() + (column + 0.5) * paper.width() / 3,
-            paper.top() + (row + 0.5) * paper.height() / 3,
-        )
-    )
+    object_rect.moveCenter(QPointF(paper.left() + (column + 0.5) * paper.width() / 3, paper.top() + (row + 0.5) * paper.height() / 3))
     painter.setBrush(QColor("#2f7df6"))
     painter.setPen(QPen(QColor("#174d9a"), 1.0))
     painter.drawRoundedRect(object_rect, 1.5, 1.5)
+    painter.end()
+    return QIcon(pixmap)
+
+
+def _layer_icon(kind: str, active: bool = True) -> QIcon:
+    pixmap = QPixmap(32, 32)
+    pixmap.fill(Qt.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.Antialiasing, True)
+    base = QPainterPath()
+    base.addRoundedRect(QRectF(2.5, 2.5, 27, 27), 9, 9)
+    gradient = QLinearGradient(2, 2, 30, 30)
+    gradient.setColorAt(0.0, QColor("#ffffff"))
+    gradient.setColorAt(0.52, QColor("#eaf7ff" if active else "#eef1f5"))
+    gradient.setColorAt(1.0, QColor("#65c8e8" if active else "#9aa9ba"))
+    painter.fillPath(base, gradient)
+    painter.setPen(QPen(QColor("#55708f"), 1.1))
+    painter.drawPath(base)
+    ink = QColor("#132238")
+    painter.setPen(QPen(ink, 2.0, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+    painter.setBrush(Qt.NoBrush)
+    if kind == "eye":
+        eye = QPainterPath()
+        eye.moveTo(6.5, 16)
+        eye.cubicTo(10, 9.5, 22, 9.5, 25.5, 16)
+        eye.cubicTo(22, 22.5, 10, 22.5, 6.5, 16)
+        painter.drawPath(eye)
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QColor("#2f7df6" if active else "#8b98a8"))
+        painter.drawEllipse(QPointF(16, 16), 4.0, 4.0)
+    elif kind == "lock":
+        painter.drawArc(QRectF(10, 6.5, 12, 13), 0, 180 * 16)
+        body = QPainterPath()
+        body.addRoundedRect(QRectF(8.5, 14.5, 15, 10), 3, 3)
+        painter.drawPath(body)
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(ink)
+        painter.drawEllipse(QPointF(16, 19.2), 1.7, 1.7)
+    else:
+        _paint_rotation_glyph(painter, QPointF(16, 16), 8.0, ink)
+    if not active:
+        painter.setPen(QPen(QColor("#d44777"), 2.2, Qt.SolidLine, Qt.RoundCap))
+        painter.drawLine(QPointF(8, 24), QPointF(24, 8))
     painter.end()
     return QIcon(pixmap)
 
@@ -195,12 +237,7 @@ class PageSetupPreview(QWidget):
         if paper_height > available.height():
             paper_height = available.height()
             paper_width = paper_height / paper_ratio
-        paper = QRectF(
-            available.center().x() - paper_width / 2,
-            available.center().y() - paper_height / 2,
-            paper_width,
-            paper_height,
-        )
+        paper = QRectF(available.center().x() - paper_width / 2, available.center().y() - paper_height / 2, paper_width, paper_height)
         painter.setBrush(QColor("#ffffff"))
         painter.setPen(QPen(QColor("#132238"), 1.4))
         painter.drawRoundedRect(paper, 5, 5)
@@ -215,16 +252,8 @@ class PageSetupPreview(QWidget):
         row, column = self.position
         object_width = max(24.0, printable.width() * 0.34)
         object_height = max(18.0, printable.height() * 0.24)
-        x_positions = (
-            printable.left(),
-            printable.center().x() - object_width / 2,
-            printable.right() - object_width,
-        )
-        y_positions = (
-            printable.top(),
-            printable.center().y() - object_height / 2,
-            printable.bottom() - object_height,
-        )
+        x_positions = (printable.left(), printable.center().x() - object_width / 2, printable.right() - object_width)
+        y_positions = (printable.top(), printable.center().y() - object_height / 2, printable.bottom() - object_height)
         content = QRectF(x_positions[column], y_positions[row], object_width, object_height)
         painter.setPen(QPen(QColor("#ff8a35"), 1.8))
         painter.setBrush(QColor(255, 138, 53, 40))
@@ -261,7 +290,6 @@ class PageSetupDialog(QDialog):
         self._position = (1, 1)
         self._margin_spins: dict[str, QDoubleSpinBox] = {}
         self._custom_size_spins: dict[str, QDoubleSpinBox] = {}
-        self._paper_buttons: dict[str, QPushButton] = {}
         self._sync_vertical = False
         self._sync_horizontal = False
         self._drag_offset: QPoint | None = None
@@ -303,16 +331,10 @@ class PageSetupDialog(QDialog):
         header.installEventFilter(self)
         layout = QHBoxLayout(header)
         layout.setContentsMargins(12, 0, 8, 0)
-        mark = None
         builder = getattr(self.parentWidget(), "_build_window_mark", None)
-        if callable(builder):
-            mark = builder()
-            mark.setFixedSize(36, 32)
-        if mark is None:
-            mark = QLabel("AT")
-            mark.setObjectName("WindowMark")
-            mark.setAlignment(Qt.AlignCenter)
-            mark.setFixedSize(36, 32)
+        mark = builder() if callable(builder) else QLabel("AT")
+        mark.setFixedSize(36, 32)
+        mark.setAlignment(Qt.AlignCenter)
         layout.addWidget(mark)
         title = QLabel("Page Setup")
         title.setObjectName("HelpTitle")
@@ -333,17 +355,19 @@ class PageSetupDialog(QDialog):
         layout.addWidget(self._section_label("Paper"))
         self._paper_combo = QComboBox()
         self._paper_combo.setObjectName("FileTypeCombo")
+        _style_combo_arrow(self._paper_combo)
         for name, size in self.PAPER_SIZES.items():
             self._paper_combo.addItem(f"{name}  {size[0]:.1f} × {size[1]:.1f} mm", name)
-        self._paper_combo.setCurrentIndex(0)
         self._paper_combo.currentIndexChanged.connect(self._paper_combo_changed)
         layout.addWidget(self._paper_combo)
         custom_grid = QGridLayout()
-        custom_grid.setHorizontalSpacing(3)
+        custom_grid.setHorizontalSpacing(7)
         custom_grid.setVerticalSpacing(4)
+        custom_grid.setContentsMargins(18, 0, 18, 0)
         for column, (key, label) in enumerate((("width", "W"), ("height", "H"))):
             field_label = QLabel(label)
-            field_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            field_label.setFixedWidth(18)
+            field_label.setAlignment(Qt.AlignCenter)
             custom_grid.addWidget(field_label, 0, column * 2)
             spin = self._number_spin(1, 5000, 0.5, " mm")
             spin.setFixedWidth(116)
@@ -356,10 +380,10 @@ class PageSetupDialog(QDialog):
         layout.addWidget(self._section_label("Orientation"))
         orient = QHBoxLayout()
         portrait = self._choice_button("Portrait", not self._landscape, lambda: self._set_orientation(False))
-        portrait.setIcon(_paper_choice_icon(False, not self._landscape))
-        portrait.setIconSize(QSize(58, 30))
         landscape = self._choice_button("Landscape", self._landscape, lambda: self._set_orientation(True))
+        portrait.setIcon(_paper_choice_icon(False, not self._landscape))
         landscape.setIcon(_paper_choice_icon(True, self._landscape))
+        portrait.setIconSize(QSize(58, 30))
         landscape.setIconSize(QSize(58, 30))
         self._orientation_buttons = (portrait, landscape)
         orient.addWidget(portrait)
@@ -409,15 +433,10 @@ class PageSetupDialog(QDialog):
             self._dpi_buttons.append(button)
             dpi_row.addWidget(button)
         layout.addLayout(dpi_row)
-        self._custom_dpi = QDoubleSpinBox()
-        self._custom_dpi.setObjectName("FileNameInput")
-        self._custom_dpi.setRange(72, 4800)
+        self._custom_dpi = self._number_spin(72, 4800, 1, " DPI")
         self._custom_dpi.setDecimals(0)
-        self._custom_dpi.setSingleStep(1)
         self._custom_dpi.setValue(600)
-        self._custom_dpi.setSuffix(" DPI")
         self._custom_dpi.setEnabled(False)
-        _style_numeric_spin(self._custom_dpi)
         layout.addWidget(self._custom_dpi)
         layout.addStretch(1)
         return panel
@@ -450,14 +469,11 @@ class PageSetupDialog(QDialog):
     def _paper_combo_changed(self, index: int = 0) -> None:
         name = self._paper_combo.currentData()
         if isinstance(name, str):
-            self._choose_paper(name)
-
-    def _choose_paper(self, name: str) -> None:
-        self._paper_name = name
-        custom = name == "Custom"
-        for spin in self._custom_size_spins.values():
-            spin.setEnabled(custom)
-        self._update_preview()
+            self._paper_name = name
+            custom = name == "Custom"
+            for spin in self._custom_size_spins.values():
+                spin.setEnabled(custom)
+            self._update_preview()
 
     def _custom_size_changed(self, key: str, value: float) -> None:
         if self._paper_name == "Custom":
@@ -511,6 +527,11 @@ class PageSetupDialog(QDialog):
         if selected != "Custom":
             self._custom_dpi.setValue(float(selected))
 
+    def _current_paper_size(self) -> tuple[float, float]:
+        if self._paper_name == "Custom":
+            return (self._custom_size_spins["width"].value(), self._custom_size_spins["height"].value())
+        return self.PAPER_SIZES.get(self._paper_name, self.PAPER_SIZES["Workspace"])
+
     def _update_preview(self) -> None:
         margins = (
             self._margin_spins.get("top").value() if "top" in self._margin_spins else 12.0,
@@ -519,11 +540,6 @@ class PageSetupDialog(QDialog):
             self._margin_spins.get("left").value() if "left" in self._margin_spins else 10.0,
         )
         self._preview.set_state(self._current_paper_size(), self._landscape, margins, self._position)
-
-    def _current_paper_size(self) -> tuple[float, float]:
-        if self._paper_name == "Custom":
-            return (self._custom_size_spins["width"].value(), self._custom_size_spins["height"].value())
-        return self.PAPER_SIZES.get(self._paper_name, self.PAPER_SIZES["Workspace"])
 
     def mousePressEvent(self, event) -> None:  # noqa: N802
         if event.button() == Qt.MouseButton.LeftButton and event.position().y() <= 54:
@@ -565,12 +581,219 @@ class PageSetupDialog(QDialog):
 
 def apply_runtime_ui_patch() -> None:
     from . import module_window as mw
+    from . import project_file_dialog as pfd
     from ..ui import start_bar as sb
 
     if getattr(mw.ModuleWindow, "_page_setup_patch_applied", False):
         return
     mw._paint_rotation_glyph = _paint_rotation_glyph
+    mw._layer_icon = _layer_icon
     sb._arrow_head = _solid_arrow_head
+
+    def file_item_size(self, name: str):
+        return QSize(max(42, min(540, self.fontMetrics().horizontalAdvance(name) + 39)), 30)
+
+    def place_item_width(self, name: str) -> int:
+        return max(42, min(160, self.fontMetrics().horizontalAdvance(name) + 39))
+
+    def paint_selection_frame(self, painter, rect):
+        select = QColor("#2f7df6")
+        painter.setBrush(Qt.NoBrush)
+        painter.setPen(QPen(select, 1.5, Qt.DashLine))
+        painter.drawRect(rect.adjusted(-5, -5, 5, 5))
+        handles = (
+            rect.topLeft(), QPointF(rect.center().x(), rect.top()), rect.topRight(),
+            QPointF(rect.right(), rect.center().y()), rect.bottomRight(), QPointF(rect.center().x(), rect.bottom()),
+            rect.bottomLeft(), QPointF(rect.left(), rect.center().y()),
+        )
+        painter.setPen(QPen(QColor("#ffffff"), 1.0))
+        painter.setBrush(select)
+        for point in handles:
+            painter.drawRoundedRect(QRectF(point.x() - 4, point.y() - 4, 8, 8), 2, 2)
+        rotate_center = QPointF(rect.center().x(), rect.top() - 34)
+        painter.setPen(QPen(select, 1.2, Qt.DashLine))
+        painter.drawLine(QPointF(rect.center().x() - 5, rect.top() - 5), QPointF(rotate_center.x() - 5, rotate_center.y() + 11))
+        painter.drawLine(QPointF(rect.center().x() + 5, rect.top() - 5), QPointF(rotate_center.x() + 5, rotate_center.y() + 11))
+        painter.setBrush(QColor("#fff9de"))
+        painter.setPen(QPen(QColor("#7e5b10"), 1.4))
+        painter.drawEllipse(rotate_center, 13, 13)
+        _paint_rotation_glyph(painter, rotate_center, 7.4, QColor("#ff8a35"))
+
+    pfd.ProjectFileDialog._file_item_size = file_item_size
+    pfd.ProjectFileDialog._place_item_width = place_item_width
+    mw.GridCanvas._paint_selection_frame = paint_selection_frame
+
+    def canvas_snapshot(self):
+        canvas = getattr(self, "_canvas", None)
+        if canvas is None:
+            return None
+        rect = getattr(canvas, "_object_rect", None)
+        return {
+            "file_path": getattr(canvas, "_file_path", None),
+            "file_pixmap": QPixmap(getattr(canvas, "_file_pixmap", QPixmap())),
+            "object_rect": QRectF(rect) if rect is not None else None,
+            "rotation": getattr(canvas, "_rotation_degrees", 0.0),
+            "layers": list(getattr(self, "_layers", [])),
+        }
+
+    def restore_canvas(self, snapshot):
+        canvas = getattr(self, "_canvas", None)
+        if canvas is None or snapshot is None:
+            return
+        canvas._file_path = snapshot["file_path"]
+        canvas._file_pixmap = QPixmap(snapshot["file_pixmap"])
+        canvas._object_rect = QRectF(snapshot["object_rect"]) if snapshot["object_rect"] is not None else None
+        canvas._rotation_degrees = snapshot["rotation"]
+        self._layers = list(snapshot["layers"])
+        self._refresh_layers()
+        canvas.update()
+
+    def push_history(self):
+        snapshot = canvas_snapshot(self)
+        if snapshot is None:
+            return
+        undo_stack = getattr(self, "_runtime_undo_stack", [])
+        undo_stack.append(snapshot)
+        self._runtime_undo_stack = undo_stack[-40:]
+        self._runtime_redo_stack = []
+
+    def has_canvas_object(self) -> bool:
+        canvas = getattr(self, "_canvas", None)
+        return canvas is not None and getattr(canvas, "_object_rect", None) is not None
+
+    def copy_canvas_object(self) -> bool:
+        canvas = getattr(self, "_canvas", None)
+        if canvas is None or getattr(canvas, "_object_rect", None) is None:
+            return False
+        self._runtime_clipboard_object = {
+            "file_path": getattr(canvas, "_file_path", None),
+            "file_pixmap": QPixmap(getattr(canvas, "_file_pixmap", QPixmap())),
+            "object_rect": QRectF(canvas._object_rect),
+            "rotation": getattr(canvas, "_rotation_degrees", 0.0),
+        }
+        return True
+
+    def undo(self):
+        stack = getattr(self, "_runtime_undo_stack", [])
+        if not stack:
+            self._run_focus_command("undo")
+            self._set_status("Undo")
+            return
+        redo_stack = getattr(self, "_runtime_redo_stack", [])
+        redo_stack.append(canvas_snapshot(self))
+        self._runtime_redo_stack = redo_stack[-40:]
+        restore_canvas(self, stack.pop())
+        self._runtime_undo_stack = stack
+        self._set_status("Undo")
+
+    def redo(self):
+        stack = getattr(self, "_runtime_redo_stack", [])
+        if not stack:
+            self._run_focus_command("redo")
+            self._set_status("Redo")
+            return
+        undo_stack = getattr(self, "_runtime_undo_stack", [])
+        undo_stack.append(canvas_snapshot(self))
+        self._runtime_undo_stack = undo_stack[-40:]
+        restore_canvas(self, stack.pop())
+        self._runtime_redo_stack = stack
+        self._set_status("Redo")
+
+    def copy(self):
+        focused = QApplication.focusWidget()
+        if focused is not None and focused is not self and self._run_focus_command("copy"):
+            self._set_status("Copy")
+            return
+        self._set_status("Copied object" if copy_canvas_object(self) else "Copy")
+
+    def cut(self):
+        if copy_canvas_object(self):
+            push_history(self)
+            canvas = self._canvas
+            canvas._object_rect = None
+            canvas._file_path = None
+            canvas._file_pixmap = QPixmap()
+            if self._layers:
+                self._layers.pop()
+                self._refresh_layers()
+            canvas.update()
+            self._set_status("Cut object")
+            return
+        self._run_focus_command("cut")
+        self._set_status("Cut")
+
+    def paste(self):
+        clip = getattr(self, "_runtime_clipboard_object", None)
+        canvas = getattr(self, "_canvas", None)
+        if clip is None or canvas is None:
+            self._run_focus_command("paste")
+            self._set_status("Paste")
+            return
+        push_history(self)
+        rect = QRectF(clip["object_rect"]).translated(18, 18)
+        canvas._file_path = clip["file_path"]
+        canvas._file_pixmap = QPixmap(clip["file_pixmap"])
+        canvas._object_rect = rect
+        canvas._rotation_degrees = clip["rotation"]
+        if clip["file_path"] is not None:
+            self._add_layer(getattr(clip["file_path"], "stem", "Object"))
+        canvas.update()
+        self._set_status("Pasted object")
+
+    def delete(self):
+        if has_canvas_object(self):
+            push_history(self)
+            canvas = self._canvas
+            canvas._object_rect = None
+            canvas._file_path = None
+            canvas._file_pixmap = QPixmap()
+            if self._layers:
+                self._layers.pop()
+                self._refresh_layers()
+            canvas.update()
+            self._set_status("Deleted object")
+            return
+        self._set_status("Delete")
+
+    def repeat_last_tools(self):
+        if copy_canvas_object(self):
+            paste(self)
+            self._set_status("Repeated object")
+        else:
+            self._set_status("Repeat Last Tools")
+
+    def select_all(self):
+        if has_canvas_object(self):
+            self._canvas.setFocus(Qt.FocusReason.ShortcutFocusReason)
+            self._canvas.update()
+            self._set_status("Selected all")
+            return
+        self._run_focus_command("selectAll")
+        self._set_status("Select All")
+
+    def toggle_start_bar(self):
+        self._view_state["start_bar"] = not self._view_state["start_bar"]
+        if self._start_bar_widget is not None:
+            self._start_bar_widget.setVisible(self._view_state["start_bar"])
+        self._set_status(f"Start Bar {'On' if self._view_state['start_bar'] else 'Off'}")
+
+    def toggle_grid(self):
+        self._view_state["grid"] = not self._view_state["grid"]
+        if self._start_bar_widget is not None and hasattr(self._start_bar_widget, "_set_grid_enabled"):
+            self._start_bar_widget._set_grid_enabled(self._view_state["grid"])
+        elif self._canvas is not None:
+            self._canvas.set_grid_visible(self._view_state["grid"])
+        self._set_status(f"Grid {'On' if self._view_state['grid'] else 'Off'}")
+
+    def toggle_ruler(self):
+        self._view_state["ruler"] = not self._view_state["ruler"]
+        if self._start_bar_widget is not None and hasattr(self._start_bar_widget, "_set_ruler"):
+            self._start_bar_widget._set_ruler(self._view_state["ruler"])
+        self._set_status(f"Ruler {'On' if self._view_state['ruler'] else 'Off'}")
+
+    def toggle_snap(self):
+        self._view_state["snap"] = not self._view_state["snap"]
+        self._set_status(f"Snap {'On' if self._view_state['snap'] else 'Off'}")
 
     def build_page_bar(self):
         bar = QWidget()
@@ -609,9 +832,7 @@ def apply_runtime_ui_patch() -> None:
         add_page.setObjectName("AddPageButton")
         add_page.setToolTip("Add page")
         add_page.setFixedSize(28, 24)
-        add_page.setStyleSheet(
-            "QPushButton#AddPageButton { min-width:24px; max-width:28px; min-height:20px; max-height:24px; padding:0px; }"
-        )
+        add_page.setStyleSheet("QPushButton#AddPageButton { min-width:24px; max-width:28px; min-height:20px; max-height:24px; padding:0px; }")
         add_page.setIcon(_plus_icon())
         add_page.setIconSize(QSize(28, 24))
         add_page.clicked.connect(self._add_page)
@@ -638,16 +859,10 @@ def apply_runtime_ui_patch() -> None:
 
     def show_canvas_context_menu(self, global_pos):
         self._show_menu_at("Object", (
-            mw.MenuItemSpec("Repeat", self._repeat_last_tools),
-            mw.MenuItemSpec("Copy", self._copy),
-            mw.MenuItemSpec("Cut", self._cut),
-            mw.MenuItemSpec("Paste", self._paste),
-            mw.MenuItemSpec("Delete", self._delete),
-            mw.MenuItemSpec("Rotate", self._rotation),
-            mw.MenuItemSpec("Bring to Front", self._bring_to_front),
-            mw.MenuItemSpec("Send to Back", self._send_to_back),
-            mw.MenuItemSpec("Group", self._group),
-            mw.MenuItemSpec("Ungroup", self._ungroup),
+            mw.MenuItemSpec("Repeat", self._repeat_last_tools), mw.MenuItemSpec("Copy", self._copy),
+            mw.MenuItemSpec("Cut", self._cut), mw.MenuItemSpec("Paste", self._paste), mw.MenuItemSpec("Delete", self._delete),
+            mw.MenuItemSpec("Rotate", self._rotation), mw.MenuItemSpec("Bring to Front", self._bring_to_front),
+            mw.MenuItemSpec("Send to Back", self._send_to_back), mw.MenuItemSpec("Group", self._group), mw.MenuItemSpec("Ungroup", self._ungroup),
         ), global_pos)
 
     def install_shortcuts(self):
@@ -661,6 +876,7 @@ def apply_runtime_ui_patch() -> None:
             shortcut = QShortcut(QKeySequence(sequence), self)
             shortcut.setContext(Qt.ShortcutContext.ApplicationShortcut)
             shortcut.activated.connect(handler)
+            shortcut.activatedAmbiguously.connect(handler)
 
     def page_setup(self):
         dialog = PageSetupDialog(self)
@@ -675,5 +891,17 @@ def apply_runtime_ui_patch() -> None:
     mw.ModuleWindow._show_edit_menu = show_edit_menu
     mw.ModuleWindow._show_canvas_context_menu = show_canvas_context_menu
     mw.ModuleWindow._install_shortcuts = install_shortcuts
+    mw.ModuleWindow._undo = undo
+    mw.ModuleWindow._redo = redo
+    mw.ModuleWindow._copy = copy
+    mw.ModuleWindow._cut = cut
+    mw.ModuleWindow._paste = paste
+    mw.ModuleWindow._delete = delete
+    mw.ModuleWindow._repeat_last_tools = repeat_last_tools
+    mw.ModuleWindow._select_all = select_all
+    mw.ModuleWindow._toggle_start_bar = toggle_start_bar
+    mw.ModuleWindow._toggle_grid = toggle_grid
+    mw.ModuleWindow._toggle_ruler = toggle_ruler
+    mw.ModuleWindow._toggle_snap = toggle_snap
     mw.ModuleWindow._page_setup = page_setup
     mw.ModuleWindow._page_setup_patch_applied = True
