@@ -418,6 +418,9 @@ def apply_runtime_ui_patch() -> None:
         add_page.setObjectName("AddPageButton")
         add_page.setToolTip("Add page")
         add_page.setFixedSize(28, 24)
+        add_page.setStyleSheet(
+            "QPushButton#AddPageButton { min-width:24px; max-width:28px; min-height:20px; max-height:24px; padding:0px; }"
+        )
         add_page.setIcon(_plus_icon())
         add_page.setIconSize(QSize(28, 24))
         add_page.clicked.connect(self._add_page)
