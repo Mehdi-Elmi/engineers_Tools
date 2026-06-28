@@ -12,12 +12,15 @@ def _triangle_arrow_head(painter: QPainter, tip: QPointF, tail: QPointF, color: 
     length = max(0.01, (direction.x() ** 2 + direction.y() ** 2) ** 0.5)
     unit = QPointF(direction.x() / length, direction.y() / length)
     normal = QPointF(-unit.y(), unit.x())
-    base = QPointF(tip.x() - unit.x() * size, tip.y() - unit.y() * size)
-    left = QPointF(base.x() + normal.x() * size * 0.58, base.y() + normal.y() * size * 0.58)
-    right = QPointF(base.x() - normal.x() * size * 0.58, base.y() - normal.y() * size * 0.58)
+    base = QPointF(tip.x() - unit.x() * size * 1.28, tip.y() - unit.y() * size * 1.28)
+    neck = QPointF(tip.x() - unit.x() * size * 0.62, tip.y() - unit.y() * size * 0.62)
+    left = QPointF(base.x() + normal.x() * size * 0.42, base.y() + normal.y() * size * 0.42)
+    left_wing = QPointF(neck.x() + normal.x() * size * 0.74, neck.y() + normal.y() * size * 0.74)
+    right_wing = QPointF(neck.x() - normal.x() * size * 0.74, neck.y() - normal.y() * size * 0.74)
+    right = QPointF(base.x() - normal.x() * size * 0.42, base.y() - normal.y() * size * 0.42)
     painter.setBrush(color)
     painter.setPen(Qt.NoPen)
-    painter.drawPolygon(QPolygonF([tip, left, right]))
+    painter.drawPolygon(QPolygonF([tip, left_wing, left, right, right_wing]))
 
 
 def _solid_arrow_head(painter: QPainter, tip: QPointF, back: QPointF, size: float = 6.0) -> None:
@@ -95,24 +98,25 @@ def _move_cursor() -> QCursor:
 
 
 def _style_numeric_spin(spin: QDoubleSpinBox) -> None:
+    spin.setButtonSymbols(QDoubleSpinBox.ButtonSymbols.UpDownArrows)
     spin.setStyleSheet(
         """
         QDoubleSpinBox#FileNameInput {
-            background:#ffffff; border:1px solid #9fb0c5; border-radius:8px;
-            color:#132238; font-size:12px; font-style:normal; font-weight:800; padding:4px 28px 4px 7px;
+            background:#ffffff; border:1px solid #9fb0c5; border-radius:9px;
+            color:#132238; font-size:12px; font-style:normal; font-weight:800; padding:4px 32px 4px 8px;
         }
         QDoubleSpinBox#FileNameInput::up-button, QDoubleSpinBox#FileNameInput::down-button {
-            width:24px; border:1px solid #8fa2bb;
+            width:28px; border:0px; margin:1px 1px 1px 0px;
             background:qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 #ffffff, stop:0.45 #fff1bf, stop:1 #43d3bd);
             subcontrol-origin:border;
         }
-        QDoubleSpinBox#FileNameInput::up-button { subcontrol-position:top right; border-top-right-radius:7px; }
-        QDoubleSpinBox#FileNameInput::down-button { subcontrol-position:bottom right; border-bottom-right-radius:7px; }
+        QDoubleSpinBox#FileNameInput::up-button { subcontrol-position:top right; border-top-right-radius:8px; }
+        QDoubleSpinBox#FileNameInput::down-button { subcontrol-position:bottom right; border-bottom-right-radius:8px; }
         QDoubleSpinBox#FileNameInput::up-arrow {
-            width:0; height:0; border-left:6px solid transparent; border-right:6px solid transparent; border-bottom:8px solid #132238;
+            width:0; height:0; border-left:7px solid transparent; border-right:7px solid transparent; border-bottom:9px solid #132238;
         }
         QDoubleSpinBox#FileNameInput::down-arrow {
-            width:0; height:0; border-left:6px solid transparent; border-right:6px solid transparent; border-top:8px solid #132238;
+            width:0; height:0; border-left:7px solid transparent; border-right:7px solid transparent; border-top:9px solid #132238;
         }
         """
     )
@@ -122,13 +126,13 @@ def _style_combo_arrow(combo: QComboBox) -> None:
     combo.setStyleSheet(
         """
         QComboBox#FileTypeCombo {
-            background:#ffffff; border:1px solid #9fb0c5; border-radius:8px;
-            color:#132238; font-size:12px; font-style:normal; font-weight:800; padding:5px 30px 5px 8px;
+            background:#ffffff; border:1px solid #9fb0c5; border-radius:9px;
+            color:#132238; font-size:12px; font-style:normal; font-weight:800; padding:5px 33px 5px 8px;
         }
         QComboBox#FileTypeCombo::drop-down {
-            width:26px; border:0;
+            width:29px; border:0; margin:1px 1px 1px 0px;
             background:qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 #ffffff, stop:0.48 #fff2b8, stop:1 #5ed7c4);
-            border-top-right-radius:7px; border-bottom-right-radius:7px;
+            border-top-right-radius:8px; border-bottom-right-radius:8px;
         }
         QComboBox#FileTypeCombo::down-arrow {
             width:0; height:0; border-left:7px solid transparent; border-right:7px solid transparent; border-top:9px solid #132238;
@@ -161,10 +165,10 @@ def apply_interaction_ui_patch() -> None:
             replacements = {"W": "Width", "H": "Height", "Top": "Top", "Bottom": "Bottom", "Right": "Right", "Left": "Left"}
             if text in replacements:
                 label.setText(replacements[text])
-                label.setMinimumWidth(44 if text in {"W", "H"} else 48)
+                label.setFixedWidth(48 if text in {"W", "H"} else 46)
                 label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         for spin in self.findChildren(QDoubleSpinBox):
-            spin.setMinimumWidth(124)
+            spin.setMinimumWidth(132)
             _style_numeric_spin(spin)
         for combo in self.findChildren(QComboBox):
             _style_combo_arrow(combo)
@@ -272,14 +276,18 @@ def apply_interaction_ui_patch() -> None:
                 return False
             app = QApplication.instance()
             active = app.activeWindow() if app is not None else None
-            if active is None or isinstance(active, QDialog):
+            if isinstance(active, QDialog):
                 return False
-            window = active
+            focus = QApplication.focusWidget()
+            window = active or focus
             while window is not None and not isinstance(window, mw.ModuleWindow):
                 window = window.parentWidget()
             if window is None:
+                window = focus
+                while window is not None and not isinstance(window, mw.ModuleWindow):
+                    window = window.parentWidget()
+            if window is None:
                 return False
-            focus = QApplication.focusWidget()
             if isinstance(focus, (QLineEdit, QDoubleSpinBox, QComboBox)):
                 return False
             modifiers = event.modifiers()
