@@ -209,6 +209,24 @@ def apply_interaction_ui_patch() -> None:
 
     original_page_setup_init = rtp.PageSetupDialog.__init__
 
+    rtp.PageSetupDialog.PAPER_SIZES["Workspace"] = (400.0, 220.0)
+
+    def page_setup_preview_set_state(self, paper_size, landscape, margins, position):
+        width, height = paper_size
+        width = max(1.0, float(width))
+        height = max(1.0, float(height))
+        if landscape and height > width:
+            width, height = height, width
+        elif not landscape and width > height:
+            width, height = height, width
+        self.paper_width_mm = width
+        self.paper_height_mm = height
+        self.margin_top, self.margin_right, self.margin_bottom, self.margin_left = margins
+        self.position = position
+        self.update()
+
+    rtp.PageSetupPreview.set_state = page_setup_preview_set_state
+
     def page_setup_init(self, *args, **kwargs):
         original_page_setup_init(self, *args, **kwargs)
         for label in self.findChildren(QLabel):
@@ -589,7 +607,7 @@ def apply_interaction_ui_patch() -> None:
             self.update()
 
         def engineering_page_rect(self):
-            width, height = getattr(self, "_page_setup_size_mm", (390.0, 210.0))
+            width, height = getattr(self, "_page_setup_size_mm", (400.0, 220.0))
             available = QRectF(30, 30, max(80, self.width() - 60), max(80, self.height() - 60))
             ratio = height / width
             page_width = min(available.width(), available.height() / ratio)
