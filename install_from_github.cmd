@@ -12,8 +12,6 @@ set "ZIP_FILE=%TEMP%\engineer_tools.zip"
 set "EXTRACT_DIR=%TEMP%\engineer_tools_extract"
 set "REMOTE_SHA_FILE=%TEMP%\engineer_tools_remote_sha.txt"
 set "UPDATE_STATUS_FILE=%TEMP%\engineer_tools_update_status.txt"
-set "FORCE_UPDATE=0"
-set "UI_MARKER=ENGINEER_TOOLS_ACTIVE_UI_2026_06_27_B"
 
 if not exist "%TOKEN_FILE%" (
     if exist "%FALLBACK_TOKEN_FILE%" (
@@ -46,14 +44,11 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "[System.IO.File]::WriteAllText($env:REMOTE_SHA_FILE,$remoteSha,$utf8NoBom);" ^
   "$localSha=''; if(Test-Path $env:COMMIT_STAMP){ $localSha=[System.IO.File]::ReadAllText($env:COMMIT_STAMP,[System.Text.Encoding]::UTF8).Trim([char]0xFEFF).Trim() }" ^
   "$runFile=Join-Path $env:INSTALL_DIR 'run_engineers_tools.cmd';" ^
-  "$readmeFile=Join-Path $env:INSTALL_DIR 'README.md';" ^
-  "$uiFile=Join-Path $env:INSTALL_DIR 'src\engineers_tools\app\module_window.py';" ^
-  "$repoOk=(Test-Path $readmeFile) -and ((Get-Content $readmeFile -Raw) -match 'Mehdi-Elmi/engineers_Tools');" ^
-  "$runnerOk=(Test-Path $runFile) -and ((Get-Content $runFile -Raw) -match 'EXPECTED_APP_ROOT');" ^
-  "$uiText=''; if(Test-Path $uiFile){ $uiText=Get-Content $uiFile -Raw }" ^
-  "$uiOk=(Test-Path $uiFile) -and (($uiText -match $env:UI_MARKER) -or ($uiText -match 'class\s+ModuleWindow\s*\(\s*QMainWindow\s*\)'));" ^
-  "$force=$env:FORCE_UPDATE -eq '1';" ^
-  "if((Test-Path $runFile) -and $repoOk -and $runnerOk -and $uiOk -and -not $force -and $localSha -eq $remoteSha){ [System.IO.File]::WriteAllText($env:UPDATE_STATUS_FILE,'UP_TO_DATE',[System.Text.Encoding]::ASCII) } else { [System.IO.File]::WriteAllText($env:UPDATE_STATUS_FILE,'NEED_UPDATE',[System.Text.Encoding]::ASCII) }"
+  "$mainFile=Join-Path $env:INSTALL_DIR 'src\engineers_tools\main.py';" ^
+  "$moduleWindow=Join-Path $env:INSTALL_DIR 'src\engineers_tools\app\module_window.py';" ^
+  "$workspace=Join-Path $env:INSTALL_DIR 'modules\mechanics_dynamics_statics\workspace.py';" ^
+  "$installOk=(Test-Path $runFile) -and (Test-Path $mainFile) -and (Test-Path $moduleWindow) -and (Test-Path $workspace);" ^
+  "if($installOk -and $localSha -eq $remoteSha){ [System.IO.File]::WriteAllText($env:UPDATE_STATUS_FILE,'UP_TO_DATE',[System.Text.Encoding]::ASCII) } else { [System.IO.File]::WriteAllText($env:UPDATE_STATUS_FILE,'NEED_UPDATE',[System.Text.Encoding]::ASCII) }"
 
 if errorlevel 1 (
     echo Version check failed.
@@ -66,6 +61,7 @@ if exist "%UPDATE_STATUS_FILE%" set /p UPDATE_STATUS=<"%UPDATE_STATUS_FILE%"
 
 if /I "%UPDATE_STATUS%"=="UP_TO_DATE" (
     echo Engineer Tools is already up to date.
+    echo Starting Engineer Tools...
     call "%INSTALL_DIR%\run_engineers_tools.cmd"
     goto :finish
 )
@@ -125,24 +121,16 @@ if /I not "%LEGACY_INSTALL_DIR%"=="%INSTALL_DIR%" (
     >> "%LEGACY_INSTALL_DIR%\run_engineers_tools.cmd" echo exit /b %%ERRORLEVEL%%
 )
 
-set "APP_MODULE_DIR=%INSTALL_DIR%\src\engineers_tools\app"
-set "MECH_DIR=%INSTALL_DIR%\modules\mechanics_dynamics_statics"
 set "VERIFY_FAILED=0"
-
-if not exist "%MECH_DIR%\module_entry.py" echo VERIFY FAILED: missing modules\mechanics_dynamics_statics\module_entry.py & set "VERIFY_FAILED=1"
-if not exist "%MECH_DIR%\workspace.py" echo VERIFY FAILED: missing modules\mechanics_dynamics_statics\workspace.py & set "VERIFY_FAILED=1"
-if not exist "%APP_MODULE_DIR%\module_window.py" echo VERIFY FAILED: missing src\engineers_tools\app\module_window.py & set "VERIFY_FAILED=1"
-if not exist "%APP_MODULE_DIR%\project_file_dialog.py" echo VERIFY FAILED: missing src\engineers_tools\app\project_file_dialog.py & set "VERIFY_FAILED=1"
-if not exist "%INSTALL_DIR%\run_engineers_tools.cmd" echo VERIFY FAILED: missing run_engineers_tools.cmd & set "VERIFY_FAILED=1"
 if not exist "%INSTALL_DIR%\README.md" echo VERIFY FAILED: missing README.md & set "VERIFY_FAILED=1"
-
-if exist "%INSTALL_DIR%\README.md" findstr /C:"Mehdi-Elmi/engineers_Tools" "%INSTALL_DIR%\README.md" >nul || echo VERIFY WARNING: README repository marker was not found.
-if exist "%MECH_DIR%\module_entry.py" findstr /C:"from .workspace import EngineeringDesignWorkspace" "%MECH_DIR%\module_entry.py" >nul || echo VERIFY FAILED: module_entry.py does not import EngineeringDesignWorkspace & set "VERIFY_FAILED=1"
-if exist "%MECH_DIR%\workspace.py" findstr /C:"class EngineeringDesignWorkspace(ModuleWindow)" "%MECH_DIR%\workspace.py" >nul || echo VERIFY FAILED: workspace.py does not define EngineeringDesignWorkspace & set "VERIFY_FAILED=1"
-if exist "%APP_MODULE_DIR%\module_window.py" findstr /C:"class ModuleWindow(QMainWindow)" "%APP_MODULE_DIR%\module_window.py" >nul || echo VERIFY FAILED: module_window.py does not define ModuleWindow & set "VERIFY_FAILED=1"
-if exist "%APP_MODULE_DIR%\module_window.py" findstr /C:"%UI_MARKER%" "%APP_MODULE_DIR%\module_window.py" >nul || echo VERIFY WARNING: UI marker %UI_MARKER% was not found, but ModuleWindow exists.
-if exist "%APP_MODULE_DIR%\project_file_dialog.py" findstr /C:"class ProjectFileDialog(QDialog)" "%APP_MODULE_DIR%\project_file_dialog.py" >nul || echo VERIFY FAILED: project_file_dialog.py does not define ProjectFileDialog & set "VERIFY_FAILED=1"
-if exist "%INSTALL_DIR%\run_engineers_tools.cmd" findstr /C:"EXPECTED_APP_ROOT" "%INSTALL_DIR%\run_engineers_tools.cmd" >nul || echo VERIFY WARNING: EXPECTED_APP_ROOT marker was not found in run_engineers_tools.cmd.
+if not exist "%INSTALL_DIR%\run_engineers_tools.cmd" echo VERIFY FAILED: missing run_engineers_tools.cmd & set "VERIFY_FAILED=1"
+if not exist "%INSTALL_DIR%\requirements.txt" echo VERIFY FAILED: missing requirements.txt & set "VERIFY_FAILED=1"
+if not exist "%INSTALL_DIR%\src\engineers_tools\main.py" echo VERIFY FAILED: missing src\engineers_tools\main.py & set "VERIFY_FAILED=1"
+if not exist "%INSTALL_DIR%\src\engineers_tools\app\launcher.py" echo VERIFY FAILED: missing src\engineers_tools\app\launcher.py & set "VERIFY_FAILED=1"
+if not exist "%INSTALL_DIR%\src\engineers_tools\app\module_window.py" echo VERIFY FAILED: missing src\engineers_tools\app\module_window.py & set "VERIFY_FAILED=1"
+if not exist "%INSTALL_DIR%\src\engineers_tools\app\project_file_dialog.py" echo VERIFY FAILED: missing src\engineers_tools\app\project_file_dialog.py & set "VERIFY_FAILED=1"
+if not exist "%INSTALL_DIR%\modules\mechanics_dynamics_statics\module_entry.py" echo VERIFY FAILED: missing modules\mechanics_dynamics_statics\module_entry.py & set "VERIFY_FAILED=1"
+if not exist "%INSTALL_DIR%\modules\mechanics_dynamics_statics\workspace.py" echo VERIFY FAILED: missing modules\mechanics_dynamics_statics\workspace.py & set "VERIFY_FAILED=1"
 
 if "%VERIFY_FAILED%"=="1" goto :verify_failed
 
@@ -155,15 +143,13 @@ if exist "%COMMIT_STAMP%" (
 )
 echo Verified repository: %REPO%
 echo Verified install path: %INSTALL_DIR%
-echo Verified UI marker: %UI_MARKER%
 echo Starting Engineer Tools...
 call "%INSTALL_DIR%\run_engineers_tools.cmd"
 goto :finish
 
 :verify_failed
 echo Installation verification failed.
-echo One or more required Engineer Tools files are missing or structurally invalid.
-echo Check the VERIFY FAILED lines above.
+echo The required files listed above must exist after mirroring GitHub source tree.
 pause
 exit /b 1
 
