@@ -32,9 +32,9 @@ DEFAULT_START_BAR_TOOLS: tuple[StartBarTool, ...] = (
 )
 
 UNIT_TO_MM = {"mm": 1.0, "cm": 10.0, "m": 1000.0, "px": 25.4 / 96.0, "in": 25.4, "pt": 25.4 / 72.0}
-UNIT_ORDER = ("mm", "cm", "m", "px", "in", "pt")
-UNIT_LABELS = {"mm": "Millimeter", "cm": "Centimeter", "m": "Meter", "px": "Pixel", "in": "Inch", "pt": "Point"}
+UNIT_ORDER = ("mm", "m", "cm", "px", "pt", "in")
 MM_TO_SCREEN_PX = 96.0 / 25.4
+GUIDE_COLOR = QColor(255, 138, 53, 205)
 
 
 def _badge(painter: QPainter, rect: QRectF, accent: QColor) -> None:
@@ -182,15 +182,27 @@ def _mini_zoom_icon(action: str) -> QIcon:
     return QIcon(pixmap)
 
 
+def _style_guide_menu(menu: QMenu) -> None:
+    menu.setStyleSheet(
+        "QMenu {background:qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 #ffffff, stop:0.55 #edf8ff, stop:1 #fff1d3); border:1px solid #8fa2bb; border-radius:10px; padding:6px;}"
+        "QMenu::item {color:#1f3148; padding:6px 24px 6px 12px; border-radius:7px; font-size:12px; font-style:italic; font-weight:800;}"
+        "QMenu::item:selected {background:#fff4cf; color:#132238;}"
+    )
+
+
 class _GuideLine(QWidget):
-    def __init__(self, orientation: str, position: float, parent: QWidget) -> None:
+    def __init__(self, orientation: str, position: float, parent: QWidget, start_bar: "StartBar | None" = None, persistent: bool = True) -> None:
         super().__init__(parent)
         self.orientation = orientation
         self.position = position
+        self._start_bar = start_bar
+        self._persistent = persistent
         self._dragging = False
         self.setCursor(Qt.CursorShape.SizeVerCursor if orientation == "horizontal" else Qt.CursorShape.SizeHorCursor)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self._place()
+        if self._start_bar is not None and self._persistent:
+            self._start_bar._register_ruler_guide(self)
         self.show()
 
     def _place(self) -> None:
@@ -207,7 +219,7 @@ class _GuideLine(QWidget):
         super().paintEvent(event)
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing, True)
-        painter.setPen(QPen(QColor("#2f7df6"), 1.4, Qt.PenStyle.DashLine))
+        painter.setPen(QPen(GUIDE_COLOR, 1.6, Qt.PenStyle.DashLine, Qt.PenCapStyle.RoundCap))
         if self.orientation == "horizontal":
             painter.drawLine(0, 2, self.width(), 2)
         else:
@@ -236,9 +248,15 @@ class _GuideLine(QWidget):
 
     def contextMenuEvent(self, event) -> None:  # noqa: N802
         menu = QMenu(self)
+        _style_guide_menu(menu)
+        menu.addAction("Copy")
+        menu.addAction("Cut")
+        menu.addAction("Paste")
         delete = menu.addAction("Delete")
         chosen = menu.exec(event.globalPos())
         if chosen == delete:
+            if self._start_bar is not None:
+                self._start_bar._unregister_ruler_guide(self)
             self.deleteLater()
 
 
@@ -309,7 +327,7 @@ class _RulerOverlay(QWidget):
         orientation = "horizontal" if self._orientation == "top" else "vertical"
         position = point.y() if orientation == "horizontal" else point.x()
         if self._active_guide is None:
-            self._active_guide = _GuideLine(orientation, position, canvas)
+            self._active_guide = _GuideLine(orientation, position, canvas, self._start_bar)
         else:
             self._active_guide.position = position
             self._active_guide._place()
@@ -320,31 +338,56 @@ class _RulerCorner(QWidget):
         super().__init__(parent)
         self._start_bar = start_bar
         self._dragging = False
+        self._pressed = False
         self._press_pos: QPointF | None = None
         self._origin_h_guide: _GuideLine | None = None
         self._origin_v_guide: _GuideLine | None = None
-        self.setCursor(Qt.CursorShape.CrossCursor)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
 
     def paintEvent(self, event) -> None:  # noqa: N802
         super().paintEvent(event)
         painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing, True)
         painter.fillRect(self.rect(), QColor(13, 29, 48, 240))
-        painter.setPen(QPen(QColor("#ffffff"), 1.1))
-        painter.drawLine(6, self.height() - 6, self.width() - 6, 6)
-        painter.drawEllipse(QPointF(self.width() / 2, self.height() / 2), 3.5, 3.5)
+        rect = QRectF(4, 3, self.width() - 8, self.height() - 6)
+        gradient = QLinearGradient(rect.topLeft(), rect.bottomRight())
+        if self._pressed:
+            gradient.setColorAt(0.0, QColor("#7f95b2"))
+            gradient.setColorAt(1.0, QColor("#213d5f"))
+        else:
+            gradient.setColorAt(0.0, QColor("#ffffff"))
+            gradient.setColorAt(0.48, QColor("#dff4ff"))
+            gradient.setColorAt(1.0, QColor("#ffbf69"))
+        path = QPainterPath()
+        path.addRoundedRect(rect, 6, 6)
+        painter.fillPath(path, gradient)
+        painter.setPen(QPen(QColor("#ffffff"), 1.0))
+        painter.drawPath(path)
+        painter.setPen(QPen(QColor("#132238"), 1.5, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+        painter.drawLine(QPointF(10, 16), QPointF(10, 8))
+        painter.drawLine(QPointF(10, 16), QPointF(20, 16))
+        painter.setBrush(QColor("#2f7df6"))
+        painter.drawEllipse(QPointF(10, 16), 2.4, 2.4)
         painter.end()
 
     def mousePressEvent(self, event) -> None:  # noqa: N802
         if event.button() == Qt.MouseButton.LeftButton:
             self._dragging = True
+            self._pressed = True
             self._press_pos = event.position()
+            self.update()
             event.accept()
             return
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event) -> None:  # noqa: N802
         if self._dragging and self.parentWidget() is not None:
-            self._preview_origin(event.globalPosition().toPoint())
+            if self._press_pos is not None:
+                delta = event.position() - self._press_pos
+                if abs(delta.x()) + abs(delta.y()) >= 4:
+                    self._pressed = False
+                    self.update()
+                    self._preview_origin(event.globalPosition().toPoint())
             event.accept()
             return
         super().mouseMoveEvent(event)
@@ -361,8 +404,10 @@ class _RulerCorner(QWidget):
                 else:
                     point = canvas.mapFromGlobal(event.globalPosition().toPoint())
                     self._start_bar._set_ruler_origin(QPointF(point), custom=True)
+            self._pressed = False
             self._clear_origin_preview()
             self._press_pos = None
+            self.update()
             event.accept()
             return
         super().mouseReleaseEvent(event)
@@ -373,12 +418,12 @@ class _RulerCorner(QWidget):
             return
         point = canvas.mapFromGlobal(global_point)
         if self._origin_h_guide is None:
-            self._origin_h_guide = _GuideLine("horizontal", point.y(), canvas)
+            self._origin_h_guide = _GuideLine("horizontal", point.y(), canvas, persistent=False)
         else:
             self._origin_h_guide.position = point.y()
             self._origin_h_guide._place()
         if self._origin_v_guide is None:
-            self._origin_v_guide = _GuideLine("vertical", point.x(), canvas)
+            self._origin_v_guide = _GuideLine("vertical", point.x(), canvas, persistent=False)
         else:
             self._origin_v_guide.position = point.x()
             self._origin_v_guide._place()
@@ -417,6 +462,7 @@ class StartBar(QWidget):
         self._ruler_corner: _RulerCorner | None = None
         self._ruler_origin = QPointF(0, 0)
         self._ruler_origin_custom = False
+        self._ruler_guides: list[_GuideLine] = []
         self._hooked_canvas: QWidget | None = None
 
         layout = QHBoxLayout(self)
@@ -576,8 +622,10 @@ class StartBar(QWidget):
         popup.setObjectName("StartToolPopup")
         popup.setWindowFlags(Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint)
         popup.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        popup.setStyleSheet("QDialog#StartToolPopup {background:transparent;}")
         shell = QWidget()
         shell.setObjectName("StartToolPopupShell")
+        shell.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         root = QVBoxLayout(popup)
         root.setContentsMargins(0, 0, 0, 0)
         root.addWidget(shell)
@@ -678,15 +726,14 @@ class StartBar(QWidget):
         self._set_zoom_value(max(5.0, min(3200.0, value)))
 
     def _show_unit_popup(self, key: str) -> None:
-        popup, layout = self._popup_base(298)
-        rows = (UNIT_ORDER[:2], UNIT_ORDER[2:4], UNIT_ORDER[4:])
+        popup, layout = self._popup_base(184)
+        rows = (UNIT_ORDER[:3], UNIT_ORDER[3:])
         for row_units in rows:
             row = QHBoxLayout()
-            row.setSpacing(6)
+            row.setSpacing(5)
             for unit in row_units:
-                label = f"{unit}  {UNIT_LABELS[unit]}"
-                button = self._radio_button(label, unit == self._unit, lambda checked=False, selected=unit: self._set_unit(selected))
-                button.setFixedWidth(132)
+                button = self._radio_button(unit, unit == self._unit, lambda checked=False, selected=unit: self._set_unit(selected))
+                button.setFixedWidth(52)
                 row.addWidget(button)
             layout.addLayout(row)
         self._show_popup_near(key, popup)
@@ -771,6 +818,8 @@ class StartBar(QWidget):
         self._ruler_enabled = enabled
         if enabled and not self._ruler_origin_custom:
             self._center_ruler_origin()
+        if not enabled:
+            self._clear_ruler_guides()
         host = self._host()
         view_state = getattr(host, "_view_state", None)
         if isinstance(view_state, dict):
@@ -788,6 +837,19 @@ class StartBar(QWidget):
         canvas = self._canvas()
         if canvas is not None:
             canvas.update()
+
+    def _register_ruler_guide(self, guide: _GuideLine) -> None:
+        if guide not in self._ruler_guides:
+            self._ruler_guides.append(guide)
+
+    def _unregister_ruler_guide(self, guide: _GuideLine) -> None:
+        if guide in self._ruler_guides:
+            self._ruler_guides.remove(guide)
+
+    def _clear_ruler_guides(self) -> None:
+        for guide in tuple(self._ruler_guides):
+            guide.deleteLater()
+        self._ruler_guides.clear()
 
     def _sync_rulers(self) -> None:
         canvas = self._canvas()
