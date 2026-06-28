@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QPointF, QRectF, Qt
+from PySide6.QtCore import QEvent, QObject, QPointF, QRectF, Qt
 from PySide6.QtGui import QColor, QCursor, QPainter, QPainterPath, QPen, QPixmap, QPolygonF
-from PySide6.QtWidgets import QComboBox, QDoubleSpinBox, QWidget
+from PySide6.QtWidgets import QApplication, QComboBox, QDialog, QDoubleSpinBox, QLabel, QLineEdit, QWidget
 
 
 def _triangle_arrow_head(painter: QPainter, tip: QPointF, tail: QPointF, color: QColor, size: float = 7.0) -> None:
@@ -69,16 +69,41 @@ def _hand_cursor(closed: bool = False) -> QCursor:
     return cursor
 
 
+def _move_cursor() -> QCursor:
+    cache = getattr(_move_cursor, "_cache", None)
+    if cache is not None:
+        return cache
+    pixmap = QPixmap(34, 34)
+    pixmap.fill(Qt.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.Antialiasing, True)
+    ink = QColor("#132238")
+    accent = QColor("#2f7df6")
+    painter.setPen(QPen(ink, 2.2, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+    center = QPointF(17, 17)
+    for tip in (QPointF(17, 3), QPointF(31, 17), QPointF(17, 31), QPointF(3, 17)):
+        painter.drawLine(center, tip)
+        _triangle_arrow_head(painter, tip, center, accent, 6.2)
+        painter.setPen(QPen(ink, 2.2, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+    painter.setBrush(QColor("#fff9de"))
+    painter.setPen(QPen(QColor("#7e5b10"), 1.3))
+    painter.drawEllipse(center, 4.0, 4.0)
+    painter.end()
+    cursor = QCursor(pixmap, 17, 17)
+    _move_cursor._cache = cursor
+    return cursor
+
+
 def _style_numeric_spin(spin: QDoubleSpinBox) -> None:
     spin.setStyleSheet(
         """
         QDoubleSpinBox#FileNameInput {
             background:#ffffff; border:1px solid #9fb0c5; border-radius:8px;
-            color:#132238; font-size:12px; font-style:normal; font-weight:800; padding:4px 23px 4px 7px;
+            color:#132238; font-size:12px; font-style:normal; font-weight:800; padding:4px 28px 4px 7px;
         }
         QDoubleSpinBox#FileNameInput::up-button, QDoubleSpinBox#FileNameInput::down-button {
-            width:20px; border:0;
-            background:qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 #ffffff, stop:0.48 #fff2b8, stop:1 #5ed7c4);
+            width:24px; border:1px solid #8fa2bb;
+            background:qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 #ffffff, stop:0.45 #fff1bf, stop:1 #43d3bd);
             subcontrol-origin:border;
         }
         QDoubleSpinBox#FileNameInput::up-button { subcontrol-position:top right; border-top-right-radius:7px; }
@@ -117,6 +142,7 @@ def _style_combo_arrow(combo: QComboBox) -> None:
 
 def apply_interaction_ui_patch() -> None:
     from . import module_window as mw
+    from . import project_file_dialog as pfd
     from . import runtime_ui_patch as rtp
     from ..ui import start_bar as sb
 
@@ -125,6 +151,35 @@ def apply_interaction_ui_patch() -> None:
     rtp._style_combo_arrow = _style_combo_arrow
     mw._paint_rotation_glyph = _paint_rotation_glyph
     sb._arrow_head = _solid_arrow_head
+
+    original_page_setup_init = rtp.PageSetupDialog.__init__
+
+    def page_setup_init(self, *args, **kwargs):
+        original_page_setup_init(self, *args, **kwargs)
+        for label in self.findChildren(QLabel):
+            text = label.text()
+            replacements = {"W": "Width", "H": "Height", "Top": "Top", "Bottom": "Bottom", "Right": "Right", "Left": "Left"}
+            if text in replacements:
+                label.setText(replacements[text])
+                label.setMinimumWidth(44 if text in {"W", "H"} else 48)
+                label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        for spin in self.findChildren(QDoubleSpinBox):
+            spin.setMinimumWidth(124)
+            _style_numeric_spin(spin)
+        for combo in self.findChildren(QComboBox):
+            _style_combo_arrow(combo)
+
+    rtp.PageSetupDialog.__init__ = page_setup_init
+
+    original_file_dialog_init = pfd.ProjectFileDialog.__init__
+
+    def file_dialog_init(self, *args, **kwargs):
+        original_file_dialog_init(self, *args, **kwargs)
+        for combo in self.findChildren(QComboBox):
+            if combo.objectName() == "FileTypeCombo":
+                _style_combo_arrow(combo)
+
+    pfd.ProjectFileDialog.__init__ = file_dialog_init
 
     def canvas_mouse_press(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
@@ -151,7 +206,9 @@ def apply_interaction_ui_patch() -> None:
             event.accept()
             return
         hover = self._hit_test(point)
-        if hover in {"move", "rotate"}:
+        if hover == "move":
+            self.setCursor(_move_cursor())
+        elif hover == "rotate":
             self.setCursor(_hand_cursor(False))
         elif hover in {"resize_n", "resize_s"}:
             self.setCursor(Qt.SizeVerCursor)
@@ -178,3 +235,79 @@ def apply_interaction_ui_patch() -> None:
     mw.GridCanvas.mousePressEvent = canvas_mouse_press
     mw.GridCanvas.mouseMoveEvent = canvas_mouse_move
     mw.GridCanvas.mouseReleaseEvent = canvas_mouse_release
+
+    def force_delete(self):
+        canvas = getattr(self, "_canvas", None)
+        if canvas is not None and (getattr(canvas, "_object_rect", None) is not None or getattr(canvas, "_file_path", None) is not None):
+            if hasattr(self, "_runtime_undo_stack"):
+                snapshot = {
+                    "file_path": getattr(canvas, "_file_path", None),
+                    "file_pixmap": QPixmap(getattr(canvas, "_file_pixmap", QPixmap())),
+                    "object_rect": QRectF(canvas._object_rect) if getattr(canvas, "_object_rect", None) is not None else None,
+                    "rotation": getattr(canvas, "_rotation_degrees", 0.0),
+                    "layers": list(getattr(self, "_layers", [])),
+                }
+                self._runtime_undo_stack.append(snapshot)
+                self._runtime_undo_stack = self._runtime_undo_stack[-40:]
+                self._runtime_redo_stack = []
+            canvas._object_rect = None
+            canvas._file_path = None
+            canvas._file_pixmap = QPixmap()
+            layers = getattr(self, "_layers", [])
+            if layers:
+                self._layers = [layer for layer in layers if str(layer).startswith("Page")]
+                if not self._layers:
+                    self._layers = ["Page 1"]
+                self._refresh_layers()
+            canvas.update()
+            self._set_status("Deleted object")
+            return
+        self._set_status("Delete")
+
+    mw.ModuleWindow._delete = force_delete
+
+    class _WorkspaceShortcutFilter(QObject):
+        def eventFilter(self, watched, event):  # noqa: N802
+            if event.type() != QEvent.Type.KeyPress:
+                return False
+            app = QApplication.instance()
+            active = app.activeWindow() if app is not None else None
+            if active is None or isinstance(active, QDialog):
+                return False
+            window = active
+            while window is not None and not isinstance(window, mw.ModuleWindow):
+                window = window.parentWidget()
+            if window is None:
+                return False
+            focus = QApplication.focusWidget()
+            if isinstance(focus, (QLineEdit, QDoubleSpinBox, QComboBox)):
+                return False
+            modifiers = event.modifiers()
+            key = event.key()
+            ctrl = bool(modifiers & Qt.KeyboardModifier.ControlModifier)
+            shift = bool(modifiers & Qt.KeyboardModifier.ShiftModifier)
+            mapping = {
+                (Qt.Key.Key_Delete, False, False): window._delete,
+                (Qt.Key.Key_Backspace, False, False): window._delete,
+                (Qt.Key.Key_C, True, False): window._copy,
+                (Qt.Key.Key_X, True, False): window._cut,
+                (Qt.Key.Key_V, True, False): window._paste,
+                (Qt.Key.Key_Z, True, False): window._undo,
+                (Qt.Key.Key_Y, True, False): window._redo,
+                (Qt.Key.Key_A, True, False): window._select_all,
+                (Qt.Key.Key_R, True, False): window._repeat_last_tools,
+                (Qt.Key.Key_G, True, False): window._group,
+                (Qt.Key.Key_G, True, True): window._ungroup,
+            }
+            handler = mapping.get((key, ctrl, shift))
+            if handler is None:
+                return False
+            handler()
+            event.accept()
+            return True
+
+    app = QApplication.instance()
+    if app is not None and not hasattr(app, "_engineer_tools_shortcut_filter"):
+        shortcut_filter = _WorkspaceShortcutFilter(app)
+        app.installEventFilter(shortcut_filter)
+        app._engineer_tools_shortcut_filter = shortcut_filter
