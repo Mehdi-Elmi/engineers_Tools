@@ -6,7 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from PySide6.QtCore import QEvent, QPoint, QPointF, QRect, QRectF, QSize, Signal, Qt
-from PySide6.QtGui import QColor, QCursor, QIcon, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap, QPolygonF
+from PySide6.QtGui import QColor, QCursor, QIcon, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap, QPolygonF, QRegion
 from PySide6.QtWidgets import QDialog, QDoubleSpinBox, QHBoxLayout, QLabel, QMenu, QPushButton, QRubberBand, QVBoxLayout, QWidget
 
 
@@ -37,6 +37,14 @@ UNIT_ORDER = ("mm", "cm", "m", "px", "pt", "in")
 MM_TO_SCREEN_PX = 96.0 / 25.4
 RULER_THICKNESS = 28
 GUIDE_COLOR = QColor(255, 138, 53, 205)
+
+
+def _apply_rounded_mask(widget: QWidget, radius: float) -> None:
+    if widget.width() <= 0 or widget.height() <= 0:
+        return
+    path = QPainterPath()
+    path.addRoundedRect(QRectF(0, 0, widget.width(), widget.height()), radius, radius)
+    widget.setMask(QRegion(path.toFillPolygon().toPolygon()))
 
 
 def _badge(painter: QPainter, rect: QRectF, accent: QColor) -> None:
@@ -210,20 +218,20 @@ class _GuideLine(QWidget):
         if parent is None:
             return
         if self.orientation == "horizontal":
-            self.setGeometry(0, int(self.position) - 2, parent.width(), 5)
+            self.setGeometry(0, int(self.position) - 1, parent.width(), 3)
         else:
-            self.setGeometry(int(self.position) - 2, 0, 5, parent.height())
+            self.setGeometry(int(self.position) - 1, 0, 3, parent.height())
         self.update()
 
     def paintEvent(self, event) -> None:  # noqa: N802
         super().paintEvent(event)
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing, True)
-        painter.setPen(QPen(GUIDE_COLOR, 1.6, Qt.PenStyle.DashLine, Qt.PenCapStyle.RoundCap))
+        painter.setPen(QPen(GUIDE_COLOR, 1.0, Qt.PenStyle.DashLine, Qt.PenCapStyle.RoundCap))
         if self.orientation == "horizontal":
-            painter.drawLine(0, 2, self.width(), 2)
+            painter.drawLine(0, 1, self.width(), 1)
         else:
-            painter.drawLine(2, 0, 2, self.height())
+            painter.drawLine(1, 0, 1, self.height())
         painter.end()
 
     def mousePressEvent(self, event) -> None:  # noqa: N802
@@ -402,9 +410,12 @@ class _RulerCorner(QWidget):
                 delta = QPointF(0, 0) if self._press_pos is None else event.position() - self._press_pos
                 moved = abs(delta.x()) + abs(delta.y())
                 if moved < 4:
-                    self._start_bar._set_ruler_origin(QPointF(RULER_THICKNESS, RULER_THICKNESS), custom=True)
+                    self._start_bar._toggle_ruler_corner_origin()
                 else:
                     point = canvas.mapFromGlobal(event.globalPosition().toPoint())
+                    self._start_bar._ruler_corner_origin_active = False
+                    self._start_bar._ruler_previous_origin = None
+                    self._start_bar._ruler_previous_origin_custom = False
                     self._start_bar._set_ruler_origin(QPointF(point), custom=True)
             self._pressed = False
             self._clear_origin_preview()
@@ -464,6 +475,9 @@ class StartBar(QWidget):
         self._ruler_corner: _RulerCorner | None = None
         self._ruler_origin = QPointF(0, 0)
         self._ruler_origin_custom = False
+        self._ruler_previous_origin: QPointF | None = None
+        self._ruler_previous_origin_custom = False
+        self._ruler_corner_origin_active = False
         self._ruler_guides: list[_GuideLine] = []
         self._hooked_canvas: QWidget | None = None
 
@@ -577,6 +591,9 @@ class StartBar(QWidget):
         canvas = self._canvas()
         if canvas is not None:
             self._ruler_origin = QPointF(canvas.width() / 2.0, canvas.height() / 2.0)
+            self._ruler_corner_origin_active = False
+            self._ruler_previous_origin = None
+            self._ruler_previous_origin_custom = False
 
     def _ensure_canvas_hooks(self) -> None:
         canvas = self._canvas()
@@ -588,6 +605,9 @@ class StartBar(QWidget):
             canvas.installEventFilter(self)
             self._hooked_canvas = canvas
             self._ruler_origin_custom = False
+            self._ruler_corner_origin_active = False
+            self._ruler_previous_origin = None
+            self._ruler_previous_origin_custom = False
             self._center_ruler_origin()
         if not getattr(canvas, "_start_bar_grid_hooked", False):
             def paint_grid(canvas_self, painter: QPainter) -> None:
@@ -633,7 +653,8 @@ class StartBar(QWidget):
         popup.setObjectName("StartToolPopup")
         popup.setWindowFlags(Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint)
         popup.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        popup.setStyleSheet("QDialog#StartToolPopup {background:transparent;}")
+        popup.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground)
+        popup.setStyleSheet("QDialog#StartToolPopup {background:transparent; border:0;} QWidget {background:transparent;}")
         shell = QWidget()
         shell.setObjectName("StartToolPopupShell")
         shell.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
@@ -653,6 +674,11 @@ class StartBar(QWidget):
             "QPushButton#RadioChoice:hover {background:#fff4cf; border-color:#ff8a35;}"
             "QPushButton#RadioChoice:checked {background:#dff6ff; border-color:#2f7df6;}"
             "QDoubleSpinBox#PopupSpin {background:#ffffff; border:1px solid #9fb0c5; border-radius:7px; color:#132238; font-size:12px; font-style:normal; font-weight:800; padding:4px 7px;}"
+            "QDoubleSpinBox#PopupSpin::up-button, QDoubleSpinBox#PopupSpin::down-button {width:18px; border:0; background:#fff9de; subcontrol-origin:border;}"
+            "QDoubleSpinBox#PopupSpin::up-button {subcontrol-position:top right; border-top-right-radius:6px;}"
+            "QDoubleSpinBox#PopupSpin::down-button {subcontrol-position:bottom right; border-bottom-right-radius:6px;}"
+            "QDoubleSpinBox#PopupSpin::up-arrow {width:0; height:0; border-left:5px solid transparent; border-right:5px solid transparent; border-bottom:6px solid #132238;}"
+            "QDoubleSpinBox#PopupSpin::down-arrow {width:0; height:0; border-left:5px solid transparent; border-right:5px solid transparent; border-top:6px solid #132238;}"
         )
         self._popup = popup
         return popup, layout
@@ -663,6 +689,7 @@ class StartBar(QWidget):
         popup.adjustSize()
         popup.move(target)
         popup.show()
+        _apply_rounded_mask(popup, 12)
 
     def _radio_button(self, label: str, checked: bool, callback: Callable[[], None]) -> QPushButton:
         button = QPushButton(label)
@@ -783,7 +810,7 @@ class StartBar(QWidget):
         spin.setObjectName("PopupSpin")
         spin.setRange(0.000001, 1000000.0)
         spin.setDecimals(6)
-        spin.setSingleStep(1.0)
+        spin.setSingleStep(0.5)
         spin.setSuffix(f" {self._unit}")
         spin.setValue(self._grid_spacing)
         spin.valueChanged.connect(self._set_grid_spacing)
@@ -852,6 +879,24 @@ class StartBar(QWidget):
         if canvas is not None:
             canvas.update()
         self._apply_grid_to_host()
+
+    def _toggle_ruler_corner_origin(self) -> None:
+        if self._ruler_corner_origin_active:
+            previous = QPointF(self._ruler_previous_origin) if self._ruler_previous_origin is not None else None
+            previous_custom = self._ruler_previous_origin_custom
+            self._ruler_corner_origin_active = False
+            self._ruler_previous_origin = None
+            self._ruler_previous_origin_custom = False
+            if previous is None:
+                self._center_ruler_origin()
+                self._set_ruler_origin(QPointF(self._ruler_origin), custom=False)
+            else:
+                self._set_ruler_origin(previous, custom=previous_custom)
+            return
+        self._ruler_previous_origin = QPointF(self._ruler_origin)
+        self._ruler_previous_origin_custom = self._ruler_origin_custom
+        self._ruler_corner_origin_active = True
+        self._set_ruler_origin(QPointF(RULER_THICKNESS, RULER_THICKNESS), custom=True)
 
     def _register_ruler_guide(self, guide: _GuideLine) -> None:
         if guide not in self._ruler_guides:
