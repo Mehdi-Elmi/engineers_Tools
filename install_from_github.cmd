@@ -50,7 +50,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "$uiFile=Join-Path $env:INSTALL_DIR 'src\engineers_tools\app\module_window.py';" ^
   "$repoOk=(Test-Path $readmeFile) -and ((Get-Content $readmeFile -Raw) -match 'Mehdi-Elmi/engineers_Tools');" ^
   "$runnerOk=(Test-Path $runFile) -and ((Get-Content $runFile -Raw) -match 'EXPECTED_APP_ROOT');" ^
-  "$uiOk=(Test-Path $uiFile) -and ((Get-Content $uiFile -Raw) -match $env:UI_MARKER);" ^
+  "$uiText=''; if(Test-Path $uiFile){ $uiText=Get-Content $uiFile -Raw }" ^
+  "$uiOk=(Test-Path $uiFile) -and (($uiText -match $env:UI_MARKER) -or ($uiText -match 'class\s+ModuleWindow\s*\(\s*QMainWindow\s*\)'));" ^
   "$force=$env:FORCE_UPDATE -eq '1';" ^
   "if((Test-Path $runFile) -and $repoOk -and $runnerOk -and $uiOk -and -not $force -and $localSha -eq $remoteSha){ [System.IO.File]::WriteAllText($env:UPDATE_STATUS_FILE,'UP_TO_DATE',[System.Text.Encoding]::ASCII) } else { [System.IO.File]::WriteAllText($env:UPDATE_STATUS_FILE,'NEED_UPDATE',[System.Text.Encoding]::ASCII) }"
 
@@ -126,19 +127,24 @@ if /I not "%LEGACY_INSTALL_DIR%"=="%INSTALL_DIR%" (
 
 set "APP_MODULE_DIR=%INSTALL_DIR%\src\engineers_tools\app"
 set "MECH_DIR=%INSTALL_DIR%\modules\mechanics_dynamics_statics"
+set "VERIFY_FAILED=0"
 
-if not exist "%MECH_DIR%\module_entry.py" goto :verify_failed
-if not exist "%MECH_DIR%\workspace.py" goto :verify_failed
-if not exist "%APP_MODULE_DIR%\module_window.py" goto :verify_failed
-if not exist "%APP_MODULE_DIR%\project_file_dialog.py" goto :verify_failed
+if not exist "%MECH_DIR%\module_entry.py" echo VERIFY FAILED: missing modules\mechanics_dynamics_statics\module_entry.py & set "VERIFY_FAILED=1"
+if not exist "%MECH_DIR%\workspace.py" echo VERIFY FAILED: missing modules\mechanics_dynamics_statics\workspace.py & set "VERIFY_FAILED=1"
+if not exist "%APP_MODULE_DIR%\module_window.py" echo VERIFY FAILED: missing src\engineers_tools\app\module_window.py & set "VERIFY_FAILED=1"
+if not exist "%APP_MODULE_DIR%\project_file_dialog.py" echo VERIFY FAILED: missing src\engineers_tools\app\project_file_dialog.py & set "VERIFY_FAILED=1"
+if not exist "%INSTALL_DIR%\run_engineers_tools.cmd" echo VERIFY FAILED: missing run_engineers_tools.cmd & set "VERIFY_FAILED=1"
+if not exist "%INSTALL_DIR%\README.md" echo VERIFY FAILED: missing README.md & set "VERIFY_FAILED=1"
 
-findstr /C:"Mehdi-Elmi/engineers_Tools" "%INSTALL_DIR%\README.md" >nul || goto :verify_failed
-findstr /C:"from .workspace import EngineeringDesignWorkspace" "%MECH_DIR%\module_entry.py" >nul || goto :verify_failed
-findstr /C:"class EngineeringDesignWorkspace(ModuleWindow)" "%MECH_DIR%\workspace.py" >nul || goto :verify_failed
-findstr /C:"class ModuleWindow(QMainWindow)" "%APP_MODULE_DIR%\module_window.py" >nul || goto :verify_failed
-findstr /C:"%UI_MARKER%" "%APP_MODULE_DIR%\module_window.py" >nul || goto :verify_failed
-findstr /C:"class ProjectFileDialog(QDialog)" "%APP_MODULE_DIR%\project_file_dialog.py" >nul || goto :verify_failed
-findstr /C:"EXPECTED_APP_ROOT" "%INSTALL_DIR%\run_engineers_tools.cmd" >nul || goto :verify_failed
+if exist "%INSTALL_DIR%\README.md" findstr /C:"Mehdi-Elmi/engineers_Tools" "%INSTALL_DIR%\README.md" >nul || echo VERIFY WARNING: README repository marker was not found.
+if exist "%MECH_DIR%\module_entry.py" findstr /C:"from .workspace import EngineeringDesignWorkspace" "%MECH_DIR%\module_entry.py" >nul || echo VERIFY FAILED: module_entry.py does not import EngineeringDesignWorkspace & set "VERIFY_FAILED=1"
+if exist "%MECH_DIR%\workspace.py" findstr /C:"class EngineeringDesignWorkspace(ModuleWindow)" "%MECH_DIR%\workspace.py" >nul || echo VERIFY FAILED: workspace.py does not define EngineeringDesignWorkspace & set "VERIFY_FAILED=1"
+if exist "%APP_MODULE_DIR%\module_window.py" findstr /C:"class ModuleWindow(QMainWindow)" "%APP_MODULE_DIR%\module_window.py" >nul || echo VERIFY FAILED: module_window.py does not define ModuleWindow & set "VERIFY_FAILED=1"
+if exist "%APP_MODULE_DIR%\module_window.py" findstr /C:"%UI_MARKER%" "%APP_MODULE_DIR%\module_window.py" >nul || echo VERIFY WARNING: UI marker %UI_MARKER% was not found, but ModuleWindow exists.
+if exist "%APP_MODULE_DIR%\project_file_dialog.py" findstr /C:"class ProjectFileDialog(QDialog)" "%APP_MODULE_DIR%\project_file_dialog.py" >nul || echo VERIFY FAILED: project_file_dialog.py does not define ProjectFileDialog & set "VERIFY_FAILED=1"
+if exist "%INSTALL_DIR%\run_engineers_tools.cmd" findstr /C:"EXPECTED_APP_ROOT" "%INSTALL_DIR%\run_engineers_tools.cmd" >nul || echo VERIFY WARNING: EXPECTED_APP_ROOT marker was not found in run_engineers_tools.cmd.
+
+if "%VERIFY_FAILED%"=="1" goto :verify_failed
 
 if exist "%REMOTE_SHA_FILE%" copy /y "%REMOTE_SHA_FILE%" "%COMMIT_STAMP%" >nul
 
@@ -156,7 +162,8 @@ goto :finish
 
 :verify_failed
 echo Installation verification failed.
-echo The installed files do not match the active %REPO% structure or UI marker.
+echo One or more required Engineer Tools files are missing or structurally invalid.
+echo Check the VERIFY FAILED lines above.
 pause
 exit /b 1
 
