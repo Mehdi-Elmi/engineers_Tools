@@ -1,317 +1,257 @@
-"""Shared start-bar controls for engineering workspaces."""
+"""Reusable icon-based Start Bar component."""
 
 from __future__ import annotations
 
 from collections.abc import Callable
-from math import isclose
+from dataclasses import dataclass
 
 from PySide6.QtCore import QEvent, QPoint, QPointF, QRect, QRectF, QSize, Signal, Qt
-from PySide6.QtGui import (
-    QColor,
-    QCursor,
-    QIcon,
-    QLinearGradient,
-    QPainter,
-    QPainterPath,
-    QPen,
-    QPixmap,
-    QPolygonF,
-    QRegion,
-)
-from PySide6.QtWidgets import (
-    QDialog,
-    QDoubleSpinBox,
-    QHBoxLayout,
-    QLabel,
-    QMenu,
-    QPushButton,
-    QRubberBand,
-    QVBoxLayout,
-    QWidget,
+from PySide6.QtGui import QColor, QCursor, QIcon, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap, QPolygonF
+from PySide6.QtWidgets import QDialog, QDoubleSpinBox, QHBoxLayout, QLabel, QMenu, QPushButton, QRubberBand, QVBoxLayout, QWidget
+
+
+@dataclass(frozen=True)
+class StartBarTool:
+    key: str
+    label: str
+    tooltip: str
+    properties_schema: tuple[str, ...] = ()
+
+
+DEFAULT_START_BAR_TOOLS: tuple[StartBarTool, ...] = (
+    StartBarTool("select", "Select", "Select and edit objects", ("Selection", "Transform", "Layer")),
+    StartBarTool("line", "Line", "Draw line", ("Start", "End", "Stroke", "Unit")),
+    StartBarTool("vector", "Vector", "Draw vector", ("Magnitude", "Direction", "Angle", "Unit")),
+    StartBarTool("angle", "Angle", "Measure or draw angle", ("Start Ray", "End Ray", "Theta", "Unit")),
+    StartBarTool("text", "Text", "Add text", ("Content", "Font", "Size", "Direction")),
+    StartBarTool("grid", "Grid", "Grid settings", ("Spacing", "Snap", "Visibility", "Unit")),
+    StartBarTool("snap", "Snap", "Snap settings", ("Mode", "Tolerance", "Targets")),
+    StartBarTool("unit", "Unit", "Set workspace unit", ("Millimeter", "Centimeter", "Meter", "Pixel", "Inch")),
+    StartBarTool("ruler", "Ruler", "Show ruler", ("Unit", "Origin", "Scale")),
+    StartBarTool("zoom", "Zoom", "Zoom in, zoom out, or fit", ("Zoom In", "Zoom Out", "Zoom Fit")),
 )
 
-UNIT_TO_MM = {
-    "mm": 1.0,
-    "cm": 10.0,
-    "m": 1000.0,
-    "px": 25.4 / 96.0,
-    "in": 25.4,
-    "pt": 25.4 / 72.0,
-}
+UNIT_TO_MM = {"mm": 1.0, "cm": 10.0, "m": 1000.0, "px": 25.4 / 96.0, "in": 25.4, "pt": 25.4 / 72.0}
 UNIT_ORDER = ("mm", "m", "cm", "px", "pt", "in")
 MM_TO_SCREEN_PX = 96.0 / 25.4
-GUIDE_COLOR = QColor(255, 138, 53, 210)
-RULER_SIZE = 28
+GUIDE_COLOR = QColor(255, 138, 53, 205)
 
 
-def _apply_rounded_mask(widget: QWidget, radius: int = 12) -> None:
-    if widget.width() <= 0 or widget.height() <= 0:
-        return
+def _badge(painter: QPainter, rect: QRectF, accent: QColor) -> None:
+    shadow = QPainterPath()
+    shadow.addRoundedRect(rect.translated(1.8, 2.2), 9, 9)
+    shadow_color = QColor("#465c78")
+    shadow_color.setAlpha(70)
+    painter.fillPath(shadow, shadow_color)
     path = QPainterPath()
-    path.addRoundedRect(QRectF(0, 0, widget.width(), widget.height()), radius, radius)
-    widget.setMask(QRegion(path.toFillPolygon().toPolygon()))
-
-
-def _unit_to_mm(value: float, unit: str) -> float:
-    return value * UNIT_TO_MM.get(unit, 1.0)
-
-
-def _mm_to_unit(value_mm: float, unit: str) -> float:
-    factor = UNIT_TO_MM.get(unit, 1.0)
-    if isclose(factor, 0.0):
-        return value_mm
-    return value_mm / factor
-
-
-def _round_icon(size: int, painter_fn: Callable[[QPainter, QRectF], None]) -> QIcon:
-    pixmap = QPixmap(size, size)
-    pixmap.fill(Qt.GlobalColor.transparent)
-    painter = QPainter(pixmap)
-    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-    rect = QRectF(1, 1, size - 2, size - 2)
+    path.addRoundedRect(rect, 9, 9)
     gradient = QLinearGradient(rect.topLeft(), rect.bottomRight())
     gradient.setColorAt(0.0, QColor("#ffffff"))
-    gradient.setColorAt(0.45, QColor("#e8eef8"))
-    gradient.setColorAt(1.0, QColor("#92abc9"))
-    painter.setBrush(gradient)
-    painter.setPen(QPen(QColor("#dce8f7"), 1.4))
-    painter.drawRoundedRect(rect, 8, 8)
-    painter_fn(painter, rect)
+    gradient.setColorAt(0.48, QColor("#edf7ff"))
+    gradient.setColorAt(1.0, accent)
+    painter.fillPath(path, gradient)
+    painter.setPen(QPen(QColor("#6e86a4"), 1.1))
+    painter.drawPath(path)
+
+
+def _arrow_head(painter: QPainter, tip: QPointF, back: QPointF, size: float = 6.0) -> None:
+    direction = tip - back
+    length = max(0.01, (direction.x() ** 2 + direction.y() ** 2) ** 0.5)
+    unit = QPointF(direction.x() / length, direction.y() / length)
+    normal = QPointF(-unit.y(), unit.x())
+    left = QPointF(tip.x() - unit.x() * size + normal.x() * size * 0.48, tip.y() - unit.y() * size + normal.y() * size * 0.48)
+    right = QPointF(tip.x() - unit.x() * size - normal.x() * size * 0.48, tip.y() - unit.y() * size - normal.y() * size * 0.48)
+    painter.drawLine(tip, left)
+    painter.drawLine(tip, right)
+
+
+def _paint_magnifier(painter: QPainter, mode: str, center: QPointF = QPointF(15, 15)) -> None:
+    painter.setPen(QPen(QColor("#132238"), 2.1, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+    painter.setBrush(Qt.NoBrush)
+    painter.drawEllipse(center, 7.1, 7.1)
+    painter.drawLine(QPointF(center.x() + 5, center.y() + 5), QPointF(center.x() + 13, center.y() + 13))
+    painter.setPen(QPen(QColor("#2f7df6"), 2.0, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+    if mode == "fit":
+        painter.drawLine(QPointF(center.x() - 5, center.y() + 5), QPointF(center.x() + 5, center.y() - 5))
+        painter.drawLine(QPointF(center.x() + 5, center.y() - 5), QPointF(center.x() + 5, center.y() + 1))
+        painter.drawLine(QPointF(center.x() + 5, center.y() - 5), QPointF(center.x() - 1, center.y() - 5))
+    else:
+        painter.drawLine(QPointF(center.x() - 4, center.y()), QPointF(center.x() + 4, center.y()))
+        if mode == "in":
+            painter.drawLine(QPointF(center.x(), center.y() - 4), QPointF(center.x(), center.y() + 4))
+
+
+def _zoom_cursor(mode: str) -> QCursor:
+    pixmap = QPixmap(32, 32)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.Antialiasing, True)
+    _paint_magnifier(painter, "in" if mode == "zoom_in" else "out", QPointF(12, 12))
+    painter.end()
+    return QCursor(pixmap, 12, 12)
+
+
+def _radio_icon(checked: bool) -> QIcon:
+    pixmap = QPixmap(22, 22)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.Antialiasing, True)
+    painter.setPen(QPen(QColor("#18314f"), 2.0))
+    painter.setBrush(QColor("#ffffff"))
+    painter.drawEllipse(QPointF(11, 11), 8.0, 8.0)
+    if checked:
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor("#2f7df6"))
+        painter.drawEllipse(QPointF(11, 11), 4.6, 4.6)
     painter.end()
     return QIcon(pixmap)
 
 
-def _paint_magnifier(painter: QPainter, rect: QRectF, mode: str) -> None:
-    painter.setPen(QPen(QColor("#0d243d"), 2.0, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
-    center = rect.center() + QPointF(-2.0, -2.0)
-    radius = rect.width() * 0.23
-    painter.drawEllipse(center, radius, radius)
-    painter.drawLine(center + QPointF(radius * 0.72, radius * 0.72), rect.bottomRight() - QPointF(7, 7))
-    painter.setPen(QPen(QColor("#2474d6"), 2.0, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
-    if mode == "in":
-        painter.drawLine(center + QPointF(-radius * 0.48, 0), center + QPointF(radius * 0.48, 0))
-        painter.drawLine(center + QPointF(0, -radius * 0.48), center + QPointF(0, radius * 0.48))
-    elif mode == "out":
-        painter.drawLine(center + QPointF(-radius * 0.48, 0), center + QPointF(radius * 0.48, 0))
-    else:
-        fit_rect = QRectF(center.x() - radius * 0.58, center.y() - radius * 0.58, radius * 1.16, radius * 1.16)
-        painter.drawRoundedRect(fit_rect, 1.6, 1.6)
+def _tool_icon(key: str) -> QIcon:
+    pixmap = QPixmap(36, 36)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.Antialiasing, True)
+    accents = {"select": "#8dc1ff", "line": "#72d6c7", "vector": "#8bbcff", "angle": "#f0c86a", "text": "#d8b6ff", "grid": "#b8d4ef", "snap": "#93d6bd", "unit": "#78e1cf", "ruler": "#ffc35a", "zoom": "#9bc8ff"}
+    _badge(painter, QRectF(3, 3, 30, 30), QColor(accents.get(key, "#9bc8ff")))
+    ink = QColor("#132238")
+    painter.setPen(QPen(ink, 2.15, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+    painter.setBrush(Qt.NoBrush)
+    if key == "select":
+        painter.setBrush(ink)
+        painter.drawPolygon(QPolygonF([QPointF(10, 8), QPointF(25, 19), QPointF(18, 20), QPointF(22, 29), QPointF(17, 30), QPointF(14, 22), QPointF(9, 26)]))
+    elif key == "line":
+        painter.drawLine(QPointF(9, 26), QPointF(27, 10))
+        painter.setBrush(QColor("#ffffff"))
+        painter.drawEllipse(QPointF(9, 26), 2.6, 2.6)
+        painter.drawEllipse(QPointF(27, 10), 2.6, 2.6)
+    elif key == "vector":
+        painter.drawLine(QPointF(8, 27), QPointF(27, 10))
+        _arrow_head(painter, QPointF(27, 10), QPointF(20, 16), 7.0)
+    elif key == "angle":
+        painter.drawLine(QPointF(9, 27), QPointF(28, 27))
+        painter.drawLine(QPointF(9, 27), QPointF(23, 10))
+        painter.setPen(QPen(QColor("#e6822a"), 2.0, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+        painter.drawArc(QRectF(11, 15, 16, 16), 0, 66 * 16)
+    elif key == "text":
+        font = painter.font()
+        font.setFamily("Times New Roman")
+        font.setBold(True)
+        font.setItalic(False)
+        font.setPointSize(18)
+        painter.setFont(font)
+        painter.drawText(QRectF(6, 4, 24, 27), Qt.AlignCenter, "T")
+    elif key == "grid":
+        painter.setPen(QPen(ink, 1.35))
+        for pos in (11, 18, 25):
+            painter.drawLine(QPointF(pos, 8), QPointF(pos, 28))
+            painter.drawLine(QPointF(8, pos), QPointF(28, pos))
+    elif key == "snap":
+        painter.drawLine(QPointF(10, 26), QPointF(10, 13))
+        painter.drawLine(QPointF(26, 26), QPointF(26, 13))
+        painter.drawArc(QRectF(10, 8, 16, 16), 180 * 16, -180 * 16)
+        painter.setBrush(QColor("#ffffff"))
+        painter.drawEllipse(QPointF(18, 12), 2.5, 2.5)
+    elif key == "unit":
+        painter.drawLine(QPointF(10, 22), QPointF(26, 22))
+        painter.drawLine(QPointF(10, 22), QPointF(10, 15))
+        painter.drawLine(QPointF(26, 22), QPointF(26, 15))
+        painter.setPen(QPen(QColor("#ff8a35"), 1.7, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+        painter.drawLine(QPointF(11, 12), QPointF(25, 12))
+        _arrow_head(painter, QPointF(11, 12), QPointF(16, 12), 3.8)
+        _arrow_head(painter, QPointF(25, 12), QPointF(20, 12), 3.8)
+    elif key == "ruler":
+        painter.drawRoundedRect(QRectF(8, 12, 21, 11), 2, 2)
+        painter.setPen(QPen(ink, 1.1))
+        for index, x in enumerate((12, 16, 20, 24)):
+            painter.drawLine(QPointF(x, 12), QPointF(x, 19 if index % 2 == 0 else 17))
+    elif key == "zoom":
+        _paint_magnifier(painter, "in")
+    painter.end()
+    return QIcon(pixmap)
 
 
 def _mini_zoom_icon(action: str) -> QIcon:
-    mode = "fit" if action == "zoom_fit" else "in" if action == "zoom_in" else "out"
-    return _round_icon(32, lambda painter, rect: _paint_magnifier(painter, rect, mode))
-
-
-def _paint_unit_icon(painter: QPainter, rect: QRectF) -> None:
-    painter.setPen(QPen(QColor("#0d243d"), 2.0, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
-    y = rect.center().y() + 3
-    x1 = rect.left() + 7
-    x2 = rect.right() - 7
-    painter.drawLine(QPointF(x1, y), QPointF(x2, y))
-    for index, x in enumerate((x1, x1 + 8, x1 + 16, x1 + 24, x2)):
-        height = 10 if index in (0, 2, 4) else 6
-        painter.drawLine(QPointF(x, y), QPointF(x, y - height))
-    painter.setPen(QPen(QColor("#2474d6"), 1.7, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
-    painter.drawText(QRectF(rect.left() + 6, rect.top() + 4, rect.width() - 12, 13), Qt.AlignmentFlag.AlignCenter, "mm")
-
-
-def _paint_grid_icon(painter: QPainter, rect: QRectF) -> None:
-    painter.setPen(QPen(QColor("#0d243d"), 1.35))
-    left = rect.left() + 8
-    top = rect.top() + 8
-    step = 6
-    for index in range(4):
-        painter.drawLine(QPointF(left, top + index * step), QPointF(left + 18, top + index * step))
-        painter.drawLine(QPointF(left + index * step, top), QPointF(left + index * step, top + 18))
-    painter.setPen(QPen(QColor("#2474d6"), 2.0, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
-    painter.drawLine(QPointF(left + 1, top + 18), QPointF(left + 18, top + 1))
-
-
-def _paint_snap_icon(painter: QPainter, rect: QRectF) -> None:
-    painter.setPen(QPen(QColor("#0d243d"), 2.0, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
-    painter.drawArc(QRectF(rect.left() + 8, rect.top() + 6, 16, 18), 30 * 16, 230 * 16)
-    painter.drawArc(QRectF(rect.left() + 16, rect.top() + 6, 16, 18), -80 * 16, 230 * 16)
-    painter.setPen(QPen(QColor("#2474d6"), 1.8, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
-    painter.drawLine(QPointF(rect.center().x(), rect.top() + 8), QPointF(rect.center().x(), rect.bottom() - 8))
-
-
-def _paint_ruler_icon(painter: QPainter, rect: QRectF) -> None:
-    painter.setPen(QPen(QColor("#0d243d"), 1.7, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
-    box = QRectF(rect.left() + 7, rect.top() + 9, rect.width() - 14, 13)
-    painter.drawRoundedRect(box, 3, 3)
-    for index in range(5):
-        x = box.left() + 4 + index * 5
-        height = 8 if index % 2 == 0 else 5
-        painter.drawLine(QPointF(x, box.top()), QPointF(x, box.top() + height))
-
-
-def _paint_select_icon(painter: QPainter, rect: QRectF) -> None:
-    painter.setPen(QPen(QColor("#0d243d"), 1.8, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
-    points = QPolygonF([
-        QPointF(rect.left() + 9, rect.top() + 7),
-        QPointF(rect.left() + 24, rect.top() + 20),
-        QPointF(rect.left() + 17, rect.top() + 21),
-        QPointF(rect.left() + 20, rect.top() + 27),
-        QPointF(rect.left() + 16, rect.top() + 28),
-        QPointF(rect.left() + 13, rect.top() + 22),
-        QPointF(rect.left() + 8, rect.top() + 27),
-    ])
-    painter.drawPolygon(points)
-
-
-def _paint_undo_icon(painter: QPainter, rect: QRectF, flipped: bool = False) -> None:
-    painter.setPen(QPen(QColor("#0d243d"), 2.2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
-    if flipped:
-        painter.drawArc(QRectF(rect.left() + 8, rect.top() + 8, 18, 16), 20 * 16, 250 * 16)
-        painter.drawLine(QPointF(rect.right() - 7, rect.top() + 14), QPointF(rect.right() - 14, rect.top() + 9))
-        painter.drawLine(QPointF(rect.right() - 7, rect.top() + 14), QPointF(rect.right() - 13, rect.top() + 19))
-    else:
-        painter.drawArc(QRectF(rect.left() + 8, rect.top() + 8, 18, 16), -90 * 16, 250 * 16)
-        painter.drawLine(QPointF(rect.left() + 7, rect.top() + 14), QPointF(rect.left() + 14, rect.top() + 9))
-        painter.drawLine(QPointF(rect.left() + 7, rect.top() + 14), QPointF(rect.left() + 13, rect.top() + 19))
+    pixmap = QPixmap(34, 34)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.Antialiasing, True)
+    _badge(painter, QRectF(3, 3, 28, 28), QColor({"zoom_in": "#8dc1ff", "zoom_out": "#b8d4ef", "zoom_fit": "#78e1cf"}[action]))
+    _paint_magnifier(painter, {"zoom_in": "in", "zoom_out": "out", "zoom_fit": "fit"}[action])
+    painter.end()
+    return QIcon(pixmap)
 
 
 def _style_guide_menu(menu: QMenu) -> None:
-    menu.setWindowFlags(menu.windowFlags() | Qt.WindowType.FramelessWindowHint)
-    menu.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
     menu.setStyleSheet(
-        """
-        QMenu {
-            background: #eaf2fb;
-            border: 1px solid #9fb2c8;
-            border-radius: 10px;
-            padding: 5px;
-            color: #0d243d;
-            font-family: "Times New Roman";
-            font-style: italic;
-            font-weight: 700;
-        }
-        QMenu::item {
-            padding: 6px 20px 6px 12px;
-            border-radius: 7px;
-        }
-        QMenu::item:selected {
-            background: #d6e6f8;
-            color: #0d243d;
-        }
-        """
+        "QMenu {background:qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 #ffffff, stop:0.55 #edf8ff, stop:1 #fff1d3); border:1px solid #8fa2bb; border-radius:10px; padding:6px;}"
+        "QMenu::item {color:#1f3148; padding:6px 24px 6px 12px; border-radius:7px; font-size:12px; font-style:italic; font-weight:800;}"
+        "QMenu::item:selected {background:#fff4cf; color:#132238;}"
     )
 
 
-class _RoundedPopupDialog(QDialog):
-    def resizeEvent(self, event):  # type: ignore[override]
-        super().resizeEvent(event)
-        _apply_rounded_mask(self, 14)
-
-
-class _StartToolButton(QPushButton):
-    def __init__(self, title: str, icon: QIcon, parent: QWidget | None = None) -> None:
-        super().__init__(parent)
-        self.setObjectName("StartToolButton")
-        self.setToolTip(title)
-        self.setIcon(icon)
-        self.setIconSize(QSize(30, 30))
-        self.setFixedSize(38, 36)
-        self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
-        self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-
-
-class _ToolPopupShell(QWidget):
-    def __init__(self, parent: QWidget | None = None) -> None:
-        super().__init__(parent)
-        self.setObjectName("StartToolPopupShell")
-        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-
-
-class _RadioChoiceButton(QPushButton):
-    def __init__(self, label: str, checked: bool, parent: QWidget | None = None) -> None:
-        super().__init__(label, parent)
-        self._checked = checked
-        self.setObjectName("RadioChoiceButton")
-        self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
-        self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        self.setMinimumHeight(30)
-        self.setCheckable(False)
-
-    def set_checked(self, checked: bool) -> None:
-        self._checked = checked
-        self.update()
-
-    def paintEvent(self, event):  # type: ignore[override]
-        super().paintEvent(event)
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        center = QPointF(15, self.height() / 2)
-        painter.setPen(QPen(QColor("#17324c"), 1.5))
-        painter.setBrush(QColor("#f8fbff"))
-        painter.drawEllipse(center, 6.2, 6.2)
-        if self._checked:
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(QColor("#2474d6"))
-            painter.drawEllipse(center, 3.3, 3.3)
-        painter.end()
-
-
 class _GuideLine(QWidget):
-    def __init__(self, orientation: str, position: float, parent: QWidget, start_bar: "StartBar" | None = None, persistent: bool = True) -> None:
+    def __init__(self, orientation: str, position: float, parent: QWidget, start_bar: "StartBar | None" = None, persistent: bool = True) -> None:
         super().__init__(parent)
         self.orientation = orientation
         self.position = position
         self._start_bar = start_bar
-        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, False)
-        self.setCursor(QCursor(Qt.CursorShape.SizeAllCursor))
-        self._drag_start: QPoint | None = None
-        self._position_start = position
-        if orientation == "vertical":
-            self.setGeometry(int(position) - 4, 0, 8, parent.height())
-        else:
-            self.setGeometry(0, int(position) - 4, parent.width(), 8)
-        self.show()
-        if persistent and self._start_bar is not None:
+        self._persistent = persistent
+        self._dragging = False
+        self.setCursor(Qt.CursorShape.SizeVerCursor if orientation == "horizontal" else Qt.CursorShape.SizeHorCursor)
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self._place()
+        if self._start_bar is not None and self._persistent:
             self._start_bar._register_ruler_guide(self)
+        self.show()
 
-    def paintEvent(self, event):  # type: ignore[override]
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        pen = QPen(GUIDE_COLOR, 1.7, Qt.PenStyle.DashLine)
-        pen.setDashPattern([5, 4])
-        painter.setPen(pen)
-        if self.orientation == "vertical":
-            x = self.width() / 2
-            painter.drawLine(QPointF(x, 0), QPointF(x, self.height()))
+    def _place(self) -> None:
+        parent = self.parentWidget()
+        if parent is None:
+            return
+        if self.orientation == "horizontal":
+            self.setGeometry(0, int(self.position) - 2, parent.width(), 5)
         else:
-            y = self.height() / 2
-            painter.drawLine(QPointF(0, y), QPointF(self.width(), y))
+            self.setGeometry(int(self.position) - 2, 0, 5, parent.height())
+        self.update()
 
-    def mousePressEvent(self, event):  # type: ignore[override]
+    def paintEvent(self, event) -> None:  # noqa: N802
+        super().paintEvent(event)
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing, True)
+        painter.setPen(QPen(GUIDE_COLOR, 1.6, Qt.PenStyle.DashLine, Qt.PenCapStyle.RoundCap))
+        if self.orientation == "horizontal":
+            painter.drawLine(0, 2, self.width(), 2)
+        else:
+            painter.drawLine(2, 0, 2, self.height())
+        painter.end()
+
+    def mousePressEvent(self, event) -> None:  # noqa: N802
         if event.button() == Qt.MouseButton.LeftButton:
-            self._drag_start = event.globalPosition().toPoint()
-            self._position_start = self.position
+            self._dragging = True
             event.accept()
             return
         super().mousePressEvent(event)
 
-    def mouseMoveEvent(self, event):  # type: ignore[override]
-        if self._drag_start is None:
-            super().mouseMoveEvent(event)
+    def mouseMoveEvent(self, event) -> None:  # noqa: N802
+        if self._dragging and self.parentWidget() is not None:
+            point = self.parentWidget().mapFromGlobal(event.globalPosition().toPoint())
+            self.position = point.y() if self.orientation == "horizontal" else point.x()
+            self._place()
+            event.accept()
             return
-        delta = event.globalPosition().toPoint() - self._drag_start
-        if self.orientation == "vertical":
-            self.position = max(0, min(self.parentWidget().width(), self._position_start + delta.x()))
-            self.setGeometry(int(self.position) - 4, 0, 8, self.parentWidget().height())
-        else:
-            self.position = max(0, min(self.parentWidget().height(), self._position_start + delta.y()))
-            self.setGeometry(0, int(self.position) - 4, self.parentWidget().width(), 8)
-        event.accept()
+        super().mouseMoveEvent(event)
 
-    def mouseReleaseEvent(self, event):  # type: ignore[override]
-        self._drag_start = None
+    def mouseReleaseEvent(self, event) -> None:  # noqa: N802
+        self._dragging = False
         super().mouseReleaseEvent(event)
 
-    def contextMenuEvent(self, event):  # type: ignore[override]
+    def contextMenuEvent(self, event) -> None:  # noqa: N802
         menu = QMenu(self)
         _style_guide_menu(menu)
+        menu.addAction("Copy")
+        menu.addAction("Cut")
+        menu.addAction("Paste")
         delete = menu.addAction("Delete")
         chosen = menu.exec(event.globalPos())
         if chosen == delete:
@@ -321,538 +261,582 @@ class _GuideLine(QWidget):
 
 
 class _RulerOverlay(QWidget):
-    def __init__(self, orientation: str, canvas: QWidget, start_bar: "StartBar") -> None:
-        super().__init__(canvas)
-        self.orientation = orientation
-        self._canvas = canvas
+    def __init__(self, start_bar: "StartBar", orientation: str, parent: QWidget) -> None:
+        super().__init__(parent)
         self._start_bar = start_bar
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
-        self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
-        self._dragging = False
-        self._preview: _GuideLine | None = None
+        self._orientation = orientation
+        self._dragging_guide = False
+        self._active_guide: _GuideLine | None = None
+        self.setCursor(Qt.CursorShape.SizeVerCursor if orientation == "top" else Qt.CursorShape.SizeHorCursor)
 
-    def paintEvent(self, event):  # type: ignore[override]
+    def paintEvent(self, event) -> None:  # noqa: N802
+        super().paintEvent(event)
         painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter.fillRect(self.rect(), QColor(238, 244, 251, 238))
-        painter.setPen(QPen(QColor("#a9bbcf"), 1))
-        painter.drawRect(self.rect().adjusted(0, 0, -1, -1))
-        font = painter.font()
-        font.setPointSize(7)
-        font.setBold(False)
-        painter.setFont(font)
-        unit = self._start_bar.current_unit
-        step_px = max(8.0, self._start_bar._grid_spacing_mm * MM_TO_SCREEN_PX)
-        origin = self._start_bar._ruler_origin
-        if self.orientation == "top":
-            zero = origin.x() - self.x()
-            self._paint_horizontal_ticks(painter, zero, step_px, unit)
-        else:
-            zero = origin.y() - self.y()
-            self._paint_vertical_ticks(painter, zero, step_px, unit)
+        painter.fillRect(self.rect(), QColor(20, 37, 58, 230))
+        painter.setPen(QPen(QColor("#ffffff"), 1.0))
+        spacing = max(1.0, self._start_bar._unit_to_canvas_px(1.0, self._start_bar._unit))
+        length = self.width() if self._orientation == "top" else self.height()
+        zero = self._start_bar._ruler_origin.x() - self.x() if self._orientation == "top" else self._start_bar._ruler_origin.y() - self.y()
+        index = int(-zero / spacing) - 2
+        while True:
+            position = zero + index * spacing
+            if position > length + spacing:
+                break
+            if position >= 0:
+                abs_index = abs(index)
+                tick = 22 if abs_index % 10 == 0 else 15 if abs_index % 5 == 0 else 8
+                if self._orientation == "top":
+                    painter.drawLine(QPointF(position, self.height()), QPointF(position, self.height() - tick))
+                    if abs_index % 10 == 0:
+                        painter.drawText(QRectF(position + 2, 1, 52, 14), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, str(index))
+                else:
+                    painter.drawLine(QPointF(self.width(), position), QPointF(self.width() - tick, position))
+                    if abs_index % 10 == 0:
+                        painter.drawText(QRectF(2, position + 2, self.width() - 4, 14), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, str(index))
+            index += 1
+        painter.end()
 
-    def _paint_horizontal_ticks(self, painter: QPainter, zero: float, step_px: float, unit: str) -> None:
-        width = self.width()
-        painter.setPen(QPen(QColor("#17324c"), 1))
-        index_start = int((0 - zero) // step_px) - 2
-        index_end = int((width - zero) // step_px) + 2
-        for index in range(index_start, index_end + 1):
-            x = zero + index * step_px
-            if x < 0 or x > width:
-                continue
-            magnitude = abs(index)
-            if magnitude % 10 == 0:
-                length = 17
-                label = str(int(_mm_to_unit(index * self._start_bar._grid_spacing_mm, unit)))
-                painter.drawText(QRectF(x - 16, 1, 32, 10), Qt.AlignmentFlag.AlignCenter, label)
-            elif magnitude % 5 == 0:
-                length = 12
-            else:
-                length = 7
-            painter.drawLine(QPointF(x, self.height()), QPointF(x, self.height() - length))
-
-    def _paint_vertical_ticks(self, painter: QPainter, zero: float, step_px: float, unit: str) -> None:
-        height = self.height()
-        painter.setPen(QPen(QColor("#17324c"), 1))
-        index_start = int((0 - zero) // step_px) - 2
-        index_end = int((height - zero) // step_px) + 2
-        for index in range(index_start, index_end + 1):
-            y = zero + index * step_px
-            if y < 0 or y > height:
-                continue
-            magnitude = abs(index)
-            if magnitude % 10 == 0:
-                length = 17
-                label = str(int(_mm_to_unit(index * self._start_bar._grid_spacing_mm, unit)))
-                painter.save()
-                painter.translate(2, y + 10)
-                painter.rotate(-90)
-                painter.drawText(QRectF(-16, -2, 32, 10), Qt.AlignmentFlag.AlignCenter, label)
-                painter.restore()
-            elif magnitude % 5 == 0:
-                length = 12
-            else:
-                length = 7
-            painter.drawLine(QPointF(self.width(), y), QPointF(self.width() - length, y))
-
-    def mousePressEvent(self, event):  # type: ignore[override]
+    def mousePressEvent(self, event) -> None:  # noqa: N802
         if event.button() == Qt.MouseButton.LeftButton:
-            self._dragging = True
+            self._dragging_guide = True
+            self._create_or_move_guide(event.globalPosition().toPoint())
             event.accept()
             return
         super().mousePressEvent(event)
 
-    def mouseMoveEvent(self, event):  # type: ignore[override]
-        if not self._dragging:
-            super().mouseMoveEvent(event)
+    def mouseMoveEvent(self, event) -> None:  # noqa: N802
+        if self._dragging_guide:
+            self._create_or_move_guide(event.globalPosition().toPoint())
+            event.accept()
             return
-        pos = self.mapToParent(event.position().toPoint())
-        if self._preview is None:
-            orientation = "horizontal" if self.orientation == "top" else "vertical"
-            self._preview = _GuideLine(orientation, pos.y() if orientation == "horizontal" else pos.x(), self._canvas, self._start_bar, persistent=False)
-        else:
-            if self._preview.orientation == "horizontal":
-                self._preview.position = pos.y()
-                self._preview.setGeometry(0, int(pos.y()) - 4, self._canvas.width(), 8)
-            else:
-                self._preview.position = pos.x()
-                self._preview.setGeometry(int(pos.x()) - 4, 0, 8, self._canvas.height())
-        event.accept()
+        super().mouseMoveEvent(event)
 
-    def mouseReleaseEvent(self, event):  # type: ignore[override]
-        if self._dragging:
-            pos = self.mapToParent(event.position().toPoint())
-            orientation = "horizontal" if self.orientation == "top" else "vertical"
-            _GuideLine(orientation, pos.y() if orientation == "horizontal" else pos.x(), self._canvas, self._start_bar)
-            if self._preview is not None:
-                self._preview.deleteLater()
-                self._preview = None
-            self._dragging = False
+    def mouseReleaseEvent(self, event) -> None:  # noqa: N802
+        if self._dragging_guide:
+            self._dragging_guide = False
+            self._active_guide = None
             event.accept()
             return
         super().mouseReleaseEvent(event)
+
+    def _create_or_move_guide(self, global_point: QPoint) -> None:
+        canvas = self.parentWidget()
+        if canvas is None:
+            return
+        point = canvas.mapFromGlobal(global_point)
+        orientation = "horizontal" if self._orientation == "top" else "vertical"
+        position = point.y() if orientation == "horizontal" else point.x()
+        if self._active_guide is None:
+            self._active_guide = _GuideLine(orientation, position, canvas, self._start_bar)
+        else:
+            self._active_guide.position = position
+            self._active_guide._place()
 
 
 class _RulerCorner(QWidget):
-    def __init__(self, canvas: QWidget, start_bar: "StartBar") -> None:
-        super().__init__(canvas)
-        self._canvas = canvas
+    def __init__(self, start_bar: "StartBar", parent: QWidget) -> None:
+        super().__init__(parent)
         self._start_bar = start_bar
-        self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         self._dragging = False
-        self._preview_h: _GuideLine | None = None
-        self._preview_v: _GuideLine | None = None
+        self._pressed = False
+        self._press_pos: QPointF | None = None
+        self._origin_h_guide: _GuideLine | None = None
+        self._origin_v_guide: _GuideLine | None = None
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
 
-    def paintEvent(self, event):  # type: ignore[override]
+    def paintEvent(self, event) -> None:  # noqa: N802
+        super().paintEvent(event)
         painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        rect = QRectF(4, 4, self.width() - 8, self.height() - 8)
+        painter.setRenderHint(QPainter.Antialiasing, True)
+        painter.fillRect(self.rect(), QColor(13, 29, 48, 240))
+        rect = QRectF(4, 3, self.width() - 8, self.height() - 6)
         gradient = QLinearGradient(rect.topLeft(), rect.bottomRight())
-        gradient.setColorAt(0.0, QColor("#ffffff"))
-        gradient.setColorAt(1.0, QColor("#adc0d7"))
-        painter.setBrush(gradient)
-        painter.setPen(QPen(QColor("#7f96b0"), 1.3))
-        painter.drawRoundedRect(rect, 7, 7)
-        painter.setPen(QPen(QColor("#0d243d"), 1.5, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
-        painter.drawLine(rect.center() + QPointF(-5, 0), rect.center() + QPointF(5, 0))
-        painter.drawLine(rect.center() + QPointF(0, -5), rect.center() + QPointF(0, 5))
+        if self._pressed:
+            gradient.setColorAt(0.0, QColor("#7f95b2"))
+            gradient.setColorAt(1.0, QColor("#213d5f"))
+        else:
+            gradient.setColorAt(0.0, QColor("#ffffff"))
+            gradient.setColorAt(0.48, QColor("#dff4ff"))
+            gradient.setColorAt(1.0, QColor("#ffbf69"))
+        path = QPainterPath()
+        path.addRoundedRect(rect, 6, 6)
+        painter.fillPath(path, gradient)
+        painter.setPen(QPen(QColor("#ffffff"), 1.0))
+        painter.drawPath(path)
+        painter.setPen(QPen(QColor("#132238"), 1.5, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+        painter.drawLine(QPointF(10, 16), QPointF(10, 8))
+        painter.drawLine(QPointF(10, 16), QPointF(20, 16))
+        painter.setBrush(QColor("#2f7df6"))
+        painter.drawEllipse(QPointF(10, 16), 2.4, 2.4)
+        painter.end()
 
-    def mousePressEvent(self, event):  # type: ignore[override]
+    def mousePressEvent(self, event) -> None:  # noqa: N802
         if event.button() == Qt.MouseButton.LeftButton:
             self._dragging = True
+            self._pressed = True
+            self._press_pos = event.position()
+            self.update()
             event.accept()
             return
         super().mousePressEvent(event)
 
-    def mouseMoveEvent(self, event):  # type: ignore[override]
-        if not self._dragging:
-            super().mouseMoveEvent(event)
+    def mouseMoveEvent(self, event) -> None:  # noqa: N802
+        if self._dragging and self.parentWidget() is not None:
+            if self._press_pos is not None:
+                delta = event.position() - self._press_pos
+                if abs(delta.x()) + abs(delta.y()) >= 4:
+                    self._pressed = False
+                    self.update()
+                    self._preview_origin(event.globalPosition().toPoint())
+            event.accept()
             return
-        pos = self.mapToParent(event.position().toPoint())
-        if self._preview_h is None:
-            self._preview_h = _GuideLine("horizontal", pos.y(), self._canvas, self._start_bar, persistent=False)
-            self._preview_v = _GuideLine("vertical", pos.x(), self._canvas, self._start_bar, persistent=False)
-        else:
-            self._preview_h.position = pos.y()
-            self._preview_h.setGeometry(0, int(pos.y()) - 4, self._canvas.width(), 8)
-            self._preview_v.position = pos.x()
-            self._preview_v.setGeometry(int(pos.x()) - 4, 0, 8, self._canvas.height())
-        event.accept()
+        super().mouseMoveEvent(event)
 
-    def mouseReleaseEvent(self, event):  # type: ignore[override]
+    def mouseReleaseEvent(self, event) -> None:  # noqa: N802
         if self._dragging:
-            pos = self.mapToParent(event.position().toPoint())
-            moved = self._preview_h is not None or self._preview_v is not None
-            if moved:
-                self._start_bar._set_ruler_origin(QPointF(pos.x(), pos.y()), custom=True)
-            else:
-                self._start_bar._set_ruler_origin(QPointF(RULER_SIZE, RULER_SIZE), custom=True)
-            for preview in (self._preview_h, self._preview_v):
-                if preview is not None:
-                    preview.deleteLater()
-            self._preview_h = None
-            self._preview_v = None
             self._dragging = False
+            canvas = self.parentWidget()
+            if canvas is not None:
+                delta = QPointF(0, 0) if self._press_pos is None else event.position() - self._press_pos
+                moved = abs(delta.x()) + abs(delta.y())
+                if moved < 4:
+                    self._start_bar._set_ruler_origin(QPointF(0, 0), custom=True)
+                else:
+                    point = canvas.mapFromGlobal(event.globalPosition().toPoint())
+                    self._start_bar._set_ruler_origin(QPointF(point), custom=True)
+            self._pressed = False
+            self._clear_origin_preview()
+            self._press_pos = None
+            self.update()
             event.accept()
             return
         super().mouseReleaseEvent(event)
 
+    def _preview_origin(self, global_point: QPoint) -> None:
+        canvas = self.parentWidget()
+        if canvas is None:
+            return
+        point = canvas.mapFromGlobal(global_point)
+        if self._origin_h_guide is None:
+            self._origin_h_guide = _GuideLine("horizontal", point.y(), canvas, persistent=False)
+        else:
+            self._origin_h_guide.position = point.y()
+            self._origin_h_guide._place()
+        if self._origin_v_guide is None:
+            self._origin_v_guide = _GuideLine("vertical", point.x(), canvas, persistent=False)
+        else:
+            self._origin_v_guide.position = point.x()
+            self._origin_v_guide._place()
+
+    def _clear_origin_preview(self) -> None:
+        for guide in (self._origin_h_guide, self._origin_v_guide):
+            if guide is not None:
+                guide.deleteLater()
+        self._origin_h_guide = None
+        self._origin_v_guide = None
+
 
 class StartBar(QWidget):
-    action_requested = Signal(str)
-    unit_changed = Signal(str)
-    grid_changed = Signal(bool, float, str)
-    snap_changed = Signal(bool)
+    tool_requested = Signal(str)
     zoom_requested = Signal(str)
+    ruler_changed = Signal(bool, str)
+    grid_changed = Signal(bool, float, str)
+    unit_changed = Signal(str)
 
-    def __init__(self, host_window: QWidget | None = None, parent: QWidget | None = None) -> None:
-        super().__init__(parent)
-        self._host_window = host_window
-        self.current_unit = "mm"
+    def __init__(self, tools: tuple[StartBarTool, ...] = DEFAULT_START_BAR_TOOLS) -> None:
+        super().__init__()
+        self.setObjectName("StartBar")
+        self.setFixedHeight(62)
+        self.tools = tools
+        self._buttons: dict[str, QPushButton] = {}
+        self._popup: QDialog | None = None
+        self._unit = "mm"
         self._grid_enabled = True
         self._grid_spacing = 4.0
-        self._grid_spacing_mm = _unit_to_mm(self._grid_spacing, self.current_unit)
-        self._snap_enabled = False
-        self._active_zoom_mode: str | None = None
-        self._rubber_band: QRubberBand | None = None
-        self._rubber_origin: QPoint | None = None
-        self._canvas: QWidget | None = None
-        self._grid_hooked = False
         self._ruler_enabled = False
-        self._ruler_origin = QPointF(0.0, 0.0)
-        self._ruler_custom_origin = False
-        self._top_ruler: _RulerOverlay | None = None
-        self._left_ruler: _RulerOverlay | None = None
+        self._zoom_mode: str | None = None
+        self._zoom_origin: QPoint | None = None
+        self._rubber_band: QRubberBand | None = None
+        self._ruler_top: _RulerOverlay | None = None
+        self._ruler_left: _RulerOverlay | None = None
         self._ruler_corner: _RulerCorner | None = None
+        self._ruler_origin = QPointF(0, 0)
+        self._ruler_origin_custom = False
         self._ruler_guides: list[_GuideLine] = []
-        self.setObjectName("StartBar")
-        self.setMinimumHeight(50)
-        self.setMaximumHeight(62)
+        self._hooked_canvas: QWidget | None = None
+
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(12, 7, 12, 7)
+        layout.setContentsMargins(14, 8, 14, 8)
         layout.setSpacing(8)
-
-        self._buttons: dict[str, _StartToolButton] = {}
-        specs: list[tuple[str, str, QIcon, Callable[[], None]]] = [
-            ("select", "Select", _round_icon(32, _paint_select_icon), lambda: self.action_requested.emit("select")),
-            ("undo", "Undo", _round_icon(32, lambda painter, rect: _paint_undo_icon(painter, rect, False)), lambda: self.action_requested.emit("undo")),
-            ("redo", "Redo", _round_icon(32, lambda painter, rect: _paint_undo_icon(painter, rect, True)), lambda: self.action_requested.emit("redo")),
-            ("zoom", "Zoom", _mini_zoom_icon("zoom_in"), self._show_zoom_popup),
-            ("ruler", "Ruler", _round_icon(32, _paint_ruler_icon), self._toggle_ruler),
-            ("grid", "Grid", _round_icon(32, _paint_grid_icon), self._show_grid_popup),
-            ("snap", "Snap", _round_icon(32, _paint_snap_icon), self._show_snap_popup),
-            ("unit", "Unit", _round_icon(32, _paint_unit_icon), self._show_unit_popup),
-        ]
-        for key, title, icon, callback in specs:
-            button = _StartToolButton(title, icon, self)
-            button.clicked.connect(callback)
+        for tool in tools:
+            button = QPushButton()
+            button.setObjectName("ToolButton")
+            button.setToolTip(tool.tooltip)
+            button.setIcon(_tool_icon(tool.key))
+            button.setIconSize(QSize(36, 36))
+            button.setFixedSize(48, 42)
+            button.setProperty("toolKey", tool.key)
+            button.setProperty("toolLabel", tool.label)
+            button.setProperty("propertiesSchema", tool.properties_schema)
+            button.clicked.connect(lambda checked=False, key=tool.key: self._handle_tool_click(key))
+            self._buttons[tool.key] = button
             layout.addWidget(button)
-            self._buttons[key] = button
         layout.addStretch(1)
-        self._refresh_buttons()
+        self._refresh_tooltips()
 
-    def showEvent(self, event):  # type: ignore[override]
-        super().showEvent(event)
-        self.sync_with_canvas()
-
-    def sync_with_canvas(self) -> None:
-        self._ensure_canvas_hooks()
-        self._apply_grid_to_host()
+    def button(self, key: str) -> QPushButton | None:
+        return self._buttons.get(key)
 
     def set_tool_visible(self, key: str, visible: bool) -> None:
         button = self._buttons.get(key)
         if button is not None:
             button.setVisible(visible)
 
-    def _popup_base(self, width: int) -> tuple[QDialog, QVBoxLayout]:
-        popup = _RoundedPopupDialog(self)
-        popup.setWindowFlags(Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint)
-        popup.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
-        popup.setFixedWidth(width)
-        root = QVBoxLayout(popup)
-        root.setContentsMargins(0, 0, 0, 0)
-        shell = _ToolPopupShell(popup)
-        shell.setStyleSheet(
-            """
-            #StartToolPopupShell {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-                    stop:0 #f8fbff, stop:0.55 #e9f1fb, stop:1 #d3e0ef);
-                border: 1px solid #9fb2c8;
-                border-radius: 13px;
-            }
-            QPushButton {
-                border: none;
-                background: transparent;
-                color: #0d243d;
-                font-family: "Times New Roman";
-                font-style: italic;
-                font-weight: 700;
-            }
-            QPushButton:hover {
-                background: rgba(255, 255, 255, 0.38);
-                border-radius: 8px;
-            }
-            #RadioChoiceButton {
-                text-align: left;
-                padding-left: 30px;
-                padding-right: 10px;
-                border-radius: 8px;
-                background: rgba(255, 255, 255, 0.18);
-            }
-            #RadioChoiceButton:hover {
-                background: rgba(255, 255, 255, 0.42);
-            }
-            QDoubleSpinBox {
-                background: #f8fbff;
-                border: 1px solid #a9bbcf;
-                border-radius: 8px;
-                color: #0d243d;
-                font-family: "Times New Roman";
-                font-style: italic;
-                font-weight: 700;
-                padding: 3px 8px;
-            }
-            QLabel {
-                color: #0d243d;
-                font-family: "Times New Roman";
-                font-style: italic;
-                font-weight: 700;
-            }
-            """
-        )
-        root.addWidget(shell)
-        layout = QVBoxLayout(shell)
-        layout.setContentsMargins(9, 9, 9, 9)
-        layout.setSpacing(6)
-        return popup, layout
+    def set_tool_callback(self, key: str, callback: Callable[[], None]) -> None:
+        button = self._buttons.get(key)
+        if button is not None:
+            button.clicked.connect(callback)
 
-    def _show_zoom_popup(self) -> None:
-        popup, layout = self._popup_base(156)
-        row = QHBoxLayout()
-        row.setSpacing(7)
-        for action, tooltip in (("zoom_in", "Zoom In"), ("zoom_out", "Zoom Out"), ("zoom_fit", "Zoom Fit")):
-            button = QPushButton(popup)
-            button.setToolTip(tooltip)
-            button.setIcon(_mini_zoom_icon(action))
-            button.setIconSize(QSize(31, 31))
-            button.setFixedSize(38, 36)
-            button.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
-            button.clicked.connect(lambda checked=False, name=action, dialog=popup: self._choose_zoom_mode(name, dialog))
-            row.addWidget(button)
-        layout.addLayout(row)
-        self._show_popup_under_button(popup, self._buttons["zoom"])
+    def eventFilter(self, watched, event) -> bool:  # noqa: N802
+        canvas = self._canvas()
+        if watched is canvas:
+            if event.type() == QEvent.Type.Resize:
+                if not self._ruler_origin_custom:
+                    self._center_ruler_origin()
+                self._position_rulers()
+                return False
+            if self._zoom_mode in {"zoom_in", "zoom_out"}:
+                if event.type() in {QEvent.Type.Enter, QEvent.Type.MouseMove} and self._zoom_origin is None:
+                    canvas.setCursor(_zoom_cursor(self._zoom_mode))
+                    return event.type() == QEvent.Type.MouseMove
+                if event.type() == QEvent.Type.MouseButtonPress and event.button() == Qt.MouseButton.LeftButton:
+                    canvas.setCursor(_zoom_cursor(self._zoom_mode))
+                    self._zoom_origin = event.position().toPoint()
+                    self._ensure_rubber_band()
+                    if self._rubber_band is not None:
+                        self._rubber_band.setGeometry(QRect(self._zoom_origin, QSize()))
+                        self._rubber_band.show()
+                    return True
+                if event.type() == QEvent.Type.MouseMove and self._zoom_origin is not None:
+                    canvas.setCursor(_zoom_cursor(self._zoom_mode))
+                    self._ensure_rubber_band()
+                    if self._rubber_band is not None:
+                        self._rubber_band.setGeometry(QRect(self._zoom_origin, event.position().toPoint()).normalized())
+                    return True
+                if event.type() == QEvent.Type.MouseButtonRelease and self._zoom_origin is not None:
+                    rect = QRect(self._zoom_origin, event.position().toPoint()).normalized()
+                    if self._rubber_band is not None:
+                        self._rubber_band.hide()
+                    mode = self._zoom_mode
+                    self._zoom_mode = None
+                    self._zoom_origin = None
+                    canvas.unsetCursor()
+                    if mode is not None:
+                        self._apply_drag_zoom(mode, rect)
+                    return True
+        return super().eventFilter(watched, event)
 
-    def _choose_zoom_mode(self, action: str, dialog: QDialog) -> None:
-        dialog.close()
-        self.zoom_requested.emit(action)
-        if action == "zoom_fit":
-            self._active_zoom_mode = None
-            self._apply_zoom_fit()
-        else:
-            self._active_zoom_mode = action
-            self._ensure_canvas_hooks()
-            if self._canvas is not None:
-                self._canvas.setCursor(QCursor(Qt.CursorShape.CrossCursor))
-
-    def _show_unit_popup(self) -> None:
-        popup, layout = self._popup_base(218)
-        unit_buttons: dict[str, _RadioChoiceButton] = {}
-        for row_units in (("mm", "m", "cm"), ("px", "pt", "in")):
-            row = QHBoxLayout()
-            row.setSpacing(6)
-            for unit in row_units:
-                button = _RadioChoiceButton(unit, unit == self.current_unit, popup)
-                button.setFixedWidth(62)
-                button.clicked.connect(lambda checked=False, name=unit, dialog=popup: self._set_unit(name, dialog))
-                row.addWidget(button)
-                unit_buttons[unit] = button
-            layout.addLayout(row)
-        self._show_popup_under_button(popup, self._buttons["unit"])
-
-    def _show_grid_popup(self) -> None:
-        popup, layout = self._popup_base(190)
-        on_button = _RadioChoiceButton("Grid On", self._grid_enabled, popup)
-        off_button = _RadioChoiceButton("Grid Off", not self._grid_enabled, popup)
-        layout.addWidget(on_button)
-        layout.addWidget(off_button)
-        spacing_row = QHBoxLayout()
-        spacing_label = QLabel("Spacing")
-        spacing_input = QDoubleSpinBox(popup)
-        spacing_input.setRange(0.01, 100000.0)
-        spacing_input.setDecimals(3)
-        spacing_input.setSingleStep(1.0)
-        spacing_input.setValue(self._grid_spacing)
-        spacing_input.setSuffix(f" {self.current_unit}")
-        spacing_row.addWidget(spacing_label)
-        spacing_row.addWidget(spacing_input, 1)
-        layout.addLayout(spacing_row)
-
-        def apply_state(enabled: bool) -> None:
-            self._grid_enabled = enabled
-            on_button.set_checked(enabled)
-            off_button.set_checked(not enabled)
-            self._set_grid_spacing(spacing_input.value())
-
-        on_button.clicked.connect(lambda: apply_state(True))
-        off_button.clicked.connect(lambda: apply_state(False))
-        spacing_input.valueChanged.connect(self._set_grid_spacing)
-        self._show_popup_under_button(popup, self._buttons["grid"])
-
-    def _show_snap_popup(self) -> None:
-        popup, layout = self._popup_base(162)
-        on_button = _RadioChoiceButton("Snap On", self._snap_enabled, popup)
-        off_button = _RadioChoiceButton("Snap Off", not self._snap_enabled, popup)
-        layout.addWidget(on_button)
-        layout.addWidget(off_button)
-
-        def apply_state(enabled: bool) -> None:
-            self._snap_enabled = enabled
-            on_button.set_checked(enabled)
-            off_button.set_checked(not enabled)
-            self.snap_changed.emit(enabled)
-            self._refresh_buttons()
-
-        on_button.clicked.connect(lambda: apply_state(True))
-        off_button.clicked.connect(lambda: apply_state(False))
-        self._show_popup_under_button(popup, self._buttons["snap"])
-
-    def _show_popup_under_button(self, popup: QDialog, button: QWidget) -> None:
-        popup.adjustSize()
-        _apply_rounded_mask(popup, 14)
-        point = button.mapToGlobal(QPoint(0, button.height() + 4))
-        popup.move(point)
-        popup.show()
-
-    def _set_unit(self, unit: str, dialog: QDialog | None = None) -> None:
-        old_spacing_mm = self._grid_spacing_mm
-        self.current_unit = unit
-        self._grid_spacing = _mm_to_unit(old_spacing_mm, unit)
-        self._grid_spacing_mm = old_spacing_mm
-        self.unit_changed.emit(unit)
-        self.grid_changed.emit(self._grid_enabled, self._grid_spacing, self.current_unit)
-        self._apply_grid_to_host()
-        self._refresh_buttons()
-        if dialog is not None:
-            dialog.close()
-
-    def _set_grid_spacing(self, spacing: float) -> None:
-        self._grid_spacing = spacing
-        self._grid_spacing_mm = _unit_to_mm(spacing, self.current_unit)
-        self.grid_changed.emit(self._grid_enabled, self._grid_spacing, self.current_unit)
-        self._apply_grid_to_host()
-        self._refresh_rulers()
-
-    def _toggle_ruler(self) -> None:
-        self._ruler_enabled = not self._ruler_enabled
+    def _handle_tool_click(self, key: str) -> None:
         self._ensure_canvas_hooks()
-        self._refresh_rulers()
-        self._refresh_buttons()
+        if key == "zoom":
+            self._show_zoom_popup(key)
+        elif key == "ruler":
+            self._set_ruler(not self._ruler_enabled)
+        elif key == "grid":
+            self._show_grid_popup(key)
+        elif key == "unit":
+            self._show_unit_popup(key)
+        else:
+            self.tool_requested.emit(key)
 
-    def _refresh_buttons(self) -> None:
-        self._buttons["grid"].setProperty("active", self._grid_enabled)
-        self._buttons["snap"].setProperty("active", self._snap_enabled)
-        self._buttons["ruler"].setProperty("active", self._ruler_enabled)
-        for button in self._buttons.values():
-            button.style().unpolish(button)
-            button.style().polish(button)
+    def _host(self) -> QWidget:
+        return self.window()
+
+    def _canvas(self):
+        return getattr(self._host(), "_canvas", None)
+
+    def _set_host_status(self, message: str) -> None:
+        setter = getattr(self._host(), "_set_status", None)
+        if callable(setter):
+            setter(message)
+
+    def _unit_to_canvas_px(self, value: float, unit: str) -> float:
+        return max(1.0, value * UNIT_TO_MM[unit] * MM_TO_SCREEN_PX)
+
+    def _spacing_text(self) -> str:
+        return f"{self._grid_spacing:.6f}".rstrip("0").rstrip(".") or "0"
+
+    def _center_ruler_origin(self) -> None:
+        canvas = self._canvas()
+        if canvas is not None:
+            self._ruler_origin = QPointF(canvas.width() / 2.0, canvas.height() / 2.0)
 
     def _ensure_canvas_hooks(self) -> None:
-        if self._canvas is None:
-            self._canvas = self._find_canvas()
-        canvas = self._canvas
+        canvas = self._canvas()
         if canvas is None:
             return
-        canvas._grid_spacing = self._grid_spacing_mm * MM_TO_SCREEN_PX
-        canvas._grid_unit = self.current_unit
-        canvas._grid_origin = self._ruler_origin
-        if hasattr(canvas, "set_grid_visible"):
-            canvas.set_grid_visible(self._grid_enabled)
-        else:
-            canvas._grid_visible = self._grid_enabled
-        if not self._grid_hooked:
+        if canvas is not self._hooked_canvas:
+            if self._hooked_canvas is not None:
+                self._hooked_canvas.removeEventFilter(self)
             canvas.installEventFilter(self)
-            self._grid_hooked = True
-        canvas.update()
+            self._hooked_canvas = canvas
+            self._ruler_origin_custom = False
+            self._center_ruler_origin()
+        if not getattr(canvas, "_start_bar_grid_hooked", False):
+            def paint_grid(canvas_self, painter: QPainter) -> None:
+                if not getattr(canvas_self, "_grid_visible", True):
+                    return
+                spacing = max(1.0, min(self._unit_to_canvas_px(self._grid_spacing, self._unit), 10000.0))
+                origin = self._ruler_origin
+                painter.setPen(QPen(QColor(70, 96, 130, 42), 1))
+                x = origin.x()
+                while x <= canvas_self.width():
+                    painter.drawLine(QPointF(x, 0), QPointF(x, canvas_self.height()))
+                    x += spacing
+                x = origin.x() - spacing
+                while x >= 0:
+                    painter.drawLine(QPointF(x, 0), QPointF(x, canvas_self.height()))
+                    x -= spacing
+                y = origin.y()
+                while y <= canvas_self.height():
+                    painter.drawLine(QPointF(0, y), QPointF(canvas_self.width(), y))
+                    y += spacing
+                y = origin.y() - spacing
+                while y >= 0:
+                    painter.drawLine(QPointF(0, y), QPointF(canvas_self.width(), y))
+                    y -= spacing
+            canvas._paint_grid = paint_grid.__get__(canvas, canvas.__class__)
+            canvas._start_bar_grid_hooked = True
+        canvas._grid_spacing = self._grid_spacing
+        canvas._grid_unit = self._unit
 
-    def _find_canvas(self) -> QWidget | None:
-        if self._host_window is None:
-            return None
-        for candidate in self._host_window.findChildren(QWidget):
-            if candidate.objectName() in {"DesignCanvas", "WorkspaceCanvas", "Canvas"}:
-                return candidate
-        return None
+    def _ensure_rubber_band(self) -> None:
+        canvas = self._canvas()
+        if canvas is not None and (self._rubber_band is None or self._rubber_band.parent() is not canvas):
+            self._rubber_band = QRubberBand(QRubberBand.Shape.Rectangle, canvas)
+
+    def _popup_base(self, width: int) -> tuple[QDialog, QVBoxLayout]:
+        if self._popup is not None:
+            self._popup.close()
+        popup = QDialog(self)
+        popup.setObjectName("StartToolPopup")
+        popup.setWindowFlags(Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint)
+        popup.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        popup.setStyleSheet("QDialog#StartToolPopup {background:transparent;}")
+        shell = QWidget()
+        shell.setObjectName("StartToolPopupShell")
+        shell.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        root = QVBoxLayout(popup)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.addWidget(shell)
+        layout = QVBoxLayout(shell)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(6)
+        shell.setStyleSheet(
+            "QWidget#StartToolPopupShell {background:qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 #ffffff, stop:0.48 #eef8ff, stop:1 #fff3d4); border:1px solid #8fa2bb; border-radius:12px;}"
+            "QLabel {background:transparent; color:#1f3148; font-size:11px; font-style:italic; font-weight:800;}"
+            "QPushButton#IconChoice {background:rgba(255,255,255,220); border:1px solid #b8c5d4; border-radius:10px;}"
+            "QPushButton#IconChoice:hover {background:#fff4cf; border-color:#ff8a35;}"
+            "QPushButton#RadioChoice {background:rgba(255,255,255,220); border:1px solid #b8c5d4; border-radius:8px; color:#1f3148; font-size:12px; font-style:italic; font-weight:900; padding:5px 8px; text-align:left;}"
+            "QPushButton#RadioChoice:hover {background:#fff4cf; border-color:#ff8a35;}"
+            "QPushButton#RadioChoice:checked {background:#dff6ff; border-color:#2f7df6;}"
+            "QDoubleSpinBox#PopupSpin {background:#ffffff; border:1px solid #9fb0c5; border-radius:7px; color:#132238; font-size:12px; font-style:normal; font-weight:800; padding:4px 7px;}"
+        )
+        popup.setFixedWidth(width)
+        self._popup = popup
+        return popup, layout
+
+    def _show_popup_near(self, key: str, popup: QDialog) -> None:
+        button = self._buttons.get(key)
+        target = button.mapToGlobal(QPoint(0, button.height() + 4)) if button is not None else self.mapToGlobal(QPoint(0, self.height()))
+        popup.move(target)
+        popup.show()
+
+    def _radio_button(self, label: str, checked: bool, callback: Callable[[], None]) -> QPushButton:
+        button = QPushButton(label)
+        button.setObjectName("RadioChoice")
+        button.setCheckable(True)
+        button.setChecked(checked)
+        button.setIcon(_radio_icon(checked))
+        button.setIconSize(QSize(22, 22))
+        button.clicked.connect(callback)
+        return button
+
+    def _refresh_radio_button(self, button: QPushButton, checked: bool) -> None:
+        button.setChecked(checked)
+        button.setIcon(_radio_icon(checked))
+
+    def _show_zoom_popup(self, key: str) -> None:
+        popup, layout = self._popup_base(172)
+        row = QHBoxLayout()
+        row.setContentsMargins(2, 2, 2, 2)
+        row.setSpacing(6)
+        for action, tooltip in (("zoom_in", "Zoom In"), ("zoom_out", "Zoom Out"), ("zoom_fit", "Zoom Fit")):
+            button = QPushButton()
+            button.setObjectName("IconChoice")
+            button.setToolTip(tooltip)
+            button.setIcon(_mini_zoom_icon(action))
+            button.setIconSize(QSize(34, 34))
+            button.setFixedSize(46, 42)
+            button.clicked.connect(lambda checked=False, mode=action: self._activate_zoom(mode))
+            row.addWidget(button)
+        layout.addLayout(row)
+        self._show_popup_near(key, popup)
+
+    def _activate_zoom(self, mode: str) -> None:
+        self._ensure_canvas_hooks()
+        if self._popup is not None:
+            self._popup.close()
+        if mode == "zoom_fit":
+            self._set_zoom_value(100.0)
+        else:
+            self._zoom_mode = mode
+            canvas = self._canvas()
+            if canvas is not None:
+                canvas.setCursor(_zoom_cursor(mode))
+            self._set_host_status(f"{'Zoom In' if mode == 'zoom_in' else 'Zoom Out'}: drag a region on the main page")
+        self.zoom_requested.emit(mode)
+        self.tool_requested.emit(mode)
+
+    def _set_zoom_value(self, value: float) -> None:
+        host = self._host()
+        zoom_input = getattr(host, "_zoom_input", None)
+        if zoom_input is not None and hasattr(zoom_input, "blockSignals"):
+            blocked = zoom_input.blockSignals(True)
+            zoom_input.setValue(value)
+            zoom_input.blockSignals(blocked)
+        setter = getattr(host, "_set_zoom", None)
+        if callable(setter):
+            setter(value)
+            return
+        canvas = self._canvas()
+        if canvas is not None and hasattr(canvas, "set_zoom"):
+            canvas.set_zoom(value)
+        self._set_host_status(f"Zoom {value:.2f}%")
+
+    def _apply_drag_zoom(self, mode: str, rect: QRect) -> None:
+        canvas = self._canvas()
+        if canvas is None or rect.width() < 8 or rect.height() < 8:
+            self._set_host_status("Zoom canceled")
+            return
+        current_zoom = getattr(canvas, "_zoom", 1.0) * 100.0
+        factor = min(canvas.width() / max(1, rect.width()), canvas.height() / max(1, rect.height()))
+        factor = max(1.05, min(factor, 12.0))
+        value = current_zoom * factor if mode == "zoom_in" else current_zoom / factor
+        self._set_zoom_value(max(5.0, min(3200.0, value)))
+
+    def _show_unit_popup(self, key: str) -> None:
+        popup, layout = self._popup_base(184)
+        rows = (UNIT_ORDER[:3], UNIT_ORDER[3:])
+        for row_units in rows:
+            row = QHBoxLayout()
+            row.setSpacing(5)
+            for unit in row_units:
+                button = self._radio_button(unit, unit == self._unit, lambda checked=False, selected=unit: self._set_unit(selected))
+                button.setFixedWidth(52)
+                row.addWidget(button)
+            layout.addLayout(row)
+        self._show_popup_near(key, popup)
+
+    def _set_unit(self, unit: str) -> None:
+        if unit == self._unit:
+            if self._popup is not None:
+                self._popup.close()
+            return
+        spacing_mm = self._grid_spacing * UNIT_TO_MM[self._unit]
+        self._unit = unit
+        self._grid_spacing = spacing_mm / UNIT_TO_MM[self._unit]
+        self._apply_unit_to_host()
+        self._apply_grid_to_host()
+        if self._ruler_enabled:
+            self._sync_rulers()
+        self.unit_changed.emit(unit)
+        self.grid_changed.emit(self._grid_enabled, self._grid_spacing, self._unit)
+        self.tool_requested.emit(f"unit_{unit}")
+        self._refresh_tooltips()
+        if self._popup is not None:
+            self._popup.close()
+
+    def _show_grid_popup(self, key: str) -> None:
+        popup, layout = self._popup_base(204)
+        row = QHBoxLayout()
+        on_button = self._radio_button("Grid On", self._grid_enabled, lambda: self._set_grid_enabled(True))
+        off_button = self._radio_button("Grid Off", not self._grid_enabled, lambda: self._set_grid_enabled(False))
+        row.addWidget(on_button)
+        row.addWidget(off_button)
+        layout.addLayout(row)
+        spin = QDoubleSpinBox()
+        spin.setObjectName("PopupSpin")
+        spin.setRange(0.000001, 1000000.0)
+        spin.setDecimals(6)
+        spin.setSingleStep(1.0)
+        spin.setSuffix(f" {self._unit}")
+        spin.setValue(self._grid_spacing)
+        spin.valueChanged.connect(self._set_grid_spacing)
+        layout.addWidget(QLabel("Grid spacing"))
+        layout.addWidget(spin)
+        self._show_popup_near(key, popup)
+
+    def _set_grid_enabled(self, enabled: bool) -> None:
+        self._grid_enabled = enabled
+        self._apply_grid_to_host()
+        self.grid_changed.emit(self._grid_enabled, self._grid_spacing, self._unit)
+        self.tool_requested.emit("grid_on" if enabled else "grid_off")
+        self._refresh_tooltips()
+        if self._popup is not None:
+            self._popup.close()
+
+    def _set_grid_spacing(self, value: float) -> None:
+        self._grid_spacing = value
+        self._apply_grid_to_host()
+        self.grid_changed.emit(self._grid_enabled, self._grid_spacing, self._unit)
+        self._refresh_tooltips()
 
     def _apply_grid_to_host(self) -> None:
         self._ensure_canvas_hooks()
-        canvas = self._canvas
-        if canvas is None:
-            return
-        canvas._grid_spacing = self._grid_spacing_mm * MM_TO_SCREEN_PX
-        canvas._grid_unit = self.current_unit
-        canvas._grid_origin = self._ruler_origin
-        if hasattr(canvas, "set_grid_visible"):
-            canvas.set_grid_visible(self._grid_enabled)
-        else:
-            canvas._grid_visible = self._grid_enabled
+        host = self._host()
+        view_state = getattr(host, "_view_state", None)
+        if isinstance(view_state, dict):
+            view_state["grid"] = self._grid_enabled
+        canvas = self._canvas()
+        if canvas is not None:
+            if hasattr(canvas, "set_grid_visible"):
+                canvas.set_grid_visible(self._grid_enabled)
             canvas.update()
-        if self._ruler_enabled:
-            self._refresh_rulers()
+        self._set_host_status(f"Grid {'On' if self._grid_enabled else 'Off'} | spacing {self._spacing_text()} {self._unit}")
 
-    def _refresh_rulers(self) -> None:
-        canvas = self._canvas
-        if canvas is None:
-            return
-        if not self._ruler_custom_origin:
+    def _apply_unit_to_host(self) -> None:
+        host = self._host()
+        for item in getattr(host, "_status_items", []):
+            if hasattr(item, "text") and item.text().startswith("Unit:"):
+                item.setText(f"Unit: {self._unit}")
+                break
+        self._set_host_status(f"Unit {self._unit}")
+
+    def _set_ruler(self, enabled: bool) -> None:
+        self._ensure_canvas_hooks()
+        self._ruler_enabled = enabled
+        if enabled and not self._ruler_origin_custom:
             self._center_ruler_origin()
-        if not self._ruler_enabled:
-            for widget in (self._top_ruler, self._left_ruler, self._ruler_corner):
-                if widget is not None:
-                    widget.hide()
-            for guide in self._ruler_guides:
-                guide.hide()
-            return
-        if self._top_ruler is None:
-            self._top_ruler = _RulerOverlay("top", canvas, self)
-            self._left_ruler = _RulerOverlay("left", canvas, self)
-            self._ruler_corner = _RulerCorner(canvas, self)
+        if not enabled:
+            self._clear_ruler_guides()
+        host = self._host()
+        view_state = getattr(host, "_view_state", None)
+        if isinstance(view_state, dict):
+            view_state["ruler"] = enabled
+        self._sync_rulers()
+        self.ruler_changed.emit(enabled, self._unit)
+        self.tool_requested.emit("ruler_on" if enabled else "ruler_off")
+        self._refresh_tooltips()
+        self._set_host_status(f"Ruler {'On' if enabled else 'Off'} | unit {self._unit}")
+
+    def _set_ruler_origin(self, origin: QPointF, custom: bool = True) -> None:
+        self._ruler_origin = origin
+        self._ruler_origin_custom = custom
         self._position_rulers()
-        for widget in (self._top_ruler, self._left_ruler, self._ruler_corner):
-            widget.show()
-            widget.raise_()
-            widget.update()
-        for guide in self._ruler_guides:
-            guide.show()
-            guide.raise_()
-
-    def _position_rulers(self) -> None:
-        canvas = self._canvas
-        if canvas is None or self._top_ruler is None or self._left_ruler is None or self._ruler_corner is None:
-            return
-        self._top_ruler.setGeometry(RULER_SIZE, 0, max(0, canvas.width() - RULER_SIZE), RULER_SIZE)
-        self._left_ruler.setGeometry(0, RULER_SIZE, RULER_SIZE, max(0, canvas.height() - RULER_SIZE))
-        self._ruler_corner.setGeometry(0, 0, RULER_SIZE, RULER_SIZE)
-        for guide in self._ruler_guides:
-            if guide.orientation == "vertical":
-                guide.setGeometry(int(guide.position) - 4, 0, 8, canvas.height())
-            else:
-                guide.setGeometry(0, int(guide.position) - 4, canvas.width(), 8)
-
-    def _center_ruler_origin(self) -> None:
-        canvas = self._canvas
-        if canvas is None:
-            return
-        self._ruler_origin = QPointF(canvas.width() / 2.0, canvas.height() / 2.0)
-        canvas._grid_origin = self._ruler_origin
-
-    def _set_ruler_origin(self, origin: QPointF, custom: bool = False) -> None:
-        canvas = self._canvas
-        if canvas is None:
-            return
-        self._ruler_origin = QPointF(max(0.0, min(canvas.width(), origin.x())), max(0.0, min(canvas.height(), origin.y())))
-        self._ruler_custom_origin = custom
-        canvas._grid_origin = self._ruler_origin
-        canvas.update()
-        self._refresh_rulers()
+        canvas = self._canvas()
+        if canvas is not None:
+            canvas.update()
 
     def _register_ruler_guide(self, guide: _GuideLine) -> None:
         if guide not in self._ruler_guides:
@@ -862,47 +846,54 @@ class StartBar(QWidget):
         if guide in self._ruler_guides:
             self._ruler_guides.remove(guide)
 
-    def eventFilter(self, watched, event):  # type: ignore[override]
-        canvas = self._canvas
-        if watched is canvas:
-            if event.type() == QEvent.Type.Resize:
-                self._refresh_rulers()
-            if event.type() == QEvent.Type.MouseButtonPress and self._active_zoom_mode in {"zoom_in", "zoom_out"}:
-                if event.button() == Qt.MouseButton.LeftButton:
-                    self._rubber_origin = event.position().toPoint()
-                    if self._rubber_band is None:
-                        self._rubber_band = QRubberBand(QRubberBand.Shape.Rectangle, canvas)
-                    self._rubber_band.setGeometry(QRect(self._rubber_origin, QSize()))
-                    self._rubber_band.show()
-                    return True
-            if event.type() == QEvent.Type.MouseMove and self._rubber_origin is not None and self._rubber_band is not None:
-                self._rubber_band.setGeometry(QRect(self._rubber_origin, event.position().toPoint()).normalized())
-                return True
-            if event.type() == QEvent.Type.MouseButtonRelease and self._rubber_origin is not None:
-                rect = QRect(self._rubber_origin, event.position().toPoint()).normalized()
-                if self._rubber_band is not None:
-                    self._rubber_band.hide()
-                self._apply_zoom_rect(rect)
-                self._rubber_origin = None
-                self._active_zoom_mode = None
-                canvas.unsetCursor()
-                return True
-        return super().eventFilter(watched, event)
+    def _clear_ruler_guides(self) -> None:
+        for guide in tuple(self._ruler_guides):
+            guide.deleteLater()
+        self._ruler_guides.clear()
 
-    def _apply_zoom_rect(self, rect: QRect) -> None:
-        if self._canvas is None or rect.width() < 6 or rect.height() < 6:
+    def _sync_rulers(self) -> None:
+        canvas = self._canvas()
+        if canvas is None:
             return
-        factor = 1.25 if self._active_zoom_mode == "zoom_in" else 0.8
-        host = self._host_window
-        if host is not None and hasattr(host, "adjust_zoom"):
-            host.adjust_zoom(factor)
-        self.zoom_requested.emit(self._active_zoom_mode or "zoom_in")
+        if self._ruler_enabled:
+            if self._ruler_top is None or self._ruler_top.parent() is not canvas:
+                self._ruler_top = _RulerOverlay(self, "top", canvas)
+            if self._ruler_left is None or self._ruler_left.parent() is not canvas:
+                self._ruler_left = _RulerOverlay(self, "left", canvas)
+            if self._ruler_corner is None or self._ruler_corner.parent() is not canvas:
+                self._ruler_corner = _RulerCorner(self, canvas)
+            self._position_rulers()
+            self._ruler_top.show()
+            self._ruler_left.show()
+            self._ruler_corner.show()
+            self._ruler_top.raise_()
+            self._ruler_left.raise_()
+            self._ruler_corner.raise_()
+        else:
+            for widget in (self._ruler_top, self._ruler_left, self._ruler_corner):
+                if widget is not None:
+                    widget.hide()
 
-    def _apply_zoom_fit(self) -> None:
-        host = self._host_window
-        if host is not None and hasattr(host, "set_zoom"):
-            host.set_zoom(100.0)
-        self.zoom_requested.emit("zoom_fit")
+    def _position_rulers(self) -> None:
+        canvas = self._canvas()
+        if canvas is None:
+            return
+        if self._ruler_top is not None:
+            self._ruler_top.setGeometry(30, 0, max(0, canvas.width() - 30), 24)
+            self._ruler_top.update()
+        if self._ruler_left is not None:
+            self._ruler_left.setGeometry(0, 24, 30, max(0, canvas.height() - 24))
+            self._ruler_left.update()
+        if self._ruler_corner is not None:
+            self._ruler_corner.setGeometry(0, 0, 30, 24)
+            self._ruler_corner.update()
 
-    def sizeHint(self) -> QSize:  # type: ignore[override]
-        return QSize(640, 54)
+    def _refresh_tooltips(self) -> None:
+        if (grid := self._buttons.get("grid")) is not None:
+            grid.setToolTip(f"Grid: {'On' if self._grid_enabled else 'Off'} | spacing {self._spacing_text()} {self._unit}")
+        if (ruler := self._buttons.get("ruler")) is not None:
+            ruler.setToolTip(f"Ruler: {'On' if self._ruler_enabled else 'Off'} | unit {self._unit}")
+        if (unit := self._buttons.get("unit")) is not None:
+            unit.setToolTip(f"Unit: {self._unit}")
+        if (zoom := self._buttons.get("zoom")) is not None:
+            zoom.setToolTip("Zoom in, zoom out, or fit")
