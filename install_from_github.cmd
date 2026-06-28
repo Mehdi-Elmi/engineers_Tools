@@ -1,6 +1,8 @@
 @echo off
 setlocal EnableExtensions EnableDelayedExpansion
 
+echo Engineer Tools installer build: 2026-06-28 robust-verification-2
+
 set "REPO=Mehdi-Elmi/engineers_Tools"
 set "BRANCH=main"
 set "TOKEN_FILE=%USERPROFILE%\Desktop\token.txt"
