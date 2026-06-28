@@ -12,9 +12,50 @@ from PySide6.QtWidgets import QApplication, QComboBox, QDialog, QDoubleSpinBox, 
 
 
 _ARROW_ICON_CACHE: dict[str, str] = {}
+_ASSET_ICON_DIR = Path(__file__).resolve().parents[1] / "assets" / "ui_icons"
+
+
+def _asset_icon_path(file_name: str) -> Path | None:
+    path = _ASSET_ICON_DIR / file_name
+    return path if path.exists() else None
+
+
+def _paint_asset_icon(painter: QPainter, file_name: str, rect: QRectF) -> bool:
+    path = _asset_icon_path(file_name)
+    if path is None:
+        return False
+    if path.suffix.lower() == ".svg":
+        try:
+            from PySide6.QtSvg import QSvgRenderer
+        except Exception:
+            return False
+        renderer = QSvgRenderer(str(path))
+        if not renderer.isValid():
+            return False
+        renderer.render(painter, rect)
+        return True
+    pixmap = QPixmap(str(path))
+    if pixmap.isNull():
+        return False
+    painter.drawPixmap(rect.toRect(), pixmap)
+    return True
+
+
+def _cursor_from_asset(file_name: str, fallback: QCursor, hot_x: int = 8, hot_y: int = 8) -> QCursor:
+    path = _asset_icon_path(file_name)
+    if path is None:
+        return fallback
+    pixmap = QPixmap(str(path))
+    if pixmap.isNull():
+        return fallback
+    return QCursor(pixmap, hot_x, hot_y)
 
 
 def _control_arrow_path(direction: str) -> str:
+    asset_names = {"up": "spin_up.svg", "down": "spin_down.svg", "left": "combo_down.svg", "right": "combo_down.svg"}
+    asset = _asset_icon_path(asset_names.get(direction, "combo_down.svg"))
+    if asset is not None:
+        return asset.as_posix()
     cached = _ARROW_ICON_CACHE.get(direction)
     if cached:
         return cached
@@ -70,6 +111,10 @@ def _solid_arrow_head(painter: QPainter, tip: QPointF, back: QPointF, size: floa
 def _paint_rotation_glyph(painter: QPainter, center: QPointF, radius: float, color: QColor) -> None:
     painter.save()
     painter.setRenderHint(QPainter.Antialiasing, True)
+    asset_rect = QRectF(center.x() - radius * 1.35, center.y() - radius * 1.35, radius * 2.7, radius * 2.7)
+    if _paint_asset_icon(painter, "rotate_arrow.svg", asset_rect):
+        painter.restore()
+        return
     painter.setBrush(Qt.NoBrush)
     painter.setPen(QPen(color, 2.15, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
     painter.drawArc(QRectF(center.x() - radius, center.y() - radius, radius * 2, radius * 2), 46 * 16, 280 * 16)
@@ -80,11 +125,12 @@ def _paint_rotation_glyph(painter: QPainter, center: QPointF, radius: float, col
 
 
 def _hand_cursor(closed: bool = False) -> QCursor:
-    return QCursor(Qt.CursorShape.ClosedHandCursor if closed else Qt.CursorShape.OpenHandCursor)
+    fallback = QCursor(Qt.CursorShape.ClosedHandCursor if closed else Qt.CursorShape.OpenHandCursor)
+    return _cursor_from_asset("hand_closed.svg" if closed else "hand_open.svg", fallback)
 
 
 def _move_cursor() -> QCursor:
-    return QCursor(Qt.CursorShape.SizeAllCursor)
+    return _cursor_from_asset("move_cursor.svg", QCursor(Qt.CursorShape.SizeAllCursor))
 
 
 def _layer_icon(kind: str, active: bool = True) -> QIcon:
@@ -104,6 +150,14 @@ def _layer_icon(kind: str, active: bool = True) -> QIcon:
     ink = QColor("#132238")
     painter.setPen(QPen(ink, 2.1, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
     painter.setBrush(Qt.NoBrush)
+    asset_name = {
+        "eye": "layer_eye.svg",
+        "lock": "layer_lock_closed.svg" if active else "layer_lock_open.svg",
+        "rotate": "layer_rotate.svg",
+    }.get(kind)
+    if asset_name is not None and _paint_asset_icon(painter, asset_name, QRectF(7, 7, 20, 20)):
+        painter.end()
+        return QIcon(pixmap)
     if kind == "eye":
         eye = QPainterPath()
         eye.moveTo(6.5, 17)
@@ -168,7 +222,8 @@ def _style_numeric_spin(spin: QDoubleSpinBox) -> None:
 
 
 def _style_combo_arrow(combo: QComboBox) -> None:
-    down_icon = _control_arrow_path("down")
+    combo_icon = _asset_icon_path("combo_down.svg")
+    down_icon = combo_icon.as_posix() if combo_icon is not None else _control_arrow_path("down")
     combo.setMinimumHeight(31)
     combo.setStyleSheet(
         """
