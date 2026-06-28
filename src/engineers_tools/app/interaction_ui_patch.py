@@ -390,6 +390,164 @@ def apply_interaction_ui_patch() -> None:
     mw.ModuleWindow._show_canvas_context_menu = show_canvas_context_menu
     mw.ModuleWindow._install_shortcuts = install_shortcuts
 
+    try:
+        from modules.mechanics_dynamics_statics import workspace as edw
+    except Exception:
+        edw = None
+
+    if edw is not None:
+        edw._layer_icon = _layer_icon
+
+        def engineering_delete(self):
+            canvas = getattr(self, "_canvas", None)
+            if isinstance(canvas, edw.EngineeringCanvas) and canvas.selected_indices:
+                canvas._push_undo()
+                canvas._delete_selected_objects()
+                self._set_status("Deleted object")
+                return
+            self._set_status("Delete")
+
+        def engineering_show_edit_menu(self, anchor):
+            self._show_menu("Edit", (
+                mw.MenuItemSpec("Copy", self._copy, "Ctrl+C"),
+                mw.MenuItemSpec("Cut", self._cut, "Ctrl+X"),
+                mw.MenuItemSpec("Paste", self._paste, "Ctrl+V"),
+                mw.MenuItemSpec("Move", self._move),
+                mw.MenuItemSpec("Undo", self._undo, "Ctrl+Z"),
+                mw.MenuItemSpec("Redo", self._redo, "Ctrl+Y"),
+                mw.MenuItemSpec("Delete", self._delete, "Delete"),
+                mw.MenuItemSpec("Repeat Last Tools", self._repeat_last_tools, "Ctrl+R"),
+                mw.MenuItemSpec("Select All", self._select_all, "Ctrl+A"),
+                mw.MenuItemSpec("Group", self._group, "Ctrl+G"),
+                mw.MenuItemSpec("Ungroup", self._ungroup, "Ctrl+Shift+G"),
+            ), anchor)
+
+        def engineering_show_canvas_context_menu(self, global_pos):
+            self._show_menu_at("Object", (
+                mw.MenuItemSpec("Repeat", self._repeat_last_tools),
+                mw.MenuItemSpec("Copy", self._copy),
+                mw.MenuItemSpec("Cut", self._cut),
+                mw.MenuItemSpec("Paste", self._paste),
+                mw.MenuItemSpec("Delete", self._delete),
+                mw.MenuItemSpec("Rotate", self._rotation),
+                mw.MenuItemSpec("Bring to Front", self._bring_to_front),
+                mw.MenuItemSpec("Send to Back", self._send_to_back),
+                mw.MenuItemSpec("Group", self._group),
+                mw.MenuItemSpec("Ungroup", self._ungroup),
+            ), global_pos)
+
+        def engineering_install_shortcuts(self):
+            if getattr(self, "_engineering_shortcuts_installed", False):
+                return
+            self._engineering_shortcuts_installed = True
+            self._engineering_shortcuts = []
+            for sequence, callback in (
+                ("Ctrl+N", self._new_file), ("Ctrl+O", self._open_file), ("Ctrl+S", self._save_file), ("Ctrl+Shift+S", self._save_as_file),
+                ("Ctrl+Z", self._undo), ("Ctrl+Y", self._redo), ("Ctrl+Shift+Z", self._redo),
+                ("Ctrl+C", self._copy), ("Ctrl+X", self._cut), ("Ctrl+V", self._paste), ("Ctrl+A", self._select_all),
+                ("Delete", self._delete), ("Backspace", self._delete),
+                ("Ctrl+R", self._repeat_last_tools), ("Ctrl+G", self._group_selection), ("Ctrl+Shift+G", self._ungroup_selection),
+            ):
+                shortcut = QShortcut(QKeySequence(sequence), self)
+                shortcut.setContext(Qt.ShortcutContext.ApplicationShortcut)
+                shortcut.activated.connect(callback)
+                shortcut.activatedAmbiguously.connect(callback)
+                self._engineering_shortcuts.append(shortcut)
+
+        def engineering_canvas_key_press(self, event):
+            ctrl = bool(event.modifiers() & Qt.KeyboardModifier.ControlModifier)
+            shift = bool(event.modifiers() & Qt.KeyboardModifier.ShiftModifier)
+            handled = True
+            if event.key() in {Qt.Key.Key_Delete, Qt.Key.Key_Backspace}:
+                if self.selected_indices:
+                    self._push_undo()
+                    self._delete_selected_objects()
+                else:
+                    handled = False
+            elif ctrl and event.key() == Qt.Key.Key_A:
+                self.select_all()
+            elif ctrl and event.key() == Qt.Key.Key_C:
+                self.copy_selection()
+            elif ctrl and event.key() == Qt.Key.Key_X:
+                self.cut_selection()
+            elif ctrl and event.key() == Qt.Key.Key_V:
+                self.paste_selection()
+            elif ctrl and event.key() == Qt.Key.Key_G and not shift:
+                self.group_selection()
+            elif ctrl and shift and event.key() == Qt.Key.Key_G:
+                self.ungroup_selection()
+            elif ctrl and event.key() == Qt.Key.Key_R:
+                self.repeat_last_action()
+            elif ctrl and event.key() == Qt.Key.Key_Z and not shift:
+                self.undo()
+            elif (ctrl and event.key() == Qt.Key.Key_Y) or (ctrl and shift and event.key() == Qt.Key.Key_Z):
+                self.redo()
+            else:
+                handled = False
+            if handled:
+                event.accept()
+                return
+            QWidget.keyPressEvent(self, event)
+
+        original_engineering_mouse_press = edw.EngineeringCanvas.mousePressEvent
+        original_engineering_mouse_move = edw.EngineeringCanvas.mouseMoveEvent
+        original_engineering_mouse_release = edw.EngineeringCanvas.mouseReleaseEvent
+
+        def engineering_mouse_press(self, event):
+            if event.button() == Qt.MouseButton.LeftButton:
+                point = self._to_canvas_point(event.position())
+                _index, action = self._hit_test_object(point)
+                if action in {"move", "rotate"}:
+                    self.setCursor(_hand_cursor(True))
+                    if not getattr(self, "_engineer_drag_cursor_active", False):
+                        QApplication.setOverrideCursor(_hand_cursor(True))
+                        self._engineer_drag_cursor_active = True
+            original_engineering_mouse_press(self, event)
+
+        def engineering_mouse_move(self, event):
+            original_engineering_mouse_move(self, event)
+            if getattr(self, "_drag_action", None) in {"move", "rotate"}:
+                self.setCursor(_hand_cursor(True))
+                return
+            point = self._to_canvas_point(event.position())
+            _index, hover = self._hit_test_object(point)
+            if hover == "move":
+                self.setCursor(_move_cursor())
+            elif hover == "rotate":
+                self.setCursor(_hand_cursor(False))
+
+        def engineering_mouse_release(self, event):
+            original_engineering_mouse_release(self, event)
+            if getattr(self, "_engineer_drag_cursor_active", False):
+                QApplication.restoreOverrideCursor()
+                self._engineer_drag_cursor_active = False
+
+        def engineering_draw_arc_arrow(painter, center, radius, color, reverse=False):
+            painter.save()
+            painter.setRenderHint(QPainter.Antialiasing, True)
+            painter.setBrush(Qt.NoBrush)
+            painter.setPen(QPen(color, 2.5, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+            rect = QRectF(center.x() - radius, center.y() - radius, radius * 2, radius * 2)
+            start = 142 if reverse else 38
+            span = -260 if reverse else 260
+            painter.drawArc(rect, start * 16, span * 16)
+            angle = -122 if reverse else -92
+            radians = __import__("math").radians(angle)
+            tip = QPointF(center.x() + radius * __import__("math").cos(radians), center.y() + radius * __import__("math").sin(radians))
+            tail = QPointF(center.x() + radius * 0.16, center.y() - radius * 0.94)
+            _triangle_arrow_head(painter, tip, tail, color, max(7.6, radius * 0.9))
+            painter.restore()
+
+        edw.EngineeringDesignWorkspace._delete = engineering_delete
+        edw.EngineeringDesignWorkspace._show_edit_menu = engineering_show_edit_menu
+        edw.EngineeringDesignWorkspace._show_canvas_context_menu = engineering_show_canvas_context_menu
+        edw.EngineeringDesignWorkspace._install_engineering_shortcuts = engineering_install_shortcuts
+        edw.EngineeringCanvas.keyPressEvent = engineering_canvas_key_press
+        edw.EngineeringCanvas.mousePressEvent = engineering_mouse_press
+        edw.EngineeringCanvas.mouseMoveEvent = engineering_mouse_move
+        edw.EngineeringCanvas.mouseReleaseEvent = engineering_mouse_release
+        edw._draw_arc_arrow = engineering_draw_arc_arrow
+
     class _WorkspaceShortcutFilter(QObject):
         def eventFilter(self, watched, event):  # noqa: N802
             if event.type() != QEvent.Type.KeyPress:
