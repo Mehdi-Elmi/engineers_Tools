@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from PySide6.QtCore import QEvent, QObject, QPointF, QRectF, Qt
 from PySide6.QtGui import QColor, QCursor, QIcon, QKeySequence, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap, QPolygonF, QShortcut
 from PySide6.QtWidgets import QApplication, QComboBox, QDialog, QDoubleSpinBox, QLabel, QLineEdit, QWidget
@@ -150,24 +152,25 @@ def _layer_icon(kind: str, active: bool = True) -> QIcon:
 def _style_numeric_spin(spin: QDoubleSpinBox) -> None:
     spin.setButtonSymbols(QDoubleSpinBox.ButtonSymbols.UpDownArrows)
     spin.setMinimumHeight(31)
+    spin.setMinimumWidth(138)
     spin.setStyleSheet(
         """
         QDoubleSpinBox#FileNameInput {
             background:#ffffff; border:1px solid #9fb0c5; border-radius:9px;
-            color:#132238; font-size:12px; font-style:normal; font-weight:800; padding:4px 32px 4px 8px;
+            color:#132238; font-size:12px; font-style:normal; font-weight:800; padding:4px 35px 4px 8px;
         }
         QDoubleSpinBox#FileNameInput::up-button, QDoubleSpinBox#FileNameInput::down-button {
-            width:28px; border:0px; margin:1px 1px 1px 0px;
+            width:31px; border:0px; margin:2px 2px 2px 0px;
             background:qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 #ffffff, stop:0.45 #fff1bf, stop:1 #43d3bd);
             subcontrol-origin:border;
         }
         QDoubleSpinBox#FileNameInput::up-button { subcontrol-position:top right; border-top-right-radius:8px; }
         QDoubleSpinBox#FileNameInput::down-button { subcontrol-position:bottom right; border-bottom-right-radius:8px; }
         QDoubleSpinBox#FileNameInput::up-arrow {
-            width:0; height:0; border-left:7px solid transparent; border-right:7px solid transparent; border-bottom:9px solid #132238;
+            image:none; width:0; height:0; border-left:7px solid transparent; border-right:7px solid transparent; border-bottom:9px solid #132238;
         }
         QDoubleSpinBox#FileNameInput::down-arrow {
-            width:0; height:0; border-left:7px solid transparent; border-right:7px solid transparent; border-top:9px solid #132238;
+            image:none; width:0; height:0; border-left:7px solid transparent; border-right:7px solid transparent; border-top:9px solid #132238;
         }
         """
     )
@@ -187,7 +190,7 @@ def _style_combo_arrow(combo: QComboBox) -> None:
             border-top-right-radius:8px; border-bottom-right-radius:8px;
         }
         QComboBox#FileTypeCombo::down-arrow {
-            width:0; height:0; border-left:7px solid transparent; border-right:7px solid transparent; border-top:9px solid #132238;
+            image:none; width:0; height:0; border-left:7px solid transparent; border-right:7px solid transparent; border-top:9px solid #132238;
         }
         QComboBox#FileTypeCombo QAbstractItemView {
             background:#ffffff; border:1px solid #8fa2bb; border-radius:8px; selection-background-color:#cfe7ff;
@@ -209,6 +212,7 @@ def apply_interaction_ui_patch() -> None:
     mw._paint_rotation_glyph = _paint_rotation_glyph
     mw._layer_icon = _layer_icon
     sb._arrow_head = _solid_arrow_head
+    logging.info("interaction_ui_patch: shared icon and control patches installed")
 
     original_page_setup_init = rtp.PageSetupDialog.__init__
 
@@ -219,10 +223,10 @@ def apply_interaction_ui_patch() -> None:
             replacements = {"W": "Width", "H": "Height", "Top": "Top", "Bottom": "Bottom", "Right": "Right", "Left": "Left"}
             if text in replacements:
                 label.setText(replacements[text])
-                label.setFixedWidth(48 if text in {"W", "H"} else 46)
+                label.setFixedWidth(58 if text in {"W", "H"} else 50)
                 label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         for spin in self.findChildren(QDoubleSpinBox):
-            spin.setMinimumWidth(132)
+            spin.setMinimumWidth(142)
             _style_numeric_spin(spin)
         for combo in self.findChildren(QComboBox):
             _style_combo_arrow(combo)
@@ -238,6 +242,43 @@ def apply_interaction_ui_patch() -> None:
                 _style_combo_arrow(combo)
 
     pfd.ProjectFileDialog.__init__ = file_dialog_init
+
+    def file_item_size(self, name: str):
+        return pfd.QSize(max(46, min(560, self.fontMetrics().horizontalAdvance(name) + 50)), 30)
+
+    def place_item_width(self, name: str) -> int:
+        return max(46, min(178, self.fontMetrics().horizontalAdvance(name) + 50))
+
+    pfd.ProjectFileDialog._file_item_size = file_item_size
+    pfd.ProjectFileDialog._place_item_width = place_item_width
+
+    original_project_dialog_key_press = pfd.ProjectFileDialog.keyPressEvent
+
+    def project_dialog_key_press(self, event):
+        focus = QApplication.focusWidget()
+        if isinstance(focus, QLineEdit):
+            original_project_dialog_key_press(self, event)
+            return
+        ctrl = bool(event.modifiers() & Qt.KeyboardModifier.ControlModifier)
+        if event.key() == Qt.Key.Key_Delete:
+            self._delete_current_file()
+            event.accept()
+            return
+        if ctrl and event.key() == Qt.Key.Key_C:
+            self._copy_current_file()
+            event.accept()
+            return
+        if ctrl and event.key() == Qt.Key.Key_X:
+            self._cut_current_file()
+            event.accept()
+            return
+        if ctrl and event.key() == Qt.Key.Key_V:
+            self._paste_file_action()
+            event.accept()
+            return
+        original_project_dialog_key_press(self, event)
+
+    pfd.ProjectFileDialog.keyPressEvent = project_dialog_key_press
 
     def canvas_mouse_press(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
@@ -401,10 +442,12 @@ def apply_interaction_ui_patch() -> None:
         def engineering_delete(self):
             canvas = getattr(self, "_canvas", None)
             if isinstance(canvas, edw.EngineeringCanvas) and canvas.selected_indices:
+                logging.info("interaction_ui_patch: deleting engineering selection count=%s", len(canvas.selected_indices))
                 canvas._push_undo()
                 canvas._delete_selected_objects()
                 self._set_status("Deleted object")
                 return
+            logging.info("interaction_ui_patch: delete requested with no engineering selection")
             self._set_status("Delete")
 
         def engineering_show_edit_menu(self, anchor):
@@ -460,6 +503,7 @@ def apply_interaction_ui_patch() -> None:
             handled = True
             if event.key() in {Qt.Key.Key_Delete, Qt.Key.Key_Backspace}:
                 if self.selected_indices:
+                    logging.info("interaction_ui_patch: canvas key delete count=%s", len(self.selected_indices))
                     self._push_undo()
                     self._delete_selected_objects()
                 else:
@@ -547,6 +591,7 @@ def apply_interaction_ui_patch() -> None:
         edw.EngineeringCanvas.mouseMoveEvent = engineering_mouse_move
         edw.EngineeringCanvas.mouseReleaseEvent = engineering_mouse_release
         edw._draw_arc_arrow = engineering_draw_arc_arrow
+        logging.info("interaction_ui_patch: engineering workspace patches installed")
 
     class _WorkspaceShortcutFilter(QObject):
         def eventFilter(self, watched, event):  # noqa: N802
