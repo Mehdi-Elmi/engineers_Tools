@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import QEvent, QObject, QPointF, QRectF, Qt
-from PySide6.QtGui import QColor, QCursor, QPainter, QPainterPath, QPen, QPixmap, QPolygonF
+from PySide6.QtGui import QColor, QCursor, QIcon, QKeySequence, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap, QPolygonF, QShortcut
 from PySide6.QtWidgets import QApplication, QComboBox, QDialog, QDoubleSpinBox, QLabel, QLineEdit, QWidget
 
 
@@ -97,8 +97,59 @@ def _move_cursor() -> QCursor:
     return cursor
 
 
+def _layer_icon(kind: str, active: bool = True) -> QIcon:
+    pixmap = QPixmap(34, 34)
+    pixmap.fill(Qt.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.Antialiasing, True)
+    shell = QPainterPath()
+    shell.addRoundedRect(QRectF(2.5, 2.5, 29, 29), 10, 10)
+    gradient = QLinearGradient(2, 2, 32, 32)
+    gradient.setColorAt(0.0, QColor("#ffffff"))
+    gradient.setColorAt(0.52, QColor("#e8f8ff" if active else "#eef1f5"))
+    gradient.setColorAt(1.0, QColor("#5fd0ea" if active else "#9aa9ba"))
+    painter.fillPath(shell, gradient)
+    painter.setPen(QPen(QColor("#55708f"), 1.1))
+    painter.drawPath(shell)
+    ink = QColor("#132238")
+    painter.setPen(QPen(ink, 2.1, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+    painter.setBrush(Qt.NoBrush)
+    if kind == "eye":
+        eye = QPainterPath()
+        eye.moveTo(6.5, 17)
+        eye.cubicTo(10.4, 9.8, 23.6, 9.8, 27.5, 17)
+        eye.cubicTo(23.6, 24.2, 10.4, 24.2, 6.5, 17)
+        painter.drawPath(eye)
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QColor("#2f7df6" if active else "#8b98a8"))
+        painter.drawEllipse(QPointF(17, 17), 4.5, 4.5)
+        painter.setBrush(QColor("#ffffff"))
+        painter.drawEllipse(QPointF(18.6, 15.4), 1.25, 1.25)
+    elif kind == "lock":
+        if active:
+            painter.drawArc(QRectF(10, 7, 14, 14), 0, 180 * 16)
+        else:
+            painter.drawArc(QRectF(11, 7, 14, 14), 35 * 16, 145 * 16)
+            painter.drawLine(QPointF(22, 11), QPointF(26, 8.4))
+        body = QPainterPath()
+        body.addRoundedRect(QRectF(8.5, 15, 17, 11), 3.5, 3.5)
+        painter.drawPath(body)
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(ink)
+        painter.drawEllipse(QPointF(17, 20), 1.8, 1.8)
+        painter.drawRoundedRect(QRectF(16.25, 20, 1.5, 4.2), 0.7, 0.7)
+    else:
+        _paint_rotation_glyph(painter, QPointF(17, 17), 8.7, ink)
+    if not active:
+        painter.setPen(QPen(QColor("#d44777"), 2.2, Qt.SolidLine, Qt.RoundCap))
+        painter.drawLine(QPointF(8, 26), QPointF(26, 8))
+    painter.end()
+    return QIcon(pixmap)
+
+
 def _style_numeric_spin(spin: QDoubleSpinBox) -> None:
     spin.setButtonSymbols(QDoubleSpinBox.ButtonSymbols.UpDownArrows)
+    spin.setMinimumHeight(31)
     spin.setStyleSheet(
         """
         QDoubleSpinBox#FileNameInput {
@@ -123,6 +174,7 @@ def _style_numeric_spin(spin: QDoubleSpinBox) -> None:
 
 
 def _style_combo_arrow(combo: QComboBox) -> None:
+    combo.setMinimumHeight(31)
     combo.setStyleSheet(
         """
         QComboBox#FileTypeCombo {
@@ -153,7 +205,9 @@ def apply_interaction_ui_patch() -> None:
     rtp._paint_rotation_glyph = _paint_rotation_glyph
     rtp._style_numeric_spin = _style_numeric_spin
     rtp._style_combo_arrow = _style_combo_arrow
+    rtp._layer_icon = _layer_icon
     mw._paint_rotation_glyph = _paint_rotation_glyph
+    mw._layer_icon = _layer_icon
     sb._arrow_head = _solid_arrow_head
 
     original_page_setup_init = rtp.PageSetupDialog.__init__
@@ -196,6 +250,10 @@ def apply_interaction_ui_patch() -> None:
                 self._drag_start_rotation = self._rotation_degrees
                 if action in {"move", "rotate"}:
                     self.setCursor(_hand_cursor(True))
+                    app = QApplication.instance()
+                    if app is not None and not getattr(self, "_engineer_drag_cursor_active", False):
+                        QApplication.setOverrideCursor(_hand_cursor(True))
+                        self._engineer_drag_cursor_active = True
                 event.accept()
                 return
         QWidget.mousePressEvent(self, event)
@@ -228,6 +286,9 @@ def apply_interaction_ui_patch() -> None:
 
     def canvas_mouse_release(self, event):
         self._drag_action = None
+        if getattr(self, "_engineer_drag_cursor_active", False):
+            QApplication.restoreOverrideCursor()
+            self._engineer_drag_cursor_active = False
         point = self._to_canvas_coordinates(event.position())
         hover = self._hit_test(point)
         if hover in {"move", "rotate"}:
@@ -242,7 +303,15 @@ def apply_interaction_ui_patch() -> None:
 
     def force_delete(self):
         canvas = getattr(self, "_canvas", None)
-        if canvas is not None and (getattr(canvas, "_object_rect", None) is not None or getattr(canvas, "_file_path", None) is not None):
+        has_object = (
+            canvas is not None
+            and (
+                getattr(canvas, "_object_rect", None) is not None
+                or getattr(canvas, "_file_path", None) is not None
+                or not getattr(canvas, "_file_pixmap", QPixmap()).isNull()
+            )
+        )
+        if has_object:
             if hasattr(self, "_runtime_undo_stack"):
                 snapshot = {
                     "file_path": getattr(canvas, "_file_path", None),
@@ -269,6 +338,57 @@ def apply_interaction_ui_patch() -> None:
         self._set_status("Delete")
 
     mw.ModuleWindow._delete = force_delete
+
+    def show_edit_menu(self, anchor):
+        self._show_menu("Edit", (
+            mw.MenuItemSpec("Copy", self._copy, "Ctrl+C"),
+            mw.MenuItemSpec("Cut", self._cut, "Ctrl+X"),
+            mw.MenuItemSpec("Paste", self._paste, "Ctrl+V"),
+            mw.MenuItemSpec("Move", self._move),
+            mw.MenuItemSpec("Undo", self._undo, "Ctrl+Z"),
+            mw.MenuItemSpec("Redo", self._redo, "Ctrl+Y"),
+            mw.MenuItemSpec("Delete", self._delete, "Delete"),
+            mw.MenuItemSpec("Repeat Last Tools", self._repeat_last_tools, "Ctrl+R"),
+            mw.MenuItemSpec("Select All", self._select_all, "Ctrl+A"),
+            mw.MenuItemSpec("Group", self._group, "Ctrl+G"),
+            mw.MenuItemSpec("Ungroup", self._ungroup, "Ctrl+Shift+G"),
+        ), anchor)
+
+    def show_canvas_context_menu(self, global_pos):
+        self._show_menu_at("Object", (
+            mw.MenuItemSpec("Repeat", self._repeat_last_tools),
+            mw.MenuItemSpec("Copy", self._copy),
+            mw.MenuItemSpec("Cut", self._cut),
+            mw.MenuItemSpec("Paste", self._paste),
+            mw.MenuItemSpec("Delete", self._delete),
+            mw.MenuItemSpec("Rotate", self._rotation),
+            mw.MenuItemSpec("Bring to Front", self._bring_to_front),
+            mw.MenuItemSpec("Send to Back", self._send_to_back),
+            mw.MenuItemSpec("Group", self._group),
+            mw.MenuItemSpec("Ungroup", self._ungroup),
+        ), global_pos)
+
+    def install_shortcuts(self):
+        if getattr(self, "_engineer_interaction_shortcuts_installed", False):
+            return
+        self._engineer_interaction_shortcuts_installed = True
+        self._engineer_interaction_shortcuts = []
+        for sequence, handler_name in (
+            ("Ctrl+N", "_new_file"), ("Ctrl+O", "_open_file"), ("Ctrl+S", "_save_file"),
+            ("Ctrl+Shift+S", "_save_as_file"), ("Ctrl+Z", "_undo"), ("Ctrl+Y", "_redo"),
+            ("Ctrl+X", "_cut"), ("Ctrl+C", "_copy"), ("Ctrl+V", "_paste"),
+            ("Delete", "_delete"), ("Backspace", "_delete"), ("Ctrl+R", "_repeat_last_tools"),
+            ("Ctrl+A", "_select_all"), ("Ctrl+G", "_group"), ("Ctrl+Shift+G", "_ungroup"),
+        ):
+            shortcut = QShortcut(QKeySequence(sequence), self)
+            shortcut.setContext(Qt.ShortcutContext.ApplicationShortcut)
+            shortcut.activated.connect(lambda name=handler_name: getattr(self, name)())
+            shortcut.activatedAmbiguously.connect(lambda name=handler_name: getattr(self, name)())
+            self._engineer_interaction_shortcuts.append(shortcut)
+
+    mw.ModuleWindow._show_edit_menu = show_edit_menu
+    mw.ModuleWindow._show_canvas_context_menu = show_canvas_context_menu
+    mw.ModuleWindow._install_shortcuts = install_shortcuts
 
     class _WorkspaceShortcutFilter(QObject):
         def eventFilter(self, watched, event):  # noqa: N802
