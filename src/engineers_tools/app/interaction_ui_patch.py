@@ -3,10 +3,48 @@
 from __future__ import annotations
 
 import logging
+import tempfile
+from pathlib import Path
 
 from PySide6.QtCore import QEvent, QObject, QPointF, QRectF, Qt
 from PySide6.QtGui import QColor, QCursor, QIcon, QKeySequence, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap, QPolygonF, QShortcut
 from PySide6.QtWidgets import QApplication, QComboBox, QDialog, QDoubleSpinBox, QLabel, QLineEdit, QWidget
+
+
+_ARROW_ICON_CACHE: dict[str, str] = {}
+
+
+def _control_arrow_path(direction: str) -> str:
+    cached = _ARROW_ICON_CACHE.get(direction)
+    if cached:
+        return cached
+    pixmap = QPixmap(22, 14)
+    pixmap.fill(Qt.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.Antialiasing, True)
+    ink = QColor("#132238")
+    painter.setPen(QPen(ink, 1.9, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+    painter.setBrush(ink)
+    if direction == "up":
+        painter.drawLine(QPointF(11, 11), QPointF(11, 4))
+        painter.drawPolygon(QPolygonF([QPointF(11, 2), QPointF(4, 9), QPointF(8.7, 8), QPointF(8.7, 12), QPointF(13.3, 12), QPointF(13.3, 8), QPointF(18, 9)]))
+    elif direction == "down":
+        painter.drawLine(QPointF(11, 3), QPointF(11, 10))
+        painter.drawPolygon(QPolygonF([QPointF(11, 12), QPointF(4, 5), QPointF(8.7, 6), QPointF(8.7, 2), QPointF(13.3, 2), QPointF(13.3, 6), QPointF(18, 5)]))
+    elif direction == "left":
+        painter.drawLine(QPointF(18, 7), QPointF(6, 7))
+        painter.drawPolygon(QPolygonF([QPointF(3, 7), QPointF(10, 1), QPointF(9, 5), QPointF(19, 5), QPointF(19, 9), QPointF(9, 9), QPointF(10, 13)]))
+    else:
+        painter.drawLine(QPointF(4, 7), QPointF(16, 7))
+        painter.drawPolygon(QPolygonF([QPointF(19, 7), QPointF(12, 1), QPointF(13, 5), QPointF(3, 5), QPointF(3, 9), QPointF(13, 9), QPointF(12, 13)]))
+    painter.end()
+    icon_dir = Path(tempfile.gettempdir()) / "engineer_tools_ui_icons"
+    icon_dir.mkdir(parents=True, exist_ok=True)
+    path = icon_dir / f"arrow_{direction}.png"
+    pixmap.save(str(path), "PNG")
+    url = path.as_posix()
+    _ARROW_ICON_CACHE[direction] = url
+    return url
 
 
 def _triangle_arrow_head(painter: QPainter, tip: QPointF, tail: QPointF, color: QColor, size: float = 7.0) -> None:
@@ -42,61 +80,11 @@ def _paint_rotation_glyph(painter: QPainter, center: QPointF, radius: float, col
 
 
 def _hand_cursor(closed: bool = False) -> QCursor:
-    cache = getattr(_hand_cursor, "_cache", {})
-    if closed in cache:
-        return cache[closed]
-    pixmap = QPixmap(32, 32)
-    pixmap.fill(Qt.transparent)
-    painter = QPainter(pixmap)
-    painter.setRenderHint(QPainter.Antialiasing, True)
-    skin = QColor("#fff4dc")
-    outline = QColor("#132238")
-    painter.setPen(QPen(outline, 1.45, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
-    painter.setBrush(skin)
-    if closed:
-        palm = QPainterPath()
-        palm.addRoundedRect(QRectF(8, 11, 17, 14), 6, 6)
-        painter.fillPath(palm, skin)
-        painter.drawPath(palm)
-        for x in (9.5, 13.5, 17.5, 21.0):
-            painter.drawRoundedRect(QRectF(x, 7.0, 4.3, 10.0), 2.0, 2.0)
-        painter.drawLine(QPointF(12, 22), QPointF(22, 22))
-    else:
-        painter.drawRoundedRect(QRectF(12, 8, 5, 16), 2.4, 2.4)
-        painter.drawRoundedRect(QRectF(7, 13, 5, 12), 2.4, 2.4)
-        painter.drawRoundedRect(QRectF(17, 10, 5, 14), 2.4, 2.4)
-        painter.drawRoundedRect(QRectF(22, 13, 5, 11), 2.4, 2.4)
-        painter.drawRoundedRect(QRectF(9, 20, 16, 7), 4.0, 4.0)
-    painter.end()
-    cursor = QCursor(pixmap, 15, 15)
-    cache[closed] = cursor
-    _hand_cursor._cache = cache
-    return cursor
+    return QCursor(Qt.CursorShape.ClosedHandCursor if closed else Qt.CursorShape.OpenHandCursor)
 
 
 def _move_cursor() -> QCursor:
-    cache = getattr(_move_cursor, "_cache", None)
-    if cache is not None:
-        return cache
-    pixmap = QPixmap(34, 34)
-    pixmap.fill(Qt.transparent)
-    painter = QPainter(pixmap)
-    painter.setRenderHint(QPainter.Antialiasing, True)
-    ink = QColor("#132238")
-    accent = QColor("#2f7df6")
-    painter.setPen(QPen(ink, 2.2, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
-    center = QPointF(17, 17)
-    for tip in (QPointF(17, 3), QPointF(31, 17), QPointF(17, 31), QPointF(3, 17)):
-        painter.drawLine(center, tip)
-        _triangle_arrow_head(painter, tip, center, accent, 6.2)
-        painter.setPen(QPen(ink, 2.2, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
-    painter.setBrush(QColor("#fff9de"))
-    painter.setPen(QPen(QColor("#7e5b10"), 1.3))
-    painter.drawEllipse(center, 4.0, 4.0)
-    painter.end()
-    cursor = QCursor(pixmap, 17, 17)
-    _move_cursor._cache = cursor
-    return cursor
+    return QCursor(Qt.CursorShape.SizeAllCursor)
 
 
 def _layer_icon(kind: str, active: bool = True) -> QIcon:
@@ -150,6 +138,8 @@ def _layer_icon(kind: str, active: bool = True) -> QIcon:
 
 
 def _style_numeric_spin(spin: QDoubleSpinBox) -> None:
+    up_icon = _control_arrow_path("up")
+    down_icon = _control_arrow_path("down")
     spin.setButtonSymbols(QDoubleSpinBox.ButtonSymbols.UpDownArrows)
     spin.setMinimumHeight(31)
     spin.setMinimumWidth(138)
@@ -167,16 +157,18 @@ def _style_numeric_spin(spin: QDoubleSpinBox) -> None:
         QDoubleSpinBox#FileNameInput::up-button { subcontrol-position:top right; border-top-right-radius:8px; }
         QDoubleSpinBox#FileNameInput::down-button { subcontrol-position:bottom right; border-bottom-right-radius:8px; }
         QDoubleSpinBox#FileNameInput::up-arrow {
-            image:none; width:0; height:0; border-left:7px solid transparent; border-right:7px solid transparent; border-bottom:9px solid #132238;
+            image:url(%s); width:18px; height:11px;
         }
         QDoubleSpinBox#FileNameInput::down-arrow {
-            image:none; width:0; height:0; border-left:7px solid transparent; border-right:7px solid transparent; border-top:9px solid #132238;
+            image:url(%s); width:18px; height:11px;
         }
         """
+        % (up_icon, down_icon)
     )
 
 
 def _style_combo_arrow(combo: QComboBox) -> None:
+    down_icon = _control_arrow_path("down")
     combo.setMinimumHeight(31)
     combo.setStyleSheet(
         """
@@ -190,12 +182,13 @@ def _style_combo_arrow(combo: QComboBox) -> None:
             border-top-right-radius:8px; border-bottom-right-radius:8px;
         }
         QComboBox#FileTypeCombo::down-arrow {
-            image:none; width:0; height:0; border-left:7px solid transparent; border-right:7px solid transparent; border-top:9px solid #132238;
+            image:url(%s); width:18px; height:11px;
         }
         QComboBox#FileTypeCombo QAbstractItemView {
             background:#ffffff; border:1px solid #8fa2bb; border-radius:8px; selection-background-color:#cfe7ff;
         }
         """
+        % down_icon
     )
 
 
@@ -582,10 +575,82 @@ def apply_interaction_ui_patch() -> None:
             _triangle_arrow_head(painter, tip, tail, color, max(7.6, radius * 0.9))
             painter.restore()
 
+        def engineering_set_page_setup(self, paper_size, landscape, margins=None):
+            width, height = paper_size
+            width = max(1.0, float(width))
+            height = max(1.0, float(height))
+            if landscape and height > width:
+                width, height = height, width
+            elif not landscape and width > height:
+                width, height = height, width
+            self._page_setup_size_mm = (width, height)
+            self._page_setup_landscape = bool(landscape)
+            self._page_setup_margins = margins
+            self.update()
+
+        def engineering_page_rect(self):
+            width, height = getattr(self, "_page_setup_size_mm", (390.0, 210.0))
+            available = QRectF(30, 30, max(80, self.width() - 60), max(80, self.height() - 60))
+            ratio = height / width
+            page_width = min(available.width(), available.height() / ratio)
+            page_height = page_width * ratio
+            if page_height > available.height():
+                page_height = available.height()
+                page_width = page_height / ratio
+            return QRectF(available.center().x() - page_width / 2, available.center().y() - page_height / 2, page_width, page_height)
+
+        def engineering_paint_grid(self, painter):
+            page = self._page_rect()
+            shadow = QColor("#31445f")
+            shadow.setAlpha(34)
+            painter.fillRect(page.translated(4, 5), shadow)
+            painter.setPen(QPen(QColor("#b8c8d8"), 1.2))
+            painter.setBrush(QColor("#ffffff"))
+            painter.drawRoundedRect(page, 5, 5)
+            if not getattr(self, "_grid_visible", True):
+                return
+            painter.save()
+            clip = QPainterPath()
+            clip.addRoundedRect(page, 5, 5)
+            painter.setClipPath(clip)
+            painter.setPen(QPen(QColor(70, 96, 130, 42), 1))
+            spacing = max(8.0, min(80.0, page.width() / 24.0))
+            x = page.left()
+            while x <= page.right():
+                painter.drawLine(QPointF(x, page.top()), QPointF(x, page.bottom()))
+                x += spacing
+            y = page.top()
+            while y <= page.bottom():
+                painter.drawLine(QPointF(page.left(), y), QPointF(page.right(), y))
+                y += spacing
+            painter.restore()
+
+        def engineering_page_setup(self):
+            dialog = rtp.PageSetupDialog(self)
+            if dialog.exec() == QDialog.Accepted:
+                paper_size = dialog._current_paper_size()
+                landscape = bool(getattr(dialog, "_landscape", True))
+                margins = (
+                    dialog._margin_spins.get("top").value() if "top" in dialog._margin_spins else 0.0,
+                    dialog._margin_spins.get("right").value() if "right" in dialog._margin_spins else 0.0,
+                    dialog._margin_spins.get("bottom").value() if "bottom" in dialog._margin_spins else 0.0,
+                    dialog._margin_spins.get("left").value() if "left" in dialog._margin_spins else 0.0,
+                )
+                canvas = getattr(self, "_canvas", None)
+                if isinstance(canvas, edw.EngineeringCanvas):
+                    canvas.set_page_setup(paper_size, landscape, margins)
+                self._set_status("Page Setup applied: " + ("Landscape" if landscape else "Portrait"))
+            else:
+                self._set_status("Page Setup canceled")
+
         edw.EngineeringDesignWorkspace._delete = engineering_delete
         edw.EngineeringDesignWorkspace._show_edit_menu = engineering_show_edit_menu
         edw.EngineeringDesignWorkspace._show_canvas_context_menu = engineering_show_canvas_context_menu
         edw.EngineeringDesignWorkspace._install_engineering_shortcuts = engineering_install_shortcuts
+        edw.EngineeringDesignWorkspace._page_setup = engineering_page_setup
+        edw.EngineeringCanvas.set_page_setup = engineering_set_page_setup
+        edw.EngineeringCanvas._page_rect = engineering_page_rect
+        edw.EngineeringCanvas._paint_grid = engineering_paint_grid
         edw.EngineeringCanvas.keyPressEvent = engineering_canvas_key_press
         edw.EngineeringCanvas.mousePressEvent = engineering_mouse_press
         edw.EngineeringCanvas.mouseMoveEvent = engineering_mouse_move
