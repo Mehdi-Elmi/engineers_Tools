@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from PySide6.QtCore import QEvent, QPoint, QPointF, QRectF, QSize, Qt
-from PySide6.QtGui import QColor, QIcon, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap, QPolygonF
+from PySide6.QtGui import QColor, QIcon, QKeySequence, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap, QPolygonF, QShortcut
 from PySide6.QtWidgets import QComboBox, QDialog, QDoubleSpinBox, QGridLayout, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
 
@@ -15,10 +15,10 @@ def _triangle_arrow_head(painter: QPainter, tip: QPointF, tail: QPointF, color: 
     unit = QPointF(direction.x() / length, direction.y() / length)
     normal = QPointF(-unit.y(), unit.x())
     base = QPointF(tip.x() - unit.x() * size, tip.y() - unit.y() * size)
-    left = QPointF(base.x() + normal.x() * size * 0.42, base.y() + normal.y() * size * 0.42)
-    right = QPointF(base.x() - normal.x() * size * 0.42, base.y() - normal.y() * size * 0.42)
+    left = QPointF(base.x() + normal.x() * size * 0.58, base.y() + normal.y() * size * 0.58)
+    right = QPointF(base.x() - normal.x() * size * 0.58, base.y() - normal.y() * size * 0.58)
     painter.setBrush(color)
-    painter.setPen(QPen(color, 1.0, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+    painter.setPen(Qt.NoPen)
     painter.drawPolygon(QPolygonF([tip, left, right]))
 
 
@@ -27,15 +27,53 @@ def _solid_arrow_head(painter: QPainter, tip: QPointF, back: QPointF, size: floa
     _triangle_arrow_head(painter, tip, back, color, size)
 
 
+def _radio_icon(checked: bool) -> QIcon:
+    pixmap = QPixmap(22, 22)
+    pixmap.fill(Qt.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.Antialiasing, True)
+    painter.setPen(QPen(QColor("#18314f"), 2.0))
+    painter.setBrush(QColor("#ffffff"))
+    painter.drawEllipse(QPointF(11, 11), 8.0, 8.0)
+    if checked:
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QColor("#2f7df6"))
+        painter.drawEllipse(QPointF(11, 11), 4.6, 4.6)
+    painter.end()
+    return QIcon(pixmap)
+
+
+def _style_numeric_spin(spin: QDoubleSpinBox) -> None:
+    spin.setStyleSheet(
+        """
+        QDoubleSpinBox#FileNameInput {
+            background:#ffffff; border:1px solid #9fb0c5; border-radius:8px;
+            color:#132238; font-size:12px; font-style:normal; font-weight:800; padding:4px 22px 4px 7px;
+        }
+        QDoubleSpinBox#FileNameInput::up-button, QDoubleSpinBox#FileNameInput::down-button {
+            width:18px; border:0; background:#fff9de; subcontrol-origin:border;
+        }
+        QDoubleSpinBox#FileNameInput::up-button { subcontrol-position:top right; border-top-right-radius:7px; }
+        QDoubleSpinBox#FileNameInput::down-button { subcontrol-position:bottom right; border-bottom-right-radius:7px; }
+        QDoubleSpinBox#FileNameInput::up-arrow {
+            width:0; height:0; border-left:5px solid transparent; border-right:5px solid transparent; border-bottom:6px solid #132238;
+        }
+        QDoubleSpinBox#FileNameInput::down-arrow {
+            width:0; height:0; border-left:5px solid transparent; border-right:5px solid transparent; border-top:6px solid #132238;
+        }
+        """
+    )
+
+
 def _paint_rotation_glyph(painter: QPainter, center: QPointF, radius: float, color: QColor) -> None:
     painter.save()
     painter.setRenderHint(QPainter.Antialiasing, True)
     painter.setBrush(Qt.NoBrush)
     painter.setPen(QPen(color, 2.1, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
-    painter.drawArc(QRectF(center.x() - radius, center.y() - radius, radius * 2, radius * 2), 35 * 16, 285 * 16)
-    tip = QPointF(center.x() + radius * 0.88, center.y() - radius * 0.50)
-    tail = QPointF(center.x() + radius * 0.20, center.y() - radius * 0.84)
-    _triangle_arrow_head(painter, tip, tail, color, max(5.0, radius * 0.70))
+    painter.drawArc(QRectF(center.x() - radius, center.y() - radius, radius * 2, radius * 2), 45 * 16, 280 * 16)
+    tip = QPointF(center.x() + radius * 0.76, center.y() - radius * 0.63)
+    tail = QPointF(center.x() + radius * 0.06, center.y() - radius * 0.95)
+    _triangle_arrow_head(painter, tip, tail, color, max(7.0, radius * 0.82))
     painter.restore()
 
 
@@ -76,6 +114,28 @@ def _paper_icon(landscape: bool = False) -> QIcon:
     return QIcon(pixmap)
 
 
+def _paper_choice_icon(landscape: bool, checked: bool) -> QIcon:
+    pixmap = QPixmap(58, 30)
+    pixmap.fill(Qt.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.Antialiasing, True)
+    painter.setPen(QPen(QColor("#18314f"), 2.0))
+    painter.setBrush(QColor("#ffffff"))
+    painter.drawEllipse(QPointF(11, 15), 7.6, 7.6)
+    if checked:
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QColor("#2f7df6"))
+        painter.drawEllipse(QPointF(11, 15), 4.2, 4.2)
+    rect = QRectF(35, 5, 13, 20) if not landscape else QRectF(29, 8, 23, 14)
+    painter.setBrush(QColor("#ffffff"))
+    painter.setPen(QPen(QColor("#132238"), 1.4))
+    painter.drawRoundedRect(rect, 2, 2)
+    painter.setPen(QPen(QColor("#ff8a35"), 1.3))
+    painter.drawLine(rect.left() + 3, rect.top() + 5, rect.right() - 3, rect.top() + 5)
+    painter.end()
+    return QIcon(pixmap)
+
+
 def _position_icon(row: int, column: int) -> QIcon:
     pixmap = QPixmap(34, 30)
     pixmap.fill(Qt.transparent)
@@ -95,11 +155,6 @@ def _position_icon(row: int, column: int) -> QIcon:
     painter.setBrush(QColor("#2f7df6"))
     painter.setPen(QPen(QColor("#174d9a"), 1.0))
     painter.drawRoundedRect(object_rect, 1.5, 1.5)
-    painter.setPen(QPen(QColor("#ff8a35"), 1.6, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
-    start = QPointF(9, 24)
-    end = QPointF(object_rect.center().x(), object_rect.center().y())
-    painter.drawLine(start, end)
-    _triangle_arrow_head(painter, end, start, QColor("#ff8a35"), 4.4)
     painter.end()
     return QIcon(pixmap)
 
@@ -219,12 +274,8 @@ class PageSetupDialog(QDialog):
         layout.setContentsMargins(0, 0, 0, 14)
         layout.setSpacing(10)
         layout.addWidget(self._build_header())
-        strip = QWidget()
-        strip.setObjectName("FileDialogNavBar")
-        strip.setFixedHeight(10)
-        layout.addWidget(strip)
         body = QHBoxLayout()
-        body.setContentsMargins(14, 2, 14, 0)
+        body.setContentsMargins(14, 8, 14, 0)
         body.setSpacing(14)
         self._preview = PageSetupPreview()
         body.addWidget(self._preview, 1)
@@ -288,9 +339,14 @@ class PageSetupDialog(QDialog):
         self._paper_combo.currentIndexChanged.connect(self._paper_combo_changed)
         layout.addWidget(self._paper_combo)
         custom_grid = QGridLayout()
+        custom_grid.setHorizontalSpacing(3)
+        custom_grid.setVerticalSpacing(4)
         for column, (key, label) in enumerate((("width", "W"), ("height", "H"))):
-            custom_grid.addWidget(QLabel(label), 0, column * 2)
+            field_label = QLabel(label)
+            field_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            custom_grid.addWidget(field_label, 0, column * 2)
             spin = self._number_spin(1, 5000, 0.5, " mm")
+            spin.setFixedWidth(116)
             spin.setValue(self.PAPER_SIZES["Custom"][column])
             spin.setEnabled(False)
             spin.valueChanged.connect(lambda value, spin_key=key: self._custom_size_changed(spin_key, value))
@@ -300,11 +356,11 @@ class PageSetupDialog(QDialog):
         layout.addWidget(self._section_label("Orientation"))
         orient = QHBoxLayout()
         portrait = self._choice_button("Portrait", not self._landscape, lambda: self._set_orientation(False))
-        portrait.setIcon(_paper_icon(False))
-        portrait.setIconSize(QSize(34, 24))
+        portrait.setIcon(_paper_choice_icon(False, not self._landscape))
+        portrait.setIconSize(QSize(58, 30))
         landscape = self._choice_button("Landscape", self._landscape, lambda: self._set_orientation(True))
-        landscape.setIcon(_paper_icon(True))
-        landscape.setIconSize(QSize(34, 24))
+        landscape.setIcon(_paper_choice_icon(True, self._landscape))
+        landscape.setIconSize(QSize(58, 30))
         self._orientation_buttons = (portrait, landscape)
         orient.addWidget(portrait)
         orient.addWidget(landscape)
@@ -330,7 +386,7 @@ class PageSetupDialog(QDialog):
         layout.addLayout(sync_row)
         layout.addWidget(self._section_label("Object Position"))
         pos_grid = QGridLayout()
-        pos_grid.setSpacing(2)
+        pos_grid.setSpacing(0)
         self._position_buttons: list[QPushButton] = []
         for row in range(3):
             for column in range(3):
@@ -340,7 +396,7 @@ class PageSetupDialog(QDialog):
                 button.setChecked((row, column) == self._position)
                 button.setIcon(_position_icon(row, column))
                 button.setIconSize(QSize(34, 30))
-                button.setFixedSize(40, 34)
+                button.setFixedSize(38, 32)
                 button.clicked.connect(lambda checked=False, r=row, c=column: self._set_position(r, c))
                 self._position_buttons.append(button)
                 pos_grid.addWidget(button, row, column)
@@ -360,6 +416,8 @@ class PageSetupDialog(QDialog):
         self._custom_dpi.setSingleStep(1)
         self._custom_dpi.setValue(600)
         self._custom_dpi.setSuffix(" DPI")
+        self._custom_dpi.setEnabled(False)
+        _style_numeric_spin(self._custom_dpi)
         layout.addWidget(self._custom_dpi)
         layout.addStretch(1)
         return panel
@@ -374,6 +432,8 @@ class PageSetupDialog(QDialog):
         button.setObjectName("MenuItemButton")
         button.setCheckable(True)
         button.setChecked(checked)
+        button.setIcon(_radio_icon(checked))
+        button.setIconSize(QSize(22, 22))
         button.clicked.connect(lambda checked=False: callback())
         return button
 
@@ -384,6 +444,7 @@ class PageSetupDialog(QDialog):
         spin.setDecimals(2)
         spin.setSingleStep(step)
         spin.setSuffix(suffix)
+        _style_numeric_spin(spin)
         return spin
 
     def _paper_combo_changed(self, index: int = 0) -> None:
@@ -406,6 +467,8 @@ class PageSetupDialog(QDialog):
         self._landscape = landscape
         for button, state in zip(self._orientation_buttons, (not landscape, landscape), strict=True):
             button.setChecked(state)
+        self._orientation_buttons[0].setIcon(_paper_choice_icon(False, not landscape))
+        self._orientation_buttons[1].setIcon(_paper_choice_icon(True, landscape))
         self._update_preview()
 
     def _margin_changed(self, key: str, value: float) -> None:
@@ -424,11 +487,13 @@ class PageSetupDialog(QDialog):
     def _toggle_vertical_sync(self) -> None:
         self._sync_vertical = not self._sync_vertical
         self._sync_buttons[0].setChecked(self._sync_vertical)
+        self._sync_buttons[0].setIcon(_radio_icon(self._sync_vertical))
         self._margin_changed("top", self._margin_spins["top"].value())
 
     def _toggle_horizontal_sync(self) -> None:
         self._sync_horizontal = not self._sync_horizontal
         self._sync_buttons[1].setChecked(self._sync_horizontal)
+        self._sync_buttons[1].setIcon(_radio_icon(self._sync_horizontal))
         self._margin_changed("left", self._margin_spins["left"].value())
 
     def _set_position(self, row: int, column: int) -> None:
@@ -439,7 +504,10 @@ class PageSetupDialog(QDialog):
 
     def _set_dpi(self, selected: str) -> None:
         for button in self._dpi_buttons:
-            button.setChecked(button.text() == selected)
+            active = button.text() == selected
+            button.setChecked(active)
+            button.setIcon(_radio_icon(active))
+        self._custom_dpi.setEnabled(selected == "Custom")
         if selected != "Custom":
             self._custom_dpi.setValue(float(selected))
 
@@ -558,6 +626,42 @@ def apply_runtime_ui_patch() -> None:
             mw.MenuItemSpec("Properties", self._file_properties),
         ), anchor)
 
+    def show_edit_menu(self, anchor):
+        self._show_menu("Edit", (
+            mw.MenuItemSpec("Copy", self._copy, "Ctrl+C"), mw.MenuItemSpec("Cut", self._cut, "Ctrl+X"),
+            mw.MenuItemSpec("Paste", self._paste, "Ctrl+V"), mw.MenuItemSpec("Move", self._move),
+            mw.MenuItemSpec("Undo", self._undo, "Ctrl+Z"), mw.MenuItemSpec("Redo", self._redo, "Ctrl+Y"),
+            mw.MenuItemSpec("Delete", self._delete, "Delete"),
+            mw.MenuItemSpec("Repeat Last Tools", self._repeat_last_tools, "Ctrl+R"), mw.MenuItemSpec("Select All", self._select_all, "Ctrl+A"),
+            mw.MenuItemSpec("Group", self._group, "Ctrl+G"), mw.MenuItemSpec("Ungroup", self._ungroup, "Ctrl+Shift+G"),
+        ), anchor)
+
+    def show_canvas_context_menu(self, global_pos):
+        self._show_menu_at("Object", (
+            mw.MenuItemSpec("Repeat", self._repeat_last_tools),
+            mw.MenuItemSpec("Copy", self._copy),
+            mw.MenuItemSpec("Cut", self._cut),
+            mw.MenuItemSpec("Paste", self._paste),
+            mw.MenuItemSpec("Delete", self._delete),
+            mw.MenuItemSpec("Rotate", self._rotation),
+            mw.MenuItemSpec("Bring to Front", self._bring_to_front),
+            mw.MenuItemSpec("Send to Back", self._send_to_back),
+            mw.MenuItemSpec("Group", self._group),
+            mw.MenuItemSpec("Ungroup", self._ungroup),
+        ), global_pos)
+
+    def install_shortcuts(self):
+        for sequence, handler in (
+            ("Ctrl+N", self._new_file), ("Ctrl+O", self._open_file), ("Ctrl+S", self._save_file),
+            ("Ctrl+Shift+S", self._save_as_file), ("Ctrl+Z", self._undo), ("Ctrl+Y", self._redo),
+            ("Ctrl+X", self._cut), ("Ctrl+C", self._copy), ("Ctrl+V", self._paste),
+            ("Delete", self._delete), ("Backspace", self._delete), ("Ctrl+R", self._repeat_last_tools),
+            ("Ctrl+A", self._select_all), ("Ctrl+G", self._group), ("Ctrl+Shift+G", self._ungroup),
+        ):
+            shortcut = QShortcut(QKeySequence(sequence), self)
+            shortcut.setContext(Qt.ShortcutContext.ApplicationShortcut)
+            shortcut.activated.connect(handler)
+
     def page_setup(self):
         dialog = PageSetupDialog(self)
         if dialog.exec() == QDialog.Accepted:
@@ -568,5 +672,8 @@ def apply_runtime_ui_patch() -> None:
     mw.ModuleWindow._build_page_bar = build_page_bar
     mw.ModuleWindow._refresh_page_buttons = refresh_page_buttons
     mw.ModuleWindow._show_file_menu = show_file_menu
+    mw.ModuleWindow._show_edit_menu = show_edit_menu
+    mw.ModuleWindow._show_canvas_context_menu = show_canvas_context_menu
+    mw.ModuleWindow._install_shortcuts = install_shortcuts
     mw.ModuleWindow._page_setup = page_setup
     mw.ModuleWindow._page_setup_patch_applied = True
