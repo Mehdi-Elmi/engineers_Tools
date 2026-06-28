@@ -32,8 +32,10 @@ DEFAULT_START_BAR_TOOLS: tuple[StartBarTool, ...] = (
 )
 
 UNIT_TO_MM = {"mm": 1.0, "cm": 10.0, "m": 1000.0, "px": 25.4 / 96.0, "in": 25.4, "pt": 25.4 / 72.0}
-UNIT_ORDER = ("mm", "m", "cm", "px", "pt", "in")
+UNIT_LABELS = {"mm": "millimeter", "cm": "centimeter", "m": "meter", "px": "pixel", "pt": "point", "in": "inch"}
+UNIT_ORDER = ("mm", "cm", "m", "px", "pt", "in")
 MM_TO_SCREEN_PX = 96.0 / 25.4
+RULER_THICKNESS = 28
 GUIDE_COLOR = QColor(255, 138, 53, 205)
 
 
@@ -72,9 +74,7 @@ def _paint_magnifier(painter: QPainter, mode: str, center: QPointF = QPointF(15,
     painter.drawLine(QPointF(center.x() + 5, center.y() + 5), QPointF(center.x() + 13, center.y() + 13))
     painter.setPen(QPen(QColor("#2f7df6"), 2.0, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
     if mode == "fit":
-        painter.drawLine(QPointF(center.x() - 5, center.y() + 5), QPointF(center.x() + 5, center.y() - 5))
-        painter.drawLine(QPointF(center.x() + 5, center.y() - 5), QPointF(center.x() + 5, center.y() + 1))
-        painter.drawLine(QPointF(center.x() + 5, center.y() - 5), QPointF(center.x() - 1, center.y() - 5))
+        painter.drawRoundedRect(QRectF(center.x() - 4.2, center.y() - 4.2, 8.4, 8.4), 1.5, 1.5)
     else:
         painter.drawLine(QPointF(center.x() - 4, center.y()), QPointF(center.x() + 4, center.y()))
         if mode == "in":
@@ -249,9 +249,6 @@ class _GuideLine(QWidget):
     def contextMenuEvent(self, event) -> None:  # noqa: N802
         menu = QMenu(self)
         _style_guide_menu(menu)
-        menu.addAction("Copy")
-        menu.addAction("Cut")
-        menu.addAction("Paste")
         delete = menu.addAction("Delete")
         chosen = menu.exec(event.globalPos())
         if chosen == delete:
@@ -272,7 +269,12 @@ class _RulerOverlay(QWidget):
     def paintEvent(self, event) -> None:  # noqa: N802
         super().paintEvent(event)
         painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing, True)
         painter.fillRect(self.rect(), QColor(20, 37, 58, 230))
+        font = painter.font()
+        font.setPointSize(7)
+        font.setBold(True)
+        painter.setFont(font)
         painter.setPen(QPen(QColor("#ffffff"), 1.0))
         spacing = max(1.0, self._start_bar._unit_to_canvas_px(1.0, self._start_bar._unit))
         length = self.width() if self._orientation == "top" else self.height()
@@ -284,15 +286,15 @@ class _RulerOverlay(QWidget):
                 break
             if position >= 0:
                 abs_index = abs(index)
-                tick = 22 if abs_index % 10 == 0 else 15 if abs_index % 5 == 0 else 8
+                tick = 23 if abs_index % 10 == 0 else 16 if abs_index % 5 == 0 else 8
                 if self._orientation == "top":
                     painter.drawLine(QPointF(position, self.height()), QPointF(position, self.height() - tick))
                     if abs_index % 10 == 0:
-                        painter.drawText(QRectF(position + 2, 1, 52, 14), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, str(index))
+                        painter.drawText(QRectF(position + 2, 1, 46, 12), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, str(index))
                 else:
                     painter.drawLine(QPointF(self.width(), position), QPointF(self.width() - tick, position))
                     if abs_index % 10 == 0:
-                        painter.drawText(QRectF(2, position + 2, self.width() - 4, 14), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, str(index))
+                        painter.drawText(QRectF(2, position + 1, self.width() - 4, 12), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, str(index))
             index += 1
         painter.end()
 
@@ -349,7 +351,7 @@ class _RulerCorner(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing, True)
         painter.fillRect(self.rect(), QColor(13, 29, 48, 240))
-        rect = QRectF(4, 3, self.width() - 8, self.height() - 6)
+        rect = QRectF(4, 4, self.width() - 8, self.height() - 8)
         gradient = QLinearGradient(rect.topLeft(), rect.bottomRight())
         if self._pressed:
             gradient.setColorAt(0.0, QColor("#7f95b2"))
@@ -359,15 +361,15 @@ class _RulerCorner(QWidget):
             gradient.setColorAt(0.48, QColor("#dff4ff"))
             gradient.setColorAt(1.0, QColor("#ffbf69"))
         path = QPainterPath()
-        path.addRoundedRect(rect, 6, 6)
+        path.addRoundedRect(rect, 7, 7)
         painter.fillPath(path, gradient)
         painter.setPen(QPen(QColor("#ffffff"), 1.0))
         painter.drawPath(path)
         painter.setPen(QPen(QColor("#132238"), 1.5, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
-        painter.drawLine(QPointF(10, 16), QPointF(10, 8))
-        painter.drawLine(QPointF(10, 16), QPointF(20, 16))
+        painter.drawLine(QPointF(10, 18), QPointF(10, 9))
+        painter.drawLine(QPointF(10, 18), QPointF(21, 18))
         painter.setBrush(QColor("#2f7df6"))
-        painter.drawEllipse(QPointF(10, 16), 2.4, 2.4)
+        painter.drawEllipse(QPointF(10, 18), 2.4, 2.4)
         painter.end()
 
     def mousePressEvent(self, event) -> None:  # noqa: N802
@@ -400,7 +402,7 @@ class _RulerCorner(QWidget):
                 delta = QPointF(0, 0) if self._press_pos is None else event.position() - self._press_pos
                 moved = abs(delta.x()) + abs(delta.y())
                 if moved < 4:
-                    self._start_bar._set_ruler_origin(QPointF(0, 0), custom=True)
+                    self._start_bar._set_ruler_origin(QPointF(RULER_THICKNESS, RULER_THICKNESS), custom=True)
                 else:
                     point = canvas.mapFromGlobal(event.globalPosition().toPoint())
                     self._start_bar._set_ruler_origin(QPointF(point), custom=True)
@@ -483,6 +485,11 @@ class StartBar(QWidget):
             layout.addWidget(button)
         layout.addStretch(1)
         self._refresh_tooltips()
+
+    def showEvent(self, event) -> None:  # noqa: N802
+        super().showEvent(event)
+        self._ensure_canvas_hooks()
+        self._apply_grid_to_host()
 
     def button(self, key: str) -> QPushButton | None:
         return self._buttons.get(key)
@@ -609,6 +616,10 @@ class StartBar(QWidget):
             canvas._start_bar_grid_hooked = True
         canvas._grid_spacing = self._grid_spacing
         canvas._grid_unit = self._unit
+        if hasattr(canvas, "set_grid_visible"):
+            canvas.set_grid_visible(self._grid_enabled)
+        else:
+            canvas.update()
 
     def _ensure_rubber_band(self) -> None:
         canvas = self._canvas()
@@ -626,6 +637,7 @@ class StartBar(QWidget):
         shell = QWidget()
         shell.setObjectName("StartToolPopupShell")
         shell.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        shell.setMinimumWidth(width)
         root = QVBoxLayout(popup)
         root.setContentsMargins(0, 0, 0, 0)
         root.addWidget(shell)
@@ -642,13 +654,13 @@ class StartBar(QWidget):
             "QPushButton#RadioChoice:checked {background:#dff6ff; border-color:#2f7df6;}"
             "QDoubleSpinBox#PopupSpin {background:#ffffff; border:1px solid #9fb0c5; border-radius:7px; color:#132238; font-size:12px; font-style:normal; font-weight:800; padding:4px 7px;}"
         )
-        popup.setFixedWidth(width)
         self._popup = popup
         return popup, layout
 
     def _show_popup_near(self, key: str, popup: QDialog) -> None:
         button = self._buttons.get(key)
         target = button.mapToGlobal(QPoint(0, button.height() + 4)) if button is not None else self.mapToGlobal(QPoint(0, self.height()))
+        popup.adjustSize()
         popup.move(target)
         popup.show()
 
@@ -726,14 +738,15 @@ class StartBar(QWidget):
         self._set_zoom_value(max(5.0, min(3200.0, value)))
 
     def _show_unit_popup(self, key: str) -> None:
-        popup, layout = self._popup_base(184)
-        rows = (UNIT_ORDER[:3], UNIT_ORDER[3:])
+        popup, layout = self._popup_base(228)
+        rows = (("mm", "cm", "m"), ("px", "pt", "in"))
         for row_units in rows:
             row = QHBoxLayout()
-            row.setSpacing(5)
+            row.setSpacing(6)
             for unit in row_units:
                 button = self._radio_button(unit, unit == self._unit, lambda checked=False, selected=unit: self._set_unit(selected))
-                button.setFixedWidth(52)
+                button.setToolTip(UNIT_LABELS[unit])
+                button.setFixedWidth(64)
                 row.addWidget(button)
             layout.addLayout(row)
         self._show_popup_near(key, popup)
@@ -758,8 +771,9 @@ class StartBar(QWidget):
             self._popup.close()
 
     def _show_grid_popup(self, key: str) -> None:
-        popup, layout = self._popup_base(204)
+        popup, layout = self._popup_base(220)
         row = QHBoxLayout()
+        row.setSpacing(6)
         on_button = self._radio_button("Grid On", self._grid_enabled, lambda: self._set_grid_enabled(True))
         off_button = self._radio_button("Grid Off", not self._grid_enabled, lambda: self._set_grid_enabled(False))
         row.addWidget(on_button)
@@ -837,6 +851,7 @@ class StartBar(QWidget):
         canvas = self._canvas()
         if canvas is not None:
             canvas.update()
+        self._apply_grid_to_host()
 
     def _register_ruler_guide(self, guide: _GuideLine) -> None:
         if guide not in self._ruler_guides:
@@ -879,13 +894,13 @@ class StartBar(QWidget):
         if canvas is None:
             return
         if self._ruler_top is not None:
-            self._ruler_top.setGeometry(30, 0, max(0, canvas.width() - 30), 24)
+            self._ruler_top.setGeometry(RULER_THICKNESS, 0, max(0, canvas.width() - RULER_THICKNESS), RULER_THICKNESS)
             self._ruler_top.update()
         if self._ruler_left is not None:
-            self._ruler_left.setGeometry(0, 24, 30, max(0, canvas.height() - 24))
+            self._ruler_left.setGeometry(0, RULER_THICKNESS, RULER_THICKNESS, max(0, canvas.height() - RULER_THICKNESS))
             self._ruler_left.update()
         if self._ruler_corner is not None:
-            self._ruler_corner.setGeometry(0, 0, 30, 24)
+            self._ruler_corner.setGeometry(0, 0, RULER_THICKNESS, RULER_THICKNESS)
             self._ruler_corner.update()
 
     def _refresh_tooltips(self) -> None:
