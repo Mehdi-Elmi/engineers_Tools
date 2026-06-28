@@ -32,6 +32,8 @@ def apply_app_theme(app: QApplication) -> None:
     app.setStyleSheet(
         f"""
         QWidget {{ color:{TEXT}; background:{BACKGROUND}; font-family:"Times New Roman"; font-style:italic; font-weight:700; }}
+        QDialog, QMenu, QDialog QWidget, QMenu QWidget {{ background:transparent; }}
+        QDialog#StartToolPopup, QDialog#ProjectMenuDialog, QDialog#ProjectHelpDialog, QDialog#ProjectFileDialog {{ background:transparent; }}
         QWidget#WindowRoot {{
             background:qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 #f9fcff, stop:0.45 #eaf2fb, stop:1 #d3deeb);
             border:1px solid {EDGE}; border-radius:18px;
@@ -90,6 +92,7 @@ def apply_app_theme(app: QApplication) -> None:
         QPushButton#AddPageButton:pressed {{ padding-top:3px; border-bottom:1px solid #28556a; }}
 
         QWidget#StatusBar {{ background:{NAVY}; border-top:1px solid #0b1729; border-bottom-left-radius:18px; border-bottom-right-radius:18px; }}
+        QWidget#StatusBar QWidget, QWidget#StatusBar QPushButton, QWidget#StatusBar QAbstractSpinBox {{ background:transparent; }}
         QLabel#StatusItem {{ background:transparent; color:#eef4fb; font-size:11px; }}
         QWidget#ZoomControl, QWidget#ZoomArrowStack {{ background:transparent; }}
 
