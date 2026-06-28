@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from PySide6.QtCore import QPoint, QPointF, QRectF, QSize, Qt
+from PySide6.QtCore import QEvent, QPoint, QPointF, QRectF, QSize, Qt
 from PySide6.QtGui import QColor, QIcon, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap, QPolygonF
-from PySide6.QtWidgets import QDialog, QDoubleSpinBox, QGridLayout, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QComboBox, QDialog, QDoubleSpinBox, QGridLayout, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
 
 def _triangle_arrow_head(painter: QPainter, tip: QPointF, tail: QPointF, color: QColor, size: float = 7.0) -> None:
@@ -20,6 +20,11 @@ def _triangle_arrow_head(painter: QPainter, tip: QPointF, tail: QPointF, color: 
     painter.setBrush(color)
     painter.setPen(QPen(color, 1.0, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
     painter.drawPolygon(QPolygonF([tip, left, right]))
+
+
+def _solid_arrow_head(painter: QPainter, tip: QPointF, back: QPointF, size: float = 6.0) -> None:
+    color = painter.pen().color()
+    _triangle_arrow_head(painter, tip, back, color, size)
 
 
 def _paint_rotation_glyph(painter: QPainter, center: QPointF, radius: float, color: QColor) -> None:
@@ -80,11 +85,21 @@ def _position_icon(row: int, column: int) -> QIcon:
     painter.setBrush(QColor("#ffffff"))
     painter.setPen(QPen(QColor("#8fa2bb"), 1.2))
     painter.drawRoundedRect(paper, 3, 3)
-    dot_x = paper.left() + (column + 0.5) * paper.width() / 3
-    dot_y = paper.top() + (row + 0.5) * paper.height() / 3
-    painter.setPen(Qt.NoPen)
+    object_rect = QRectF(0, 0, 8, 6)
+    object_rect.moveCenter(
+        QPointF(
+            paper.left() + (column + 0.5) * paper.width() / 3,
+            paper.top() + (row + 0.5) * paper.height() / 3,
+        )
+    )
     painter.setBrush(QColor("#2f7df6"))
-    painter.drawEllipse(QPointF(dot_x, dot_y), 3.3, 3.3)
+    painter.setPen(QPen(QColor("#174d9a"), 1.0))
+    painter.drawRoundedRect(object_rect, 1.5, 1.5)
+    painter.setPen(QPen(QColor("#ff8a35"), 1.6, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+    start = QPointF(9, 24)
+    end = QPointF(object_rect.center().x(), object_rect.center().y())
+    painter.drawLine(start, end)
+    _triangle_arrow_head(painter, end, start, QColor("#ff8a35"), 4.4)
     painter.end()
     return QIcon(pixmap)
 
@@ -93,15 +108,22 @@ class PageSetupPreview(QWidget):
     def __init__(self) -> None:
         super().__init__()
         self.setMinimumSize(260, 360)
-        self.paper_ratio = 297 / 210
+        self.paper_width_mm = 390.0
+        self.paper_height_mm = 210.0
         self.margin_top = 12.0
         self.margin_bottom = 12.0
         self.margin_left = 10.0
         self.margin_right = 10.0
         self.position = (1, 1)
 
-    def set_state(self, paper_ratio: float, landscape: bool, margins: tuple[float, float, float, float], position: tuple[int, int]) -> None:
-        self.paper_ratio = 1 / paper_ratio if landscape else paper_ratio
+    def set_state(self, paper_size: tuple[float, float], landscape: bool, margins: tuple[float, float, float, float], position: tuple[int, int]) -> None:
+        width, height = paper_size
+        if landscape and height > width:
+            width, height = height, width
+        elif not landscape and width > height and width != 390.0:
+            width, height = height, width
+        self.paper_width_mm = max(1.0, width)
+        self.paper_height_mm = max(1.0, height)
         self.margin_top, self.margin_right, self.margin_bottom, self.margin_left = margins
         self.position = position
         self.update()
@@ -112,11 +134,12 @@ class PageSetupPreview(QWidget):
         painter.setRenderHint(QPainter.Antialiasing, True)
         painter.fillRect(self.rect(), QColor("#eef4fb"))
         available = self.rect().adjusted(22, 22, -22, -22)
-        paper_width = min(available.width(), available.height() / self.paper_ratio)
-        paper_height = paper_width * self.paper_ratio
+        paper_ratio = self.paper_height_mm / self.paper_width_mm
+        paper_width = min(available.width(), available.height() / paper_ratio)
+        paper_height = paper_width * paper_ratio
         if paper_height > available.height():
             paper_height = available.height()
-            paper_width = paper_height / self.paper_ratio
+            paper_width = paper_height / paper_ratio
         paper = QRectF(
             available.center().x() - paper_width / 2,
             available.center().y() - paper_height / 2,
@@ -126,37 +149,47 @@ class PageSetupPreview(QWidget):
         painter.setBrush(QColor("#ffffff"))
         painter.setPen(QPen(QColor("#132238"), 1.4))
         painter.drawRoundedRect(paper, 5, 5)
-        left = paper.left() + paper.width() * min(self.margin_left, 45) / 100
-        right = paper.right() - paper.width() * min(self.margin_right, 45) / 100
-        top = paper.top() + paper.height() * min(self.margin_top, 45) / 100
-        bottom = paper.bottom() - paper.height() * min(self.margin_bottom, 45) / 100
-        content = QRectF(left, top, max(12, right - left), max(12, bottom - top))
+        left = paper.left() + paper.width() * min(self.margin_left, self.paper_width_mm * 0.45) / self.paper_width_mm
+        right = paper.right() - paper.width() * min(self.margin_right, self.paper_width_mm * 0.45) / self.paper_width_mm
+        top = paper.top() + paper.height() * min(self.margin_top, self.paper_height_mm * 0.45) / self.paper_height_mm
+        bottom = paper.bottom() - paper.height() * min(self.margin_bottom, self.paper_height_mm * 0.45) / self.paper_height_mm
+        printable = QRectF(left, top, max(12, right - left), max(12, bottom - top))
         painter.setPen(QPen(QColor("#2f7df6"), 1.2, Qt.DashLine))
         painter.setBrush(QColor(47, 125, 246, 24))
-        painter.drawRoundedRect(content, 4, 4)
+        painter.drawRoundedRect(printable, 4, 4)
         row, column = self.position
-        marker = QPointF(
-            content.left() + (column + 0.5) * content.width() / 3,
-            content.top() + (row + 0.5) * content.height() / 3,
+        object_width = max(24.0, printable.width() * 0.34)
+        object_height = max(18.0, printable.height() * 0.24)
+        x_positions = (
+            printable.left(),
+            printable.center().x() - object_width / 2,
+            printable.right() - object_width,
         )
-        painter.setPen(Qt.NoPen)
-        painter.setBrush(QColor("#ff8a35"))
-        painter.drawEllipse(marker, 5, 5)
+        y_positions = (
+            printable.top(),
+            printable.center().y() - object_height / 2,
+            printable.bottom() - object_height,
+        )
+        content = QRectF(x_positions[column], y_positions[row], object_width, object_height)
+        painter.setPen(QPen(QColor("#ff8a35"), 1.8))
+        painter.setBrush(QColor(255, 138, 53, 40))
+        painter.drawRoundedRect(content, 5, 5)
         painter.end()
 
 
 class PageSetupDialog(QDialog):
-    PAPER_SIZES = ("A0", "A1", "A2", "A3", "A4", "A5", "Letter", "Legal", "Tabloid")
-    PAPER_RATIOS = {
-        "A0": 1189 / 841,
-        "A1": 841 / 594,
-        "A2": 594 / 420,
-        "A3": 420 / 297,
-        "A4": 297 / 210,
-        "A5": 210 / 148,
-        "Letter": 11 / 8.5,
-        "Legal": 14 / 8.5,
-        "Tabloid": 17 / 11,
+    PAPER_SIZES = {
+        "Workspace": (390.0, 210.0),
+        "A0": (841.0, 1189.0),
+        "A1": (594.0, 841.0),
+        "A2": (420.0, 594.0),
+        "A3": (297.0, 420.0),
+        "A4": (210.0, 297.0),
+        "A5": (148.0, 210.0),
+        "Letter": (215.9, 279.4),
+        "Legal": (215.9, 355.6),
+        "Tabloid": (279.4, 431.8),
+        "Custom": (390.0, 210.0),
     }
     DPI_VALUES = ("200", "300", "600", "1200", "Custom")
 
@@ -167,30 +200,38 @@ class PageSetupDialog(QDialog):
         self.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint)
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setModal(True)
-        self.resize(820, 560)
-        self._paper_name = "A4"
-        self._landscape = False
+        self.resize(900, 600)
+        self._paper_name = "Workspace"
+        self._landscape = True
         self._position = (1, 1)
         self._margin_spins: dict[str, QDoubleSpinBox] = {}
+        self._custom_size_spins: dict[str, QDoubleSpinBox] = {}
         self._paper_buttons: dict[str, QPushButton] = {}
         self._sync_vertical = False
         self._sync_horizontal = False
+        self._drag_offset: QPoint | None = None
         shell = QWidget()
         shell.setObjectName("ProjectHelpShell")
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.addWidget(shell)
         layout = QVBoxLayout(shell)
-        layout.setContentsMargins(14, 12, 14, 14)
-        layout.setSpacing(12)
+        layout.setContentsMargins(0, 0, 0, 14)
+        layout.setSpacing(10)
         layout.addWidget(self._build_header())
+        strip = QWidget()
+        strip.setObjectName("FileDialogNavBar")
+        strip.setFixedHeight(10)
+        layout.addWidget(strip)
         body = QHBoxLayout()
+        body.setContentsMargins(14, 2, 14, 0)
         body.setSpacing(14)
         self._preview = PageSetupPreview()
         body.addWidget(self._preview, 1)
         body.addWidget(self._build_controls(), 1)
         layout.addLayout(body, 1)
         buttons = QHBoxLayout()
+        buttons.setContentsMargins(14, 0, 14, 0)
         buttons.addStretch(1)
         apply_button = QPushButton("Apply")
         apply_button.setObjectName("PrimaryDialogButton")
@@ -206,8 +247,22 @@ class PageSetupDialog(QDialog):
     def _build_header(self) -> QWidget:
         header = QWidget()
         header.setObjectName("HelpHeader")
+        header.setFixedHeight(44)
+        self._drag_header = header
+        header.installEventFilter(self)
         layout = QHBoxLayout(header)
         layout.setContentsMargins(12, 0, 8, 0)
+        mark = None
+        builder = getattr(self.parentWidget(), "_build_window_mark", None)
+        if callable(builder):
+            mark = builder()
+            mark.setFixedSize(36, 32)
+        if mark is None:
+            mark = QLabel("AT")
+            mark.setObjectName("WindowMark")
+            mark.setAlignment(Qt.AlignCenter)
+            mark.setFixedSize(36, 32)
+        layout.addWidget(mark)
         title = QLabel("Page Setup")
         title.setObjectName("HelpTitle")
         layout.addWidget(title, 1)
@@ -223,20 +278,31 @@ class PageSetupDialog(QDialog):
         panel.setObjectName("SidePanel")
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(12, 12, 12, 12)
-        layout.setSpacing(9)
+        layout.setSpacing(8)
         layout.addWidget(self._section_label("Paper"))
-        paper_row = QHBoxLayout()
-        for paper in self.PAPER_SIZES:
-            button = self._choice_button(paper, paper == "A4", lambda checked=False, name=paper: self._choose_paper(name))
-            self._paper_buttons[paper] = button
-            paper_row.addWidget(button)
-        layout.addLayout(paper_row)
+        self._paper_combo = QComboBox()
+        self._paper_combo.setObjectName("FileTypeCombo")
+        for name, size in self.PAPER_SIZES.items():
+            self._paper_combo.addItem(f"{name}  {size[0]:.1f} × {size[1]:.1f} mm", name)
+        self._paper_combo.setCurrentIndex(0)
+        self._paper_combo.currentIndexChanged.connect(self._paper_combo_changed)
+        layout.addWidget(self._paper_combo)
+        custom_grid = QGridLayout()
+        for column, (key, label) in enumerate((("width", "W"), ("height", "H"))):
+            custom_grid.addWidget(QLabel(label), 0, column * 2)
+            spin = self._number_spin(1, 5000, 0.5, " mm")
+            spin.setValue(self.PAPER_SIZES["Custom"][column])
+            spin.setEnabled(False)
+            spin.valueChanged.connect(lambda value, spin_key=key: self._custom_size_changed(spin_key, value))
+            self._custom_size_spins[key] = spin
+            custom_grid.addWidget(spin, 0, column * 2 + 1)
+        layout.addLayout(custom_grid)
         layout.addWidget(self._section_label("Orientation"))
         orient = QHBoxLayout()
-        portrait = self._choice_button("Portrait", True, lambda: self._set_orientation(False))
+        portrait = self._choice_button("Portrait", not self._landscape, lambda: self._set_orientation(False))
         portrait.setIcon(_paper_icon(False))
         portrait.setIconSize(QSize(34, 24))
-        landscape = self._choice_button("Landscape", False, lambda: self._set_orientation(True))
+        landscape = self._choice_button("Landscape", self._landscape, lambda: self._set_orientation(True))
         landscape.setIcon(_paper_icon(True))
         landscape.setIconSize(QSize(34, 24))
         self._orientation_buttons = (portrait, landscape)
@@ -245,14 +311,12 @@ class PageSetupDialog(QDialog):
         layout.addLayout(orient)
         layout.addWidget(self._section_label("Margins"))
         grid = QGridLayout()
+        grid.setHorizontalSpacing(6)
+        grid.setVerticalSpacing(5)
         for index, name in enumerate(("Top", "Right", "Bottom", "Left")):
             grid.addWidget(QLabel(name), index // 2, (index % 2) * 2)
-            spin = QDoubleSpinBox()
-            spin.setObjectName("FileNameInput")
-            spin.setRange(0, 80)
-            spin.setDecimals(2)
+            spin = self._number_spin(0, 300, 0.5, " mm")
             spin.setValue(12 if name in {"Top", "Bottom"} else 10)
-            spin.setSuffix(" mm")
             spin.valueChanged.connect(lambda value, key=name.lower(): self._margin_changed(key, value))
             self._margin_spins[name.lower()] = spin
             grid.addWidget(spin, index // 2, (index % 2) * 2 + 1)
@@ -266,6 +330,7 @@ class PageSetupDialog(QDialog):
         layout.addLayout(sync_row)
         layout.addWidget(self._section_label("Object Position"))
         pos_grid = QGridLayout()
+        pos_grid.setSpacing(2)
         self._position_buttons: list[QPushButton] = []
         for row in range(3):
             for column in range(3):
@@ -275,7 +340,7 @@ class PageSetupDialog(QDialog):
                 button.setChecked((row, column) == self._position)
                 button.setIcon(_position_icon(row, column))
                 button.setIconSize(QSize(34, 30))
-                button.setFixedSize(42, 36)
+                button.setFixedSize(40, 34)
                 button.clicked.connect(lambda checked=False, r=row, c=column: self._set_position(r, c))
                 self._position_buttons.append(button)
                 pos_grid.addWidget(button, row, column)
@@ -292,6 +357,7 @@ class PageSetupDialog(QDialog):
         self._custom_dpi.setObjectName("FileNameInput")
         self._custom_dpi.setRange(72, 4800)
         self._custom_dpi.setDecimals(0)
+        self._custom_dpi.setSingleStep(1)
         self._custom_dpi.setValue(600)
         self._custom_dpi.setSuffix(" DPI")
         layout.addWidget(self._custom_dpi)
@@ -311,11 +377,30 @@ class PageSetupDialog(QDialog):
         button.clicked.connect(lambda checked=False: callback())
         return button
 
+    def _number_spin(self, minimum: float, maximum: float, step: float, suffix: str) -> QDoubleSpinBox:
+        spin = QDoubleSpinBox()
+        spin.setObjectName("FileNameInput")
+        spin.setRange(minimum, maximum)
+        spin.setDecimals(2)
+        spin.setSingleStep(step)
+        spin.setSuffix(suffix)
+        return spin
+
+    def _paper_combo_changed(self, index: int = 0) -> None:
+        name = self._paper_combo.currentData()
+        if isinstance(name, str):
+            self._choose_paper(name)
+
     def _choose_paper(self, name: str) -> None:
         self._paper_name = name
-        for paper, button in self._paper_buttons.items():
-            button.setChecked(paper == name)
+        custom = name == "Custom"
+        for spin in self._custom_size_spins.values():
+            spin.setEnabled(custom)
         self._update_preview()
+
+    def _custom_size_changed(self, key: str, value: float) -> None:
+        if self._paper_name == "Custom":
+            self._update_preview()
 
     def _set_orientation(self, landscape: bool) -> None:
         self._landscape = landscape
@@ -365,7 +450,43 @@ class PageSetupDialog(QDialog):
             self._margin_spins.get("bottom").value() if "bottom" in self._margin_spins else 12.0,
             self._margin_spins.get("left").value() if "left" in self._margin_spins else 10.0,
         )
-        self._preview.set_state(self.PAPER_RATIOS.get(self._paper_name, self.PAPER_RATIOS["A4"]), self._landscape, margins, self._position)
+        self._preview.set_state(self._current_paper_size(), self._landscape, margins, self._position)
+
+    def _current_paper_size(self) -> tuple[float, float]:
+        if self._paper_name == "Custom":
+            return (self._custom_size_spins["width"].value(), self._custom_size_spins["height"].value())
+        return self.PAPER_SIZES.get(self._paper_name, self.PAPER_SIZES["Workspace"])
+
+    def mousePressEvent(self, event) -> None:  # noqa: N802
+        if event.button() == Qt.MouseButton.LeftButton and event.position().y() <= 54:
+            self._drag_offset = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event) -> None:  # noqa: N802
+        if self._drag_offset is not None and event.buttons() & Qt.MouseButton.LeftButton:
+            self.move(event.globalPosition().toPoint() - self._drag_offset)
+            event.accept()
+            return
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event) -> None:  # noqa: N802
+        self._drag_offset = None
+        super().mouseReleaseEvent(event)
+
+    def eventFilter(self, watched, event) -> bool:  # noqa: N802
+        if watched is getattr(self, "_drag_header", None):
+            if event.type() == QEvent.Type.MouseButtonPress and event.button() == Qt.MouseButton.LeftButton:
+                self._drag_offset = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
+                return True
+            if event.type() == QEvent.Type.MouseMove and self._drag_offset is not None and event.buttons() & Qt.MouseButton.LeftButton:
+                self.move(event.globalPosition().toPoint() - self._drag_offset)
+                return True
+            if event.type() == QEvent.Type.MouseButtonRelease:
+                self._drag_offset = None
+                return True
+        return super().eventFilter(watched, event)
 
     def resizeEvent(self, event) -> None:  # noqa: N802
         super().resizeEvent(event)
@@ -376,10 +497,12 @@ class PageSetupDialog(QDialog):
 
 def apply_runtime_ui_patch() -> None:
     from . import module_window as mw
+    from ..ui import start_bar as sb
 
     if getattr(mw.ModuleWindow, "_page_setup_patch_applied", False):
         return
     mw._paint_rotation_glyph = _paint_rotation_glyph
+    sb._arrow_head = _solid_arrow_head
 
     def build_page_bar(self):
         bar = QWidget()
