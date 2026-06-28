@@ -33,6 +33,7 @@ DEFAULT_START_BAR_TOOLS: tuple[StartBarTool, ...] = (
 
 UNIT_TO_MM = {"mm": 1.0, "cm": 10.0, "m": 1000.0, "px": 25.4 / 96.0, "in": 25.4, "pt": 25.4 / 72.0}
 UNIT_ORDER = ("mm", "cm", "m", "px", "in", "pt")
+UNIT_LABELS = {"mm": "Millimeter", "cm": "Centimeter", "m": "Meter", "px": "Pixel", "in": "Inch", "pt": "Point"}
 MM_TO_SCREEN_PX = 96.0 / 25.4
 
 
@@ -247,6 +248,7 @@ class _RulerOverlay(QWidget):
         self._start_bar = start_bar
         self._orientation = orientation
         self._dragging_guide = False
+        self._active_guide: _GuideLine | None = None
         self.setCursor(Qt.CursorShape.SizeVerCursor if orientation == "top" else Qt.CursorShape.SizeHorCursor)
 
     def paintEvent(self, event) -> None:  # noqa: N802
@@ -292,7 +294,11 @@ class _RulerOverlay(QWidget):
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event) -> None:  # noqa: N802
-        self._dragging_guide = False
+        if self._dragging_guide:
+            self._dragging_guide = False
+            self._active_guide = None
+            event.accept()
+            return
         super().mouseReleaseEvent(event)
 
     def _create_or_move_guide(self, global_point: QPoint) -> None:
@@ -300,10 +306,13 @@ class _RulerOverlay(QWidget):
         if canvas is None:
             return
         point = canvas.mapFromGlobal(global_point)
-        if self._orientation == "top":
-            _GuideLine("horizontal", point.y(), canvas)
+        orientation = "horizontal" if self._orientation == "top" else "vertical"
+        position = point.y() if orientation == "horizontal" else point.x()
+        if self._active_guide is None:
+            self._active_guide = _GuideLine(orientation, position, canvas)
         else:
-            _GuideLine("vertical", point.x(), canvas)
+            self._active_guide.position = position
+            self._active_guide._place()
 
 
 class _RulerCorner(QWidget):
@@ -311,6 +320,9 @@ class _RulerCorner(QWidget):
         super().__init__(parent)
         self._start_bar = start_bar
         self._dragging = False
+        self._press_pos: QPointF | None = None
+        self._origin_h_guide: _GuideLine | None = None
+        self._origin_v_guide: _GuideLine | None = None
         self.setCursor(Qt.CursorShape.CrossCursor)
 
     def paintEvent(self, event) -> None:  # noqa: N802
@@ -325,14 +337,14 @@ class _RulerCorner(QWidget):
     def mousePressEvent(self, event) -> None:  # noqa: N802
         if event.button() == Qt.MouseButton.LeftButton:
             self._dragging = True
+            self._press_pos = event.position()
             event.accept()
             return
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event) -> None:  # noqa: N802
         if self._dragging and self.parentWidget() is not None:
-            point = self.parentWidget().mapFromGlobal(event.globalPosition().toPoint())
-            self._start_bar._set_ruler_origin(QPointF(point))
+            self._preview_origin(event.globalPosition().toPoint())
             event.accept()
             return
         super().mouseMoveEvent(event)
@@ -340,11 +352,43 @@ class _RulerCorner(QWidget):
     def mouseReleaseEvent(self, event) -> None:  # noqa: N802
         if self._dragging:
             self._dragging = False
-            if self.parentWidget() is not None and event.position().manhattanLength() < 4:
-                self._start_bar._set_ruler_origin(QPointF(0, 0))
+            canvas = self.parentWidget()
+            if canvas is not None:
+                delta = QPointF(0, 0) if self._press_pos is None else event.position() - self._press_pos
+                moved = abs(delta.x()) + abs(delta.y())
+                if moved < 4:
+                    self._start_bar._set_ruler_origin(QPointF(0, 0), custom=True)
+                else:
+                    point = canvas.mapFromGlobal(event.globalPosition().toPoint())
+                    self._start_bar._set_ruler_origin(QPointF(point), custom=True)
+            self._clear_origin_preview()
+            self._press_pos = None
             event.accept()
             return
         super().mouseReleaseEvent(event)
+
+    def _preview_origin(self, global_point: QPoint) -> None:
+        canvas = self.parentWidget()
+        if canvas is None:
+            return
+        point = canvas.mapFromGlobal(global_point)
+        if self._origin_h_guide is None:
+            self._origin_h_guide = _GuideLine("horizontal", point.y(), canvas)
+        else:
+            self._origin_h_guide.position = point.y()
+            self._origin_h_guide._place()
+        if self._origin_v_guide is None:
+            self._origin_v_guide = _GuideLine("vertical", point.x(), canvas)
+        else:
+            self._origin_v_guide.position = point.x()
+            self._origin_v_guide._place()
+
+    def _clear_origin_preview(self) -> None:
+        for guide in (self._origin_h_guide, self._origin_v_guide):
+            if guide is not None:
+                guide.deleteLater()
+        self._origin_h_guide = None
+        self._origin_v_guide = None
 
 
 class StartBar(QWidget):
@@ -372,6 +416,7 @@ class StartBar(QWidget):
         self._ruler_left: _RulerOverlay | None = None
         self._ruler_corner: _RulerCorner | None = None
         self._ruler_origin = QPointF(0, 0)
+        self._ruler_origin_custom = False
         self._hooked_canvas: QWidget | None = None
 
         layout = QHBoxLayout(self)
@@ -410,6 +455,8 @@ class StartBar(QWidget):
         canvas = self._canvas()
         if watched is canvas:
             if event.type() == QEvent.Type.Resize:
+                if not self._ruler_origin_custom:
+                    self._center_ruler_origin()
                 self._position_rulers()
                 return False
             if self._zoom_mode in {"zoom_in", "zoom_out"}:
@@ -473,6 +520,11 @@ class StartBar(QWidget):
     def _spacing_text(self) -> str:
         return f"{self._grid_spacing:.6f}".rstrip("0").rstrip(".") or "0"
 
+    def _center_ruler_origin(self) -> None:
+        canvas = self._canvas()
+        if canvas is not None:
+            self._ruler_origin = QPointF(canvas.width() / 2.0, canvas.height() / 2.0)
+
     def _ensure_canvas_hooks(self) -> None:
         canvas = self._canvas()
         if canvas is None:
@@ -482,7 +534,8 @@ class StartBar(QWidget):
                 self._hooked_canvas.removeEventFilter(self)
             canvas.installEventFilter(self)
             self._hooked_canvas = canvas
-            self._ruler_origin = QPointF(canvas.width() / 2.0, canvas.height() / 2.0)
+            self._ruler_origin_custom = False
+            self._center_ruler_origin()
         if not getattr(canvas, "_start_bar_grid_hooked", False):
             def paint_grid(canvas_self, painter: QPainter) -> None:
                 if not getattr(canvas_self, "_grid_visible", True):
@@ -625,14 +678,15 @@ class StartBar(QWidget):
         self._set_zoom_value(max(5.0, min(3200.0, value)))
 
     def _show_unit_popup(self, key: str) -> None:
-        popup, layout = self._popup_base(156)
-        rows = (UNIT_ORDER[:3], UNIT_ORDER[3:])
+        popup, layout = self._popup_base(298)
+        rows = (UNIT_ORDER[:2], UNIT_ORDER[2:4], UNIT_ORDER[4:])
         for row_units in rows:
             row = QHBoxLayout()
-            row.setSpacing(5)
+            row.setSpacing(6)
             for unit in row_units:
-                button = self._radio_button(unit, unit == self._unit, lambda checked=False, selected=unit: self._set_unit(selected))
-                button.setFixedWidth(44)
+                label = f"{unit}  {UNIT_LABELS[unit]}"
+                button = self._radio_button(label, unit == self._unit, lambda checked=False, selected=unit: self._set_unit(selected))
+                button.setFixedWidth(132)
                 row.addWidget(button)
             layout.addLayout(row)
         self._show_popup_near(key, popup)
@@ -647,6 +701,8 @@ class StartBar(QWidget):
         self._grid_spacing = spacing_mm / UNIT_TO_MM[self._unit]
         self._apply_unit_to_host()
         self._apply_grid_to_host()
+        if self._ruler_enabled:
+            self._sync_rulers()
         self.unit_changed.emit(unit)
         self.grid_changed.emit(self._grid_enabled, self._grid_spacing, self._unit)
         self.tool_requested.emit(f"unit_{unit}")
@@ -711,7 +767,10 @@ class StartBar(QWidget):
         self._set_host_status(f"Unit {self._unit}")
 
     def _set_ruler(self, enabled: bool) -> None:
+        self._ensure_canvas_hooks()
         self._ruler_enabled = enabled
+        if enabled and not self._ruler_origin_custom:
+            self._center_ruler_origin()
         host = self._host()
         view_state = getattr(host, "_view_state", None)
         if isinstance(view_state, dict):
@@ -722,8 +781,9 @@ class StartBar(QWidget):
         self._refresh_tooltips()
         self._set_host_status(f"Ruler {'On' if enabled else 'Off'} | unit {self._unit}")
 
-    def _set_ruler_origin(self, origin: QPointF) -> None:
+    def _set_ruler_origin(self, origin: QPointF, custom: bool = True) -> None:
         self._ruler_origin = origin
+        self._ruler_origin_custom = custom
         self._position_rulers()
         canvas = self._canvas()
         if canvas is not None:
