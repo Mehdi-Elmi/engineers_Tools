@@ -1,7 +1,7 @@
 @echo off
 setlocal EnableExtensions EnableDelayedExpansion
 
-echo Engineer Tools installer build: 2026-06-28 robust-verification-2
+echo Engineer Tools installer build: 2026-06-28 robust-verification-3
 
 set "REPO=Mehdi-Elmi/engineers_Tools"
 set "BRANCH=main"
@@ -47,9 +47,11 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "$localSha=''; if(Test-Path $env:COMMIT_STAMP){ $localSha=[System.IO.File]::ReadAllText($env:COMMIT_STAMP,[System.Text.Encoding]::UTF8).Trim([char]0xFEFF).Trim() }" ^
   "$runFile=Join-Path $env:INSTALL_DIR 'run_engineers_tools.cmd';" ^
   "$mainFile=Join-Path $env:INSTALL_DIR 'src\engineers_tools\main.py';" ^
+  "$controller=Join-Path $env:INSTALL_DIR 'src\engineers_tools\app\controller.py';" ^
+  "$launcherWindow=Join-Path $env:INSTALL_DIR 'src\engineers_tools\app\launcher_window.py';" ^
   "$moduleWindow=Join-Path $env:INSTALL_DIR 'src\engineers_tools\app\module_window.py';" ^
   "$workspace=Join-Path $env:INSTALL_DIR 'modules\mechanics_dynamics_statics\workspace.py';" ^
-  "$installOk=(Test-Path $runFile) -and (Test-Path $mainFile) -and (Test-Path $moduleWindow) -and (Test-Path $workspace);" ^
+  "$installOk=(Test-Path $runFile) -and (Test-Path $mainFile) -and (Test-Path $controller) -and (Test-Path $launcherWindow) -and (Test-Path $moduleWindow) -and (Test-Path $workspace);" ^
   "if($installOk -and $localSha -eq $remoteSha){ [System.IO.File]::WriteAllText($env:UPDATE_STATUS_FILE,'UP_TO_DATE',[System.Text.Encoding]::ASCII) } else { [System.IO.File]::WriteAllText($env:UPDATE_STATUS_FILE,'NEED_UPDATE',[System.Text.Encoding]::ASCII) }"
 
 if errorlevel 1 (
@@ -128,7 +130,8 @@ if not exist "%INSTALL_DIR%\README.md" echo VERIFY FAILED: missing README.md & s
 if not exist "%INSTALL_DIR%\run_engineers_tools.cmd" echo VERIFY FAILED: missing run_engineers_tools.cmd & set "VERIFY_FAILED=1"
 if not exist "%INSTALL_DIR%\requirements.txt" echo VERIFY FAILED: missing requirements.txt & set "VERIFY_FAILED=1"
 if not exist "%INSTALL_DIR%\src\engineers_tools\main.py" echo VERIFY FAILED: missing src\engineers_tools\main.py & set "VERIFY_FAILED=1"
-if not exist "%INSTALL_DIR%\src\engineers_tools\app\launcher.py" echo VERIFY FAILED: missing src\engineers_tools\app\launcher.py & set "VERIFY_FAILED=1"
+if not exist "%INSTALL_DIR%\src\engineers_tools\app\controller.py" echo VERIFY FAILED: missing src\engineers_tools\app\controller.py & set "VERIFY_FAILED=1"
+if not exist "%INSTALL_DIR%\src\engineers_tools\app\launcher_window.py" echo VERIFY FAILED: missing src\engineers_tools\app\launcher_window.py & set "VERIFY_FAILED=1"
 if not exist "%INSTALL_DIR%\src\engineers_tools\app\module_window.py" echo VERIFY FAILED: missing src\engineers_tools\app\module_window.py & set "VERIFY_FAILED=1"
 if not exist "%INSTALL_DIR%\src\engineers_tools\app\project_file_dialog.py" echo VERIFY FAILED: missing src\engineers_tools\app\project_file_dialog.py & set "VERIFY_FAILED=1"
 if not exist "%INSTALL_DIR%\modules\mechanics_dynamics_statics\module_entry.py" echo VERIFY FAILED: missing modules\mechanics_dynamics_statics\module_entry.py & set "VERIFY_FAILED=1"
