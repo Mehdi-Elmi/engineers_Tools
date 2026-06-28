@@ -1,0 +1,14 @@
+2026-06-28 18:02:00,475 | INFO | root | Runtime log started.
+2026-06-28 18:02:00,475 | INFO | root | Runtime log path: C:\Users\ATLAS\AppData\Local\EngineerTools\logs\runtime.log
+2026-06-28 18:02:00,475 | INFO | root | Engineer Tools startup requested.
+2026-06-28 18:02:00,476 | INFO | root | Python executable: C:\Users\ATLAS\AppData\Local\EngineerTools\.venv\Scripts\pythonw.exe
+2026-06-28 18:02:00,476 | INFO | root | Python argv: ['C:\\Users\\ATLAS\\AppData\\Local\\EngineerTools\\src\\engineers_tools\\main.py']
+2026-06-28 18:02:01,130 | ERROR | root | Launcher startup failed.
+Traceback (most recent call last):
+  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\main.py", line 30, in main
+    from .app.controller import AppController
+  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\controller.py", line 11, in <module>
+    from .module_window import ModuleWindow
+  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\module_window.py", line 26, in <module>
+    from ..ui.start_bar import DEFAULT_START_BAR_TOOLS, StartBar, StartBarTool
+ImportError: cannot import name 'DEFAULT_START_BAR_TOOLS' from 'src.engineers_tools.ui.start_bar' (C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\ui\start_bar.py)
