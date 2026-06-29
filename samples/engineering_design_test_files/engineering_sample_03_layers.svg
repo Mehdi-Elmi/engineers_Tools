@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="220" viewBox="0 0 400 220">
+  <rect width="400" height="220" fill="#ffffff"/>
+  <g opacity="0.92">
+    <rect x="58" y="45" width="150" height="92" rx="12" fill="#2d7eea" stroke="#132238" stroke-width="4"/>
+    <rect x="118" y="78" width="150" height="92" rx="12" fill="#ffbd57" stroke="#132238" stroke-width="4"/>
+    <rect x="178" y="112" width="150" height="62" rx="12" fill="#f7faff" stroke="#132238" stroke-width="4"/>
+  </g>
+  <g font-family="Arial" font-size="18" font-weight="700" fill="#132238">
+    <text x="86" y="96">Layer 1</text>
+    <text x="146" y="130">Layer 2</text>
+    <text x="207" y="152">Layer 3</text>
+  </g>
+  <path d="M48 190H350" stroke="#8fa2bb" stroke-width="2" stroke-dasharray="8 7"/>
+  <text x="54" y="207" font-family="Arial" font-size="13" fill="#536170">Use for layer order, bring front/back, group and ungroup tests</text>
+</svg>
