@@ -1,31 +1,21 @@
-2026-06-29 17:15:26,383 | INFO | root | Runtime log started.
-2026-06-29 17:15:26,384 | INFO | root | Runtime log path: C:\Users\ATLAS\AppData\Local\EngineerTools\logs\runtime.log
-2026-06-29 17:15:26,384 | INFO | root | Engineer Tools startup requested.
-2026-06-29 17:15:26,384 | INFO | root | Python executable: C:\Users\ATLAS\AppData\Local\EngineerTools\.venv\Scripts\pythonw.exe
-2026-06-29 17:15:26,384 | INFO | root | Python argv: ['C:\\Users\\ATLAS\\AppData\\Local\\EngineerTools\\src\\engineers_tools\\main.py']
-2026-06-29 17:15:27,013 | INFO | root | interaction_ui_patch: shared icon and control patches installed
-2026-06-29 17:15:27,063 | INFO | root | interaction_ui_patch: engineering workspace patches installed
-2026-06-29 17:15:27,064 | INFO | root | engineering_export_patch: installed
-2026-06-29 17:15:27,064 | INFO | root | engineering_workspace_finalize_patch: installed
-2026-06-29 17:15:27,064 | INFO | root | engineering_zoom_print_patch: installed
-2026-06-29 17:15:27,064 | INFO | root | engineering_print_setup_hotfix: installed
-2026-06-29 17:15:27,970 | INFO | root | Launcher shown.
-2026-06-29 17:28:00,428 | ERROR | root | engineering_print_setup_hotfix: print imports failed: cannot import name '_render_engineering_export' from 'src.engineers_tools.app.interaction_ui_patch' (C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\interaction_ui_patch.py)
+2026-06-29 17:48:12,055 | INFO | root | Runtime log started.
+2026-06-29 17:48:12,055 | INFO | root | Runtime log path: C:\Users\ATLAS\AppData\Local\EngineerTools\logs\runtime.log
+2026-06-29 17:48:12,055 | INFO | root | Engineer Tools startup requested.
+2026-06-29 17:48:12,055 | INFO | root | Python executable: C:\Users\ATLAS\AppData\Local\EngineerTools\.venv\Scripts\pythonw.exe
+2026-06-29 17:48:12,055 | INFO | root | Python argv: ['C:\\Users\\ATLAS\\AppData\\Local\\EngineerTools\\src\\engineers_tools\\main.py']
+2026-06-29 17:48:12,678 | INFO | root | interaction_ui_patch: shared icon and control patches installed
+2026-06-29 17:48:12,727 | INFO | root | interaction_ui_patch: engineering workspace patches installed
+2026-06-29 17:48:12,728 | INFO | root | engineering_export_patch: installed
+2026-06-29 17:48:12,728 | INFO | root | engineering_workspace_finalize_patch: installed
+2026-06-29 17:48:12,728 | INFO | root | engineering_zoom_print_patch: installed
+2026-06-29 17:48:12,729 | INFO | root | engineering_print_setup_hotfix: installed
+2026-06-29 17:48:13,507 | INFO | root | Launcher shown.
+2026-06-29 17:48:22,218 | ERROR | root | engineering_print_setup_hotfix: print imports failed: cannot import name '_render_engineering_export' from 'src.engineers_tools.app.interaction_ui_patch' (C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\interaction_ui_patch.py)
 Traceback (most recent call last):
   File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\engineering_print_setup_hotfix.py", line 48, in _send_print_job
     from .interaction_ui_patch import _render_engineering_export
 ImportError: cannot import name '_render_engineering_export' from 'src.engineers_tools.app.interaction_ui_patch' (C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\interaction_ui_patch.py)
-2026-06-29 17:28:07,259 | ERROR | root | engineering_print_setup_hotfix: print imports failed: cannot import name '_render_engineering_export' from 'src.engineers_tools.app.interaction_ui_patch' (C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\interaction_ui_patch.py)
-Traceback (most recent call last):
-  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\engineering_print_setup_hotfix.py", line 48, in _send_print_job
-    from .interaction_ui_patch import _render_engineering_export
-ImportError: cannot import name '_render_engineering_export' from 'src.engineers_tools.app.interaction_ui_patch' (C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\interaction_ui_patch.py)
-2026-06-29 17:28:21,507 | ERROR | root | engineering_print_setup_hotfix: print imports failed: cannot import name '_render_engineering_export' from 'src.engineers_tools.app.interaction_ui_patch' (C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\interaction_ui_patch.py)
-Traceback (most recent call last):
-  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\engineering_print_setup_hotfix.py", line 48, in _send_print_job
-    from .interaction_ui_patch import _render_engineering_export
-ImportError: cannot import name '_render_engineering_export' from 'src.engineers_tools.app.interaction_ui_patch' (C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\interaction_ui_patch.py)
-2026-06-29 17:29:12,069 | ERROR | root | engineering_print_setup_hotfix: print imports failed: cannot import name '_render_engineering_export' from 'src.engineers_tools.app.interaction_ui_patch' (C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\interaction_ui_patch.py)
+2026-06-29 17:48:31,807 | ERROR | root | engineering_print_setup_hotfix: print imports failed: cannot import name '_render_engineering_export' from 'src.engineers_tools.app.interaction_ui_patch' (C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\interaction_ui_patch.py)
 Traceback (most recent call last):
   File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\engineering_print_setup_hotfix.py", line 48, in _send_print_job
     from .interaction_ui_patch import _render_engineering_export
