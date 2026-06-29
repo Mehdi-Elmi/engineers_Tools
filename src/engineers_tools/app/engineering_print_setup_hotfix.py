@@ -10,7 +10,7 @@ from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import QButtonGroup, QCheckBox, QComboBox, QDoubleSpinBox, QFileDialog, QHBoxLayout, QLabel, QPushButton, QSpinBox, QToolButton
 
 
-HOTFIX_VERSION = "direct-print-10"
+HOTFIX_VERSION = "direct-print-11"
 _SKIP_PRINTER_TOKENS = ("fax", "onenote", "one note", "evernote", "xps", "microsoft xps")
 _PDF_PRINTER_TOKENS = ("pdf", "foxit", "adobe", "nitro", "pdf24", "pdfcreator")
 
@@ -459,12 +459,8 @@ def apply_engineering_print_setup_hotfix() -> None:
                 except Exception:
                     pass
 
-            self._all_pages = QCheckBox("All pages")
-            self._all_pages.setObjectName("RadioLikeOption")
-            self._all_pages.setChecked(True)
-            self._all_pages.setStyleSheet(_radio_style())
-            self._all_pages.toggled.connect(self._sync_page_range_state)
-            self._print_grid = QCheckBox("Print grid")
+            self._all_pages = None
+            self._print_grid = QCheckBox("Show Grade")
             self._print_grid.setObjectName("RadioLikeOption")
             self._print_grid.setChecked(False)
             self._print_grid.setStyleSheet(_radio_style())
@@ -472,7 +468,7 @@ def apply_engineering_print_setup_hotfix() -> None:
             controls_row = QHBoxLayout()
             controls_row.setContentsMargins(0, 0, 0, 0)
             controls_row.setSpacing(4)
-            controls_row.addWidget(_inline_print_label("Copies", 44))
+            controls_row.addWidget(_inline_print_label("Copy", 38))
             controls_row.addWidget(self._copies)
             controls_row.addSpacing(8)
             controls_row.addWidget(_inline_print_label("Page From", 72))
@@ -484,8 +480,6 @@ def apply_engineering_print_setup_hotfix() -> None:
             options_row = QHBoxLayout()
             options_row.setContentsMargins(0, 0, 0, 0)
             options_row.setSpacing(12)
-            self._all_pages.setText("All")
-            options_row.addWidget(self._all_pages)
             options_row.addWidget(self._print_grid)
             options_row.addStretch(1)
             native_button = _find_button_by_text(self, "System Print Setup")
@@ -498,9 +492,9 @@ def apply_engineering_print_setup_hotfix() -> None:
                 settings_layout.insertLayout(anchor_index, controls_row)
                 settings_layout.insertLayout(anchor_index + 1, options_row)
             elif page_layout is not None:
-                page_layout.addWidget(self._all_pages)
+                page_layout.addLayout(controls_row)
                 page_layout.addWidget(self._print_grid)
-            self._sync_page_range_state(True)
+            self._sync_page_range_state(False)
 
             preview = getattr(self, "_preview", None)
             if preview is not None:
@@ -543,11 +537,10 @@ def apply_engineering_print_setup_hotfix() -> None:
 
         def settings(self) -> dict[str, object]:
             result = super().settings()
-            result["all_pages"] = bool(self._all_pages.isChecked()) if self._all_pages is not None else True
+            result["all_pages"] = False
             result["print_grid"] = bool(self._print_grid.isChecked()) if self._print_grid is not None else False
-            if result["all_pages"]:
-                result["page_from"] = 1
-                result["page_to"] = _workspace_page_count(self.parentWidget())
+            result["page_from"] = max(1, int(result.get("page_from", 1) or 1))
+            result["page_to"] = max(result["page_from"], int(result.get("page_to", _workspace_page_count(self.parentWidget())) or 1))
             return result
 
     def print_setup(self) -> None:
