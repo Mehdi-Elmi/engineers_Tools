@@ -3,9 +3,10 @@ from __future__ import annotations
 
 import logging
 
-from PySide6.QtCore import QRectF, QSize, Qt
-from PySide6.QtGui import QColor, QIcon, QPainter, QPainterPath, QPen, QPixmap
+from PySide6.QtCore import QPointF, QRectF, QSize, Qt
+from PySide6.QtGui import QColor, QIcon, QPainter, QPainterPath, QPen, QPixmap, QPolygonF
 from PySide6.QtWidgets import (
+    QAbstractSpinBox,
     QButtonGroup,
     QCheckBox,
     QDialog,
@@ -20,7 +21,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-VERSION = "direct-print-final-1"
+VERSION = "direct-print-final-2"
 
 
 def _helpers():
@@ -28,26 +29,114 @@ def _helpers():
     return h
 
 
+def _base_print_patch():
+    from . import engineering_zoom_print_patch as zp
+    return zp
+
+
 def _printer_icon(title: str, active: bool = False) -> QIcon:
-    pixmap = QPixmap(72, 72)
+    """Use the original Engineering Print Setup printer icon, not a replacement icon."""
+    try:
+        icon_builder = getattr(_base_print_patch(), "_printer_icon", None)
+        if callable(icon_builder):
+            return icon_builder(title, active)
+    except Exception as error:  # noqa: BLE001
+        logging.debug("engineering_print_setup_final_patch: original printer icon unavailable: %s", error)
+    return QIcon()
+
+
+def _zoom_arrow_icon(direction: str) -> QIcon:
+    """Copy the exact arrow geometry used by the bottom Zoom control."""
+    pixmap = QPixmap(22, 10)
     pixmap.fill(Qt.GlobalColor.transparent)
     painter = QPainter(pixmap)
     painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-    shell = QPainterPath()
-    shell.addRoundedRect(QRectF(5, 7, 62, 56), 14, 14)
-    painter.fillPath(shell, QColor("#fff3cc" if active else "#f2f7ff"))
-    painter.setPen(QPen(QColor("#e7a626" if active else "#9fb0c5"), 1.4))
-    painter.drawPath(shell)
+    painter.setPen(QPen(QColor("#ffffff"), 0.9))
     painter.setBrush(QColor("#132238"))
-    painter.setPen(Qt.PenStyle.NoPen)
-    painter.drawRoundedRect(QRectF(18, 22, 36, 22), 5, 5)
-    painter.setBrush(QColor("#ffffff"))
-    painter.drawRect(QRectF(23, 12, 26, 18))
-    painter.drawRect(QRectF(24, 41, 24, 15))
-    painter.setPen(QPen(QColor("#e7a626"), 2.0))
-    painter.drawLine(27, 47, 45, 47)
+    if direction == "up":
+        points = QPolygonF([QPointF(11, 1), QPointF(20, 9), QPointF(2, 9)])
+    else:
+        points = QPolygonF([QPointF(2, 1), QPointF(20, 1), QPointF(11, 9)])
+    painter.drawPolygon(points)
     painter.end()
     return QIcon(pixmap)
+
+
+def _zoom_arrow_button(direction: str, target: QSpinBox) -> QPushButton:
+    """Make the small orange/yellow rounded arrow button from the Zoom status control."""
+    button = QPushButton()
+    button.setObjectName("ZoomArrowButton")
+    button.setFixedSize(28, 12)
+    button.setIcon(_zoom_arrow_icon(direction))
+    button.setIconSize(QSize(22, 10))
+    button.setToolTip("Increase" if direction == "up" else "Decrease")
+    button.setStyleSheet(
+        "QPushButton#ZoomArrowButton {"
+        "background:qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #fff9de, stop:1 #ffc35a);"
+        "border:1px solid #7e5b10; border-radius:4px; padding:0px;"
+        "}"
+        "QPushButton#ZoomArrowButton:hover { background:#ff8a35; border-color:#ffffff; }"
+        "QPushButton#ZoomArrowButton:pressed { background:#d46a16; padding-top:1px; }"
+    )
+    if direction == "up":
+        button.clicked.connect(target.stepUp)
+    else:
+        button.clicked.connect(target.stepDown)
+    return button
+
+
+def _style_value_spin(spin: QSpinBox, width: int) -> None:
+    """Style only the editable numeric field; arrows are external Zoom-style buttons."""
+    spin.setObjectName("PrintValueSpin")
+    spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
+    spin.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    spin.setFixedSize(width, 26)
+    spin.setKeyboardTracking(False)
+    spin.setStyleSheet(
+        "QSpinBox#PrintValueSpin {"
+        "background:#fff9de; border:1px solid #b38621; border-radius:8px;"
+        "color:#132238; font-size:11px; font-style:normal; font-weight:800;"
+        "padding:2px 6px; selection-background-color:#43d3bd;"
+        "}"
+    )
+
+
+def _number_control(spin: QSpinBox, width: int) -> QWidget:
+    """Editable number field plus the same up/down buttons used by bottom Zoom."""
+    _style_value_spin(spin, width)
+    control = QWidget()
+    control.setObjectName("PrintNumberControl")
+    control.setFixedSize(width + 32, 28)
+    layout = QHBoxLayout(control)
+    layout.setContentsMargins(0, 0, 0, 0)
+    layout.setSpacing(2)
+    layout.addWidget(spin)
+    arrows = QWidget()
+    arrows.setObjectName("ZoomArrowStack")
+    arrows.setFixedSize(28, 26)
+    arrows_layout = QVBoxLayout(arrows)
+    arrows_layout.setContentsMargins(0, 0, 0, 0)
+    arrows_layout.setSpacing(2)
+    arrows_layout.addWidget(_zoom_arrow_button("up", spin))
+    arrows_layout.addWidget(_zoom_arrow_button("down", spin))
+    layout.addWidget(arrows)
+    return control
+
+
+def _show_grade_style() -> str:
+    return """
+        QCheckBox#RadioLikeOption {
+            background:transparent; color:#132238; font-size:12px; font-style:normal; font-weight:800; spacing:7px;
+        }
+        QCheckBox#RadioLikeOption::indicator {
+            width:16px; height:16px; border-radius:9px; border:2px solid #2d7eea; background:#ffffff;
+        }
+        QCheckBox#RadioLikeOption::indicator:checked {
+            border:2px solid #2d7eea;
+            background:qradialgradient(cx:0.5, cy:0.5, radius:0.70, fx:0.5, fy:0.5,
+                stop:0 #2d7eea, stop:0.42 #2d7eea, stop:0.46 #ffffff, stop:1 #ffffff);
+        }
+    """
 
 
 class _Preview(QWidget):
@@ -120,6 +209,7 @@ class FinalPrintSetupDialog(QDialog):
         title = QLabel("Printer")
         title.setObjectName("DialogSectionTitle")
         settings.addWidget(title)
+
         self._printer_grid = QGridLayout()
         self._printer_grid.setContentsMargins(0, 0, 0, 0)
         self._printer_grid.setHorizontalSpacing(10)
@@ -130,39 +220,40 @@ class FinalPrintSetupDialog(QDialog):
         self._load_printers()
         settings.addLayout(self._printer_grid)
 
-        h = _helpers()
         row = QHBoxLayout()
         row.setContentsMargins(0, 0, 0, 0)
         row.setSpacing(4)
+
         self._copies = QSpinBox()
         self._copies.setRange(1, 999)
         self._copies.setValue(1)
-        h._style_print_spin(self._copies, 54)
+
         self._page_from = QSpinBox()
         self._page_from.setRange(1, max(1, self._page_count))
         self._page_from.setValue(1)
-        h._style_print_spin(self._page_from, 52)
+
         self._page_to = QSpinBox()
         self._page_to.setRange(1, max(1, self._page_count))
         self._page_to.setValue(max(1, self._page_count))
-        h._style_print_spin(self._page_to, 52)
+
         self._page_from.valueChanged.connect(self._normalize_page_range)
         self._page_to.valueChanged.connect(self._normalize_page_range)
+
         row.addWidget(self._label("Copy", 36))
-        row.addWidget(self._copies)
+        row.addWidget(_number_control(self._copies, 54))
         row.addSpacing(8)
         row.addWidget(self._label("Page From", 70))
-        row.addWidget(self._page_from)
+        row.addWidget(_number_control(self._page_from, 52))
         row.addSpacing(8)
         row.addWidget(self._label("Page To", 52))
-        row.addWidget(self._page_to)
+        row.addWidget(_number_control(self._page_to, 52))
         row.addStretch(1)
         settings.addLayout(row)
 
         self._print_grid = QCheckBox("Show Grade")
         self._print_grid.setObjectName("RadioLikeOption")
         self._print_grid.setChecked(False)
-        self._print_grid.setStyleSheet(h._radio_style())
+        self._print_grid.setStyleSheet(_show_grade_style())
         self._print_grid.toggled.connect(self._update_preview)
         settings.addWidget(self._print_grid)
 
@@ -189,7 +280,12 @@ class FinalPrintSetupDialog(QDialog):
             button.clicked.connect(handler)
             buttons.addWidget(button)
         layout.addLayout(buttons)
-        logging.info("engineering_print_setup_final_patch: controls built version=%s pages=%s", VERSION, self._page_count)
+        logging.info(
+            "engineering_print_setup_final_patch: controls built version=%s pages=%s printers=%s",
+            VERSION,
+            self._page_count,
+            len(self._printer_cards),
+        )
 
     def _header(self) -> QWidget:
         header = QWidget()
@@ -226,18 +322,27 @@ class FinalPrintSetupDialog(QDialog):
             logging.exception("Print setup printer discovery failed: %s", error)
             self._add_printer_card("No Qt print support available", "", True)
             return
-        printers = [p for p in QPrinterInfo.availablePrinters() if _helpers()._is_allowed_printer_name(p.printerName())]
+
+        h = _helpers()
+        printers = [p for p in QPrinterInfo.availablePrinters() if h._is_allowed_printer_name(p.printerName())]
         default = QPrinterInfo.defaultPrinter().printerName()
         if not printers:
             self._add_printer_card("No printers found", "", True)
             return
+
+        selected = False
         for index, printer in enumerate(printers):
             name = printer.printerName()
-            self._add_printer_card(name, name, bool(name == default or (not default and index == 0)))
-        if not self._selected_printer_name and self._printer_cards:
+            checked = bool(name == default or (not default and index == 0))
+            if checked:
+                selected = True
+            self._add_printer_card(name, name, checked)
+
+        if not selected and self._printer_cards:
             first = self._printer_cards[0]
             first.setChecked(True)
             self._selected_printer_name = str(first.property("printerName") or first.text())
+            first.setIcon(_printer_icon(first.text(), True))
 
     def _add_printer_card(self, title: str, data: str, checked: bool = False) -> None:
         button = QToolButton()
@@ -248,13 +353,12 @@ class FinalPrintSetupDialog(QDialog):
         button.setIcon(_printer_icon(title, checked))
         button.setIconSize(QSize(62, 62))
         button.setText(title)
-        button.setMinimumSize(178, 104)
-        button.setMaximumSize(198, 116)
+        button.setMinimumSize(138, 112)
         button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         button.setProperty("printerName", data)
-        row = len(self._printer_cards) // 2
-        col = len(self._printer_cards) % 2
-        self._printer_grid.addWidget(button, row, col)
+        row = len(self._printer_cards) // 3
+        column = len(self._printer_cards) % 3
+        self._printer_grid.addWidget(button, row, column)
         self._printer_group.addButton(button, len(self._printer_cards))
         self._printer_cards.append(button)
         if checked:
@@ -265,6 +369,7 @@ class FinalPrintSetupDialog(QDialog):
             return
         for card_index, card in enumerate(self._printer_cards):
             active = card_index == index
+            card.setChecked(active)
             card.setIcon(_printer_icon(card.text(), active))
             card.setProperty("active", active)
         card = self._printer_cards[index]
