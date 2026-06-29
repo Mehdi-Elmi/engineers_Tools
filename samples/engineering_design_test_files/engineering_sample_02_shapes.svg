@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="220" viewBox="0 0 400 220">
+  <rect width="400" height="220" fill="#ffffff"/>
+  <rect x="34" y="42" width="112" height="82" rx="10" fill="#f7faff" stroke="#132238" stroke-width="4"/>
+  <circle cx="230" cy="84" r="44" fill="#2d7eea" opacity="0.26" stroke="#2d7eea" stroke-width="5"/>
+  <path d="M305 154l38-76 38 76z" fill="#ffbd57" stroke="#132238" stroke-width="4" stroke-linejoin="round"/>
+  <path d="M70 170c32-38 75-34 112 0s80 36 118-2" fill="none" stroke="#1e4f8f" stroke-width="6" stroke-linecap="round"/>
+  <circle cx="70" cy="170" r="8" fill="#ffbd57" stroke="#132238" stroke-width="3"/>
+  <circle cx="300" cy="168" r="8" fill="#ffbd57" stroke="#132238" stroke-width="3"/>
+  <text x="38" y="34" font-family="Arial" font-size="15" font-weight="700" fill="#536170">Move / Resize / Rotate test</text>
+</svg>
