@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QPushButton,
     QSizePolicy,
+    QSpinBox,
     QToolButton,
     QVBoxLayout,
     QWidget,
@@ -114,6 +115,10 @@ def _printer_icon(name: str, active: bool = False) -> QIcon:
     return QIcon(pixmap)
 
 
+def _set_asset_cursor(widget: QWidget, names: tuple[str, ...], fallback: Qt.CursorShape, hot_x: int = 10, hot_y: int = 10) -> None:
+    widget.setCursor(_asset_cursor(names, fallback, hot_x, hot_y))
+
+
 def _start_tool_asset(key: str) -> tuple[str, ...]:
     return {
         "select": ("select_edit_object.svg", "mouse_cursor.svg"),
@@ -129,10 +134,88 @@ def _start_tool_asset(key: str) -> tuple[str, ...]:
     }.get(key, ())
 
 
+def _workspace_page_count(workspace: QWidget | None) -> int:
+    if workspace is None:
+        return 1
+    for name in ("_pages", "pages", "_page_buttons", "_page_tabs"):
+        value = getattr(workspace, name, None)
+        if isinstance(value, (list, tuple, dict)) and value:
+            return max(1, len(value))
+    canvas = getattr(workspace, "_canvas", None)
+    if callable(canvas):
+        canvas = canvas()
+    objects = getattr(canvas, "objects", None)
+    if isinstance(objects, list):
+        return 1
+    return 1
+
+
+class PrintPreviewPanel(QWidget):
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setMinimumSize(230, 300)
+        self._paper_name = "Workspace"
+        self._page_count = 1
+
+    def set_page_count(self, value: int) -> None:
+        self._page_count = max(1, value)
+        self.update()
+
+    def paintEvent(self, event) -> None:  # noqa: N802
+        super().paintEvent(event)
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.fillRect(self.rect(), QColor("#f7faff"))
+
+        outer = QRectF(16, 16, self.width() - 32, self.height() - 32)
+        card = QPainterPath()
+        card.addRoundedRect(outer, 14, 14)
+        painter.fillPath(card, QColor("#ffffff"))
+        painter.setPen(QPen(QColor("#d3dde8"), 1.2))
+        painter.drawPath(card)
+
+        title_pen = QPen(QColor("#1f2d3d"))
+        painter.setPen(title_pen)
+        painter.drawText(QRectF(outer.left() + 12, outer.top() + 10, outer.width() - 24, 22), Qt.AlignmentFlag.AlignLeft, "Preview")
+
+        paper_width = outer.width() * 0.55
+        paper_height = paper_width * 1.42
+        if paper_height > outer.height() - 82:
+            paper_height = outer.height() - 82
+            paper_width = paper_height / 1.42
+        paper = QRectF(
+            outer.center().x() - paper_width / 2,
+            outer.top() + 48,
+            paper_width,
+            paper_height,
+        )
+        shadow = QColor("#172033")
+        shadow.setAlpha(32)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(shadow)
+        painter.drawRoundedRect(paper.translated(4, 5), 5, 5)
+        painter.setBrush(QColor("#ffffff"))
+        painter.setPen(QPen(QColor("#9fb0c1"), 1.2))
+        painter.drawRoundedRect(paper, 5, 5)
+
+        work = paper.adjusted(18, 20, -18, -22)
+        painter.setBrush(QColor("#eaf4ff"))
+        painter.setPen(QPen(QColor("#2b7de9"), 1.0, Qt.PenStyle.DashLine))
+        painter.drawRoundedRect(work, 4, 4)
+
+        painter.setPen(QPen(QColor("#536170"), 1.0))
+        painter.drawText(
+            QRectF(outer.left() + 12, outer.bottom() - 42, outer.width() - 24, 22),
+            Qt.AlignmentFlag.AlignCenter,
+            f"{self._paper_name} | {self._page_count} page(s)",
+        )
+        painter.end()
+
+
 def _paint_asset_or_arc(painter: QPainter, center: QPointF, radius: float, color: QColor, reverse: bool = False) -> None:
     painter.save()
     rect = QRectF(center.x() - radius * 1.55, center.y() - radius * 1.55, radius * 3.1, radius * 3.1)
-    names = ("redo.svg",) if reverse else ("rotate.svg", "rotation.svg", "rotate_arrow.svg", "layer_rotate.svg")
+    names = ("redo.svg",) if reverse else ("rotate_arrow_pro.svg", "rotate_arrow.svg", "rotate.svg", "rotation.svg", "layer_rotate.svg")
     if _paint_first_asset(painter, names, rect):
         painter.restore()
         return
@@ -166,8 +249,8 @@ def _layer_asset_icon(kind: str, active: bool = True) -> QIcon:
     candidates = {
         "eye": ("eye_open.svg", "eye.svg", "show.svg", "layer_eye.svg") if active else ("eye_closed.svg", "hide.svg", "layer_eye_closed.svg"),
         "lock": ("lock_closed.svg", "lock.svg", "locked.svg", "layer_lock_closed.svg") if active else ("lock_open.svg", "unlock.svg", "unlocked.svg", "layer_lock_open.svg"),
-        "rotate": ("rotate.svg", "rotation.svg", "layer_rotate.svg", "rotate_arrow.svg"),
-        "rotation": ("rotate.svg", "rotation.svg", "layer_rotate.svg", "rotate_arrow.svg"),
+        "rotate": ("rotate_arrow_pro.svg", "rotate_arrow.svg", "rotate.svg", "rotation.svg", "layer_rotate.svg"),
+        "rotation": ("rotate_arrow_pro.svg", "rotate_arrow.svg", "rotate.svg", "rotation.svg", "layer_rotate.svg"),
     }.get(kind, ("rotate.svg",))
     pixmap = QPixmap(34, 34)
     pixmap.fill(Qt.GlobalColor.transparent)
@@ -231,11 +314,12 @@ class PrintSetupDialog(QDialog):
         self.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.FramelessWindowHint)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setModal(True)
-        self.resize(620, 420)
+        self.resize(780, 500)
         self._drag_offset: QPoint | None = None
         self._printer = None
         self._printer_cards: list[QToolButton] = []
         self._selected_printer_name = ""
+        self._page_count = _workspace_page_count(parent)
 
         shell = QWidget()
         shell.setObjectName("ProjectHelpShell")
@@ -246,12 +330,16 @@ class PrintSetupDialog(QDialog):
         layout.setContentsMargins(0, 0, 0, 14)
         layout.setSpacing(10)
         layout.addWidget(self._header())
-        body = QVBoxLayout()
+        body = QHBoxLayout()
         body.setContentsMargins(16, 10, 16, 0)
-        body.setSpacing(10)
+        body.setSpacing(14)
+
+        settings = QVBoxLayout()
+        settings.setContentsMargins(0, 0, 0, 0)
+        settings.setSpacing(10)
         label = QLabel("Printer")
         label.setObjectName("DialogSectionTitle")
-        body.addWidget(label)
+        settings.addWidget(label)
         self._printer_grid = QGridLayout()
         self._printer_grid.setContentsMargins(0, 0, 0, 0)
         self._printer_grid.setHorizontalSpacing(10)
@@ -263,21 +351,62 @@ class PrintSetupDialog(QDialog):
         self._printers.setObjectName("FileTypeCombo")
         self._printers.hide()
         self._load_printers()
-        body.addLayout(self._printer_grid)
+        settings.addLayout(self._printer_grid)
+
+        copies_row = QHBoxLayout()
+        copies_label = QLabel("Copies")
+        copies_label.setObjectName("DialogSectionTitle")
+        self._copies = QSpinBox()
+        self._copies.setObjectName("ZoomSpinBox")
+        self._copies.setRange(1, 999)
+        self._copies.setValue(1)
+        copies_row.addWidget(copies_label)
+        copies_row.addWidget(self._copies, 1)
+        settings.addLayout(copies_row)
+
+        pages_label = QLabel("Pages")
+        pages_label.setObjectName("DialogSectionTitle")
+        settings.addWidget(pages_label)
+        pages_row = QHBoxLayout()
+        pages_row.addWidget(QLabel("From"))
+        self._page_from = QSpinBox()
+        self._page_from.setObjectName("ZoomSpinBox")
+        self._page_from.setRange(1, self._page_count)
+        self._page_from.setValue(1)
+        pages_row.addWidget(self._page_from)
+        pages_row.addWidget(QLabel("To"))
+        self._page_to = QSpinBox()
+        self._page_to.setObjectName("ZoomSpinBox")
+        self._page_to.setRange(1, self._page_count)
+        self._page_to.setValue(self._page_count)
+        pages_row.addWidget(self._page_to)
+        settings.addLayout(pages_row)
+        self._page_from.valueChanged.connect(self._normalize_page_range)
+        self._page_to.valueChanged.connect(self._normalize_page_range)
+
         native = QPushButton("System Print Setup")
         native.setObjectName("PrimaryDialogButton")
         native.clicked.connect(self._open_native_dialog)
-        body.addWidget(native)
+        settings.addWidget(native)
         self._status = QLabel("Select a printer, then apply.")
         self._status.setObjectName("StatusItem")
-        body.addWidget(self._status)
-        body.addStretch(1)
+        settings.addWidget(self._status)
+        settings.addStretch(1)
+
+        self._preview = PrintPreviewPanel(self)
+        self._preview.set_page_count(self._page_count)
+        body.addLayout(settings, 3)
+        body.addWidget(self._preview, 2)
         layout.addLayout(body, 1)
         buttons = QHBoxLayout()
         buttons.setContentsMargins(16, 0, 16, 0)
         buttons.addStretch(1)
+        print_button = QPushButton("Print")
+        print_button.setObjectName("PrimaryDialogButton")
+        print_button.clicked.connect(self.accept)
+        buttons.addWidget(print_button)
         apply_button = QPushButton("Apply")
-        apply_button.setObjectName("PrimaryDialogButton")
+        apply_button.setObjectName("SecondaryDialogButton")
         apply_button.clicked.connect(self.accept)
         buttons.addWidget(apply_button)
         cancel = QPushButton("Cancel")
@@ -355,6 +484,14 @@ class PrintSetupDialog(QDialog):
         if checked:
             self._selected_printer_name = data or title
 
+    def _normalize_page_range(self) -> None:
+        if self._page_from.value() > self._page_to.value():
+            sender = self.sender()
+            if sender is self._page_from:
+                self._page_to.setValue(self._page_from.value())
+            else:
+                self._page_from.setValue(self._page_to.value())
+
     def _select_printer_index(self, index: int) -> None:
         if index < 0 or index >= len(self._printer_cards):
             return
@@ -369,6 +506,9 @@ class PrintSetupDialog(QDialog):
         if combo_index >= 0:
             self._printers.setCurrentIndex(combo_index)
         self._status.setText(f"Selected: {self._selected_printer_name}")
+        if hasattr(self, "_preview"):
+            self._preview._paper_name = self._selected_printer_name or "Printer"
+            self._preview.update()
 
     def _open_native_dialog(self) -> None:
         try:
@@ -409,6 +549,14 @@ class PrintSetupDialog(QDialog):
             return self._selected_printer_name
         data = self._printers.currentData()
         return data if isinstance(data, str) else self._printers.currentText()
+
+    def settings(self) -> dict[str, object]:
+        return {
+            "printer": self.selected_printer_name(),
+            "copies": self._copies.value(),
+            "page_from": self._page_from.value(),
+            "page_to": self._page_to.value(),
+        }
 
 
 def apply_engineering_zoom_print_patch() -> None:
@@ -700,8 +848,12 @@ def apply_engineering_zoom_print_patch() -> None:
     def print_setup(self) -> None:
         dialog = PrintSetupDialog(self)
         if dialog.exec() == QDialog.DialogCode.Accepted:
-            self._print_settings = {"printer": dialog.selected_printer_name()}
-            self._set_status(f"Print Setup: {dialog.selected_printer_name()}")
+            self._print_settings = dialog.settings()
+            self._set_status(
+                f"Print Setup: {self._print_settings['printer']} | "
+                f"{self._print_settings['copies']} copy/copies | "
+                f"pages {self._print_settings['page_from']}-{self._print_settings['page_to']}"
+            )
         else:
             self._set_status("Print Setup canceled")
 
