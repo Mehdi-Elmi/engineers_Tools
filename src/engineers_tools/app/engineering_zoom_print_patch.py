@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import logging
 import math
-from pathlib import Path
-
 from PySide6.QtCore import QEvent, QPoint, QPointF, QRect, QRectF, QSize, Qt
 from PySide6.QtGui import QColor, QCursor, QIcon, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap, QPolygonF
 from PySide6.QtWidgets import QComboBox, QDialog, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
@@ -50,6 +48,21 @@ def _asset_icon(names: tuple[str, ...], fallback: QIcon | None = None) -> QIcon:
     return fallback or QIcon()
 
 
+def _start_tool_asset(key: str) -> tuple[str, ...]:
+    return {
+        "select": ("select_edit_object.svg", "mouse_cursor.svg"),
+        "line": ("line.svg",),
+        "vector": ("vector.svg",),
+        "angle": ("angle_moment.svg",),
+        "text": ("text.svg",),
+        "grid": ("grid.svg",),
+        "snap": ("snap.svg",),
+        "unit": ("unit.svg",),
+        "ruler": ("ruler.svg",),
+        "zoom": ("zoom.svg",),
+    }.get(key, ())
+
+
 def _paint_asset_or_arc(painter: QPainter, center: QPointF, radius: float, color: QColor, reverse: bool = False) -> None:
     painter.save()
     rect = QRectF(center.x() - radius * 1.55, center.y() - radius * 1.55, radius * 3.1, radius * 3.1)
@@ -73,11 +86,11 @@ def _paint_asset_or_arc(painter: QPainter, center: QPointF, radius: float, color
     painter.setPen(Qt.PenStyle.NoPen)
     painter.drawPolygon(
         QPolygonF(
-            [
-                tip,
-                QPointF(base.x() + normal.x() * size * 0.55, base.y() + normal.y() * size * 0.55),
-                QPointF(base.x() - normal.x() * size * 0.55, base.y() - normal.y() * size * 0.55),
-            ]
+        [
+            tip,
+            QPointF(base.x() + normal.x() * size * 0.55, base.y() + normal.y() * size * 0.55),
+            QPointF(base.x() - normal.x() * size * 0.55, base.y() - normal.y() * size * 0.55),
+        ]
         )
     )
     painter.restore()
@@ -85,8 +98,8 @@ def _paint_asset_or_arc(painter: QPainter, center: QPointF, radius: float, color
 
 def _layer_asset_icon(kind: str, active: bool = True) -> QIcon:
     candidates = {
-        "eye": ("eye.svg", "show.svg", "layer_eye.svg"),
-        "lock": ("lock.svg", "locked.svg", "layer_lock_closed.svg") if active else ("unlock.svg", "unlocked.svg", "layer_lock_open.svg"),
+        "eye": ("eye_open.svg", "eye.svg", "show.svg", "layer_eye.svg") if active else ("eye_closed.svg", "hide.svg", "layer_eye_closed.svg"),
+        "lock": ("lock_closed.svg", "lock.svg", "locked.svg", "layer_lock_closed.svg") if active else ("lock_open.svg", "unlock.svg", "unlocked.svg", "layer_lock_open.svg"),
         "rotate": ("rotate.svg", "rotation.svg", "layer_rotate.svg", "rotate_arrow.svg"),
         "rotation": ("rotate.svg", "rotation.svg", "layer_rotate.svg", "rotate_arrow.svg"),
     }.get(kind, ("rotate.svg",))
@@ -295,6 +308,9 @@ def apply_engineering_zoom_print_patch() -> None:
     original_activate_zoom = sb.StartBar._activate_zoom
     original_layer_button = edw.EngineeringDesignWorkspace._layer_button
     original_history_icon = edw.EngineeringDesignWorkspace._build_history_icon
+    original_tool_icon = sb._tool_icon
+    original_mini_zoom_icon = sb._mini_zoom_icon
+    original_zoom_cursor = sb._zoom_cursor
 
     def canvas_init(self, *args, **kwargs):
         original_canvas_init(self, *args, **kwargs)
@@ -348,12 +364,35 @@ def apply_engineering_zoom_print_patch() -> None:
             return icon
         return original_history_icon(self, direction)
 
+    def start_tool_icon(key: str) -> QIcon:
+        names = _start_tool_asset(key)
+        if names:
+            return _asset_icon(names, original_tool_icon(key))
+        return original_tool_icon(key)
+
+    def mini_zoom_icon(action: str) -> QIcon:
+        names = {
+            "zoom_in": ("zoom_in.svg",),
+            "zoom_out": ("zoom_out.svg",),
+            "zoom_fit": ("zoom_fit.svg",),
+        }.get(action, ())
+        if names:
+            return _asset_icon(names, original_mini_zoom_icon(action))
+        return original_mini_zoom_icon(action)
+
+    def zoom_cursor(mode: str) -> QCursor:
+        names = ("zoom_in.svg",) if mode == "zoom_in" else ("zoom_out.svg",)
+        asset = _first_existing(names)
+        if asset is None:
+            return original_zoom_cursor(mode)
+        return _asset_cursor((asset,), Qt.CursorShape.CrossCursor, 12, 12)
+
     def canvas_mouse_press(self, event) -> None:
         original_mouse_press(self, event)
         if getattr(self, "_drag_action", None) == "rotate":
             self.setCursor(_asset_cursor(("hand_closed.svg", "closed_hand.svg", "grab.svg", "mouse_cursor_closed.svg"), Qt.CursorShape.ClosedHandCursor, 12, 12))
         elif getattr(self, "_drag_action", None) == "move":
-            self.setCursor(_asset_cursor(("move.svg", "move_cursor.svg", "cursor_move.svg"), Qt.CursorShape.SizeAllCursor, 12, 12))
+            self.setCursor(_asset_cursor(("move.svg", "move_cursor.svg", "cursor_move.svg"), Qt.CursorShape.SizeAllCursor, 16, 16))
 
     def canvas_mouse_move(self, event) -> None:
         original_mouse_move(self, event)
@@ -361,7 +400,7 @@ def apply_engineering_zoom_print_patch() -> None:
         if action == "rotate":
             self.setCursor(_asset_cursor(("hand_closed.svg", "closed_hand.svg", "grab.svg", "mouse_cursor_closed.svg"), Qt.CursorShape.ClosedHandCursor, 12, 12))
         elif action == "move":
-            self.setCursor(_asset_cursor(("move.svg", "move_cursor.svg", "cursor_move.svg"), Qt.CursorShape.SizeAllCursor, 12, 12))
+            self.setCursor(_asset_cursor(("move.svg", "move_cursor.svg", "cursor_move.svg"), Qt.CursorShape.SizeAllCursor, 16, 16))
 
     def canvas_mouse_release(self, event) -> None:
         original_mouse_release(self, event)
@@ -555,6 +594,9 @@ def apply_engineering_zoom_print_patch() -> None:
     edw.EngineeringDesignWorkspace._build_history_icon = build_history_icon
     edw.EngineeringDesignWorkspace._layer_button = layer_button
     edw.EngineeringDesignWorkspace._print_setup = print_setup
+    sb._tool_icon = start_tool_icon
+    sb._mini_zoom_icon = mini_zoom_icon
+    sb._zoom_cursor = zoom_cursor
     sb.StartBar._unit_to_canvas_px = unit_to_canvas_px
     sb.StartBar._center_ruler_origin = center_ruler_origin
     sb.StartBar._toggle_ruler_corner_origin = toggle_ruler_corner_origin
