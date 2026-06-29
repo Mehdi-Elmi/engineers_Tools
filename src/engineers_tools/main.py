@@ -29,6 +29,7 @@ def main() -> int:
     try:
         from .app.controller import AppController
         from .app.engineering_export_patch import apply_engineering_export_patch
+        from .app.engineering_workspace_finalize_patch import apply_engineering_workspace_finalize_patch
         from .app.interaction_ui_patch import apply_interaction_ui_patch
         from .app.runtime_ui_patch import apply_runtime_ui_patch
         from .app.theme import apply_app_theme
@@ -40,6 +41,7 @@ def main() -> int:
         apply_runtime_ui_patch()
         apply_interaction_ui_patch()
         apply_engineering_export_patch()
+        apply_engineering_workspace_finalize_patch()
 
         controller = AppController()
         controller.show_launcher()
