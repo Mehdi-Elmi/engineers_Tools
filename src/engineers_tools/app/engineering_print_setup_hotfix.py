@@ -10,7 +10,7 @@ from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import QButtonGroup, QCheckBox, QComboBox, QDoubleSpinBox, QFileDialog, QHBoxLayout, QLabel, QPushButton, QSpinBox, QToolButton
 
 
-HOTFIX_VERSION = "direct-print-9"
+HOTFIX_VERSION = "direct-print-10"
 _SKIP_PRINTER_TOKENS = ("fax", "onenote", "one note", "evernote", "xps", "microsoft xps")
 _PDF_PRINTER_TOKENS = ("pdf", "foxit", "adobe", "nitro", "pdf24", "pdfcreator")
 
@@ -333,6 +333,37 @@ def _find_layout_with_widget(layout, widget):
     return None
 
 
+def _make_print_spin(source: QSpinBox | None, width: int, default: int, minimum: int, maximum: int) -> QSpinBox:
+    spin = QSpinBox()
+    spin.setRange(minimum, maximum)
+    value = default
+    if isinstance(source, QSpinBox):
+        value = source.value()
+    spin.setValue(max(minimum, min(maximum, value)))
+    _style_print_spin(spin, width)
+    return spin
+
+
+def _hide_widget(widget) -> None:
+    if widget is not None:
+        widget.hide()
+
+
+def _find_button_by_text(dialog, text: str):
+    for button in dialog.findChildren(QPushButton):
+        if button.text() == text:
+            return button
+    return None
+
+
+def _inline_print_label(text: str, width: int) -> QLabel:
+    label = QLabel(text)
+    label.setObjectName("DialogSectionTitle")
+    label.setFixedWidth(width)
+    label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+    return label
+
+
 def _filter_printer_cards(dialog) -> None:
     grid = getattr(dialog, "_printer_grid", None)
     cards = list(getattr(dialog, "_printer_cards", []))
@@ -396,26 +427,29 @@ def apply_engineering_print_setup_hotfix() -> None:
         def _polish_form(self) -> None:
             self.resize(760, 480)
             _filter_printer_cards(self)
-            if isinstance(getattr(self, "_copies", None), QSpinBox):
-                _style_print_spin(self._copies, 54)
-            if isinstance(getattr(self, "_page_from", None), QSpinBox):
-                _style_print_spin(self._page_from, 52)
-            if isinstance(getattr(self, "_page_to", None), QSpinBox):
-                _style_print_spin(self._page_to, 52)
+            original_copies = getattr(self, "_copies", None)
+            original_page_from = getattr(self, "_page_from", None)
+            original_page_to = getattr(self, "_page_to", None)
 
             for label in self.findChildren(QLabel):
                 if label.text() == "Copies":
-                    label.setFixedWidth(44)
+                    label.hide()
                 elif label.text() == "Pages":
                     label.hide()
                 elif label.text() == "From":
-                    label.setText("Page From")
-                    label.setFixedWidth(74)
+                    label.hide()
                 elif label.text() == "To":
-                    label.setText("Page To")
-                    label.setFixedWidth(58)
-                if label.text() in {"Copies", "Page From", "Page To"}:
-                    label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+                    label.hide()
+            _hide_widget(original_copies)
+            _hide_widget(original_page_from)
+            _hide_widget(original_page_to)
+
+            page_count = _workspace_page_count(self.parentWidget())
+            self._copies = _make_print_spin(original_copies, 54, 1, 1, 999)
+            self._page_from = _make_print_spin(original_page_from, 52, 1, 1, max(1, page_count))
+            self._page_to = _make_print_spin(original_page_to, 52, max(1, page_count), 1, max(1, page_count))
+            self._page_from.valueChanged.connect(self._normalize_page_range)
+            self._page_to.valueChanged.connect(self._normalize_page_range)
 
             page_layout = _find_layout_with_widget(self.layout(), getattr(self, "_page_to", None))
             if page_layout is not None:
@@ -435,6 +469,18 @@ def apply_engineering_print_setup_hotfix() -> None:
             self._print_grid.setChecked(False)
             self._print_grid.setStyleSheet(_radio_style())
             self._print_grid.toggled.connect(self._update_preview)
+            controls_row = QHBoxLayout()
+            controls_row.setContentsMargins(0, 0, 0, 0)
+            controls_row.setSpacing(4)
+            controls_row.addWidget(_inline_print_label("Copies", 44))
+            controls_row.addWidget(self._copies)
+            controls_row.addSpacing(8)
+            controls_row.addWidget(_inline_print_label("Page From", 72))
+            controls_row.addWidget(self._page_from)
+            controls_row.addSpacing(8)
+            controls_row.addWidget(_inline_print_label("Page To", 54))
+            controls_row.addWidget(self._page_to)
+            controls_row.addStretch(1)
             options_row = QHBoxLayout()
             options_row.setContentsMargins(0, 0, 0, 0)
             options_row.setSpacing(12)
@@ -442,9 +488,15 @@ def apply_engineering_print_setup_hotfix() -> None:
             options_row.addWidget(self._all_pages)
             options_row.addWidget(self._print_grid)
             options_row.addStretch(1)
-            settings_layout, status_index = _find_layout_index_with_widget(self.layout(), getattr(self, "_status", None))
-            if settings_layout is not None and status_index >= 0:
-                settings_layout.insertLayout(status_index, options_row)
+            native_button = _find_button_by_text(self, "System Print Setup")
+            settings_layout, anchor_index = _find_layout_index_with_widget(self.layout(), native_button)
+            if settings_layout is None:
+                settings_layout, anchor_index = _find_layout_index_with_widget(self.layout(), getattr(self, "_status", None))
+            if native_button is not None:
+                native_button.hide()
+            if settings_layout is not None and anchor_index >= 0:
+                settings_layout.insertLayout(anchor_index, controls_row)
+                settings_layout.insertLayout(anchor_index + 1, options_row)
             elif page_layout is not None:
                 page_layout.addWidget(self._all_pages)
                 page_layout.addWidget(self._print_grid)
