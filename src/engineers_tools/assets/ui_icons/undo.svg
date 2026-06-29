@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Undo icon">
+  <defs>
+    <linearGradient id="undoStroke" x1="10" y1="12" x2="54" y2="52" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffb347"/>
+      <stop offset="1" stop-color="#f36f21"/>
+    </linearGradient>
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="2" stdDeviation="1.5" flood-color="#7a3000" flood-opacity=".25"/>
+    </filter>
+  </defs>
+  <path d="M24 16 12 28l12 12" fill="none" stroke="url(#undoStroke)" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" filter="url(#softShadow)"/>
+  <path d="M14 28h25c8.2 0 13 4.8 13 11.6 0 6.9-5.4 11.4-13.4 11.4H28" fill="none" stroke="url(#undoStroke)" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" filter="url(#softShadow)"/>
+</svg>
