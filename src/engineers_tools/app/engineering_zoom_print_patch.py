@@ -6,7 +6,20 @@ import logging
 import math
 from PySide6.QtCore import QEvent, QPoint, QPointF, QRect, QRectF, QSize, Qt
 from PySide6.QtGui import QColor, QCursor, QIcon, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap, QPolygonF
-from PySide6.QtWidgets import QComboBox, QDialog, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QApplication,
+    QButtonGroup,
+    QComboBox,
+    QDialog,
+    QGridLayout,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QSizePolicy,
+    QToolButton,
+    QVBoxLayout,
+    QWidget,
+)
 
 from .interaction_ui_patch import _asset_icon_path, _paint_asset_icon
 
@@ -46,6 +59,59 @@ def _asset_icon(names: tuple[str, ...], fallback: QIcon | None = None) -> QIcon:
     if ok:
         return QIcon(pixmap)
     return fallback or QIcon()
+
+
+def _printer_icon(name: str, active: bool = False) -> QIcon:
+    lower = name.lower()
+    pixmap = QPixmap(72, 72)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+
+    shadow = QColor("#203040")
+    shadow.setAlpha(35)
+    painter.setPen(Qt.PenStyle.NoPen)
+    painter.setBrush(shadow)
+    painter.drawRoundedRect(QRectF(14, 18, 46, 42).translated(2, 3), 9, 9)
+
+    shell = QLinearGradient(14, 16, 58, 60)
+    shell.setColorAt(0.0, QColor("#ffffff"))
+    shell.setColorAt(0.45, QColor("#d6dde6"))
+    shell.setColorAt(1.0, QColor("#53606d"))
+    painter.setBrush(shell)
+    painter.setPen(QPen(QColor("#27313b"), 2.0))
+    painter.drawRoundedRect(QRectF(14, 20, 46, 32), 8, 8)
+
+    paper = QLinearGradient(21, 8, 51, 34)
+    paper.setColorAt(0.0, QColor("#ffffff"))
+    paper.setColorAt(1.0, QColor("#e9f3ff"))
+    painter.setBrush(paper)
+    painter.setPen(QPen(QColor("#708090"), 1.6))
+    painter.drawRoundedRect(QRectF(21, 8, 30, 22), 4, 4)
+
+    accent = QColor("#f28a1d")
+    if "pdf" in lower:
+        accent = QColor("#2d7eea")
+    elif "fax" in lower:
+        accent = QColor("#6b7280")
+    elif "epson" in lower:
+        accent = QColor("#1d63d1")
+    elif "canon" in lower:
+        accent = QColor("#d62728")
+    painter.setBrush(accent)
+    painter.setPen(Qt.PenStyle.NoPen)
+    painter.drawRoundedRect(QRectF(20, 44, 34, 7), 2, 2)
+    painter.drawEllipse(QRectF(48, 25, 7, 7))
+
+    if active:
+        painter.setBrush(QColor("#1d63d1"))
+        painter.setPen(QPen(QColor("#ffffff"), 1.5))
+        painter.drawEllipse(QRectF(50, 48, 16, 16))
+        painter.drawLine(QPointF(54, 56), QPointF(58, 60))
+        painter.drawLine(QPointF(58, 60), QPointF(63, 52))
+
+    painter.end()
+    return QIcon(pixmap)
 
 
 def _start_tool_asset(key: str) -> tuple[str, ...]:
@@ -168,6 +234,8 @@ class PrintSetupDialog(QDialog):
         self.resize(620, 420)
         self._drag_offset: QPoint | None = None
         self._printer = None
+        self._printer_cards: list[QToolButton] = []
+        self._selected_printer_name = ""
 
         shell = QWidget()
         shell.setObjectName("ProjectHelpShell")
@@ -181,11 +249,21 @@ class PrintSetupDialog(QDialog):
         body = QVBoxLayout()
         body.setContentsMargins(16, 10, 16, 0)
         body.setSpacing(10)
-        body.addWidget(QLabel("Printer"))
+        label = QLabel("Printer")
+        label.setObjectName("DialogSectionTitle")
+        body.addWidget(label)
+        self._printer_grid = QGridLayout()
+        self._printer_grid.setContentsMargins(0, 0, 0, 0)
+        self._printer_grid.setHorizontalSpacing(10)
+        self._printer_grid.setVerticalSpacing(10)
+        self._printer_group = QButtonGroup(self)
+        self._printer_group.setExclusive(True)
+        self._printer_group.idClicked.connect(self._select_printer_index)
         self._printers = QComboBox()
         self._printers.setObjectName("FileTypeCombo")
+        self._printers.hide()
         self._load_printers()
-        body.addWidget(self._printers)
+        body.addLayout(self._printer_grid)
         native = QPushButton("System Print Setup")
         native.setObjectName("PrimaryDialogButton")
         native.clicked.connect(self._open_native_dialog)
@@ -240,14 +318,57 @@ class PrintSetupDialog(QDialog):
         default = QPrinterInfo.defaultPrinter().printerName()
         if not printers:
             self._printers.addItem("No printers found")
+            self._add_printer_card("No printers found", "", True)
             return
-        for printer in printers:
+        for index, printer in enumerate(printers):
             name = printer.printerName()
             self._printers.addItem(name + ("  (Default)" if name == default else ""), name)
+            checked = bool(name == default or (not default and index == 0))
+            self._add_printer_card(name, name, checked)
         if default:
             index = self._printers.findData(default)
             if index >= 0:
                 self._printers.setCurrentIndex(index)
+                self._selected_printer_name = default
+        elif self._printers.count() > 0:
+            self._printers.setCurrentIndex(0)
+            data = self._printers.currentData()
+            self._selected_printer_name = data if isinstance(data, str) else self._printers.currentText()
+
+    def _add_printer_card(self, title: str, data: str, checked: bool = False) -> None:
+        button = QToolButton()
+        button.setObjectName("PrinterCard")
+        button.setCheckable(True)
+        button.setChecked(checked)
+        button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextUnderIcon)
+        button.setIcon(_printer_icon(title, checked))
+        button.setIconSize(QSize(62, 62))
+        button.setText(title)
+        button.setMinimumSize(138, 112)
+        button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        button.setProperty("printerName", data)
+        row = len(self._printer_cards) // 3
+        column = len(self._printer_cards) % 3
+        self._printer_grid.addWidget(button, row, column)
+        self._printer_group.addButton(button, len(self._printer_cards))
+        self._printer_cards.append(button)
+        if checked:
+            self._selected_printer_name = data or title
+
+    def _select_printer_index(self, index: int) -> None:
+        if index < 0 or index >= len(self._printer_cards):
+            return
+        for card_index, card in enumerate(self._printer_cards):
+            active = card_index == index
+            card.setIcon(_printer_icon(card.text(), active))
+            card.setProperty("active", active)
+        card = self._printer_cards[index]
+        name = card.property("printerName")
+        self._selected_printer_name = name if isinstance(name, str) and name else card.text()
+        combo_index = self._printers.findData(self._selected_printer_name)
+        if combo_index >= 0:
+            self._printers.setCurrentIndex(combo_index)
+        self._status.setText(f"Selected: {self._selected_printer_name}")
 
     def _open_native_dialog(self) -> None:
         try:
@@ -257,7 +378,7 @@ class PrintSetupDialog(QDialog):
             self._status.setText("Qt print support is not available.")
             return
         printer = QPrinter(QPrinter.PrinterMode.HighResolution)
-        name = self._printers.currentData()
+        name = self._selected_printer_name or self._printers.currentData()
         if isinstance(name, str) and name:
             printer.setPrinterName(name)
         dialog = QPrintDialog(printer, self)
@@ -284,6 +405,8 @@ class PrintSetupDialog(QDialog):
         super().mouseReleaseEvent(event)
 
     def selected_printer_name(self) -> str:
+        if self._selected_printer_name:
+            return self._selected_printer_name
         data = self._printers.currentData()
         return data if isinstance(data, str) else self._printers.currentText()
 
