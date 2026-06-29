@@ -10,7 +10,7 @@ from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import QButtonGroup, QCheckBox, QComboBox, QDoubleSpinBox, QFileDialog, QHBoxLayout, QLabel, QPushButton, QSpinBox, QToolButton
 
 
-HOTFIX_VERSION = "direct-print-13"
+HOTFIX_VERSION = "direct-print-14"
 _SKIP_PRINTER_TOKENS = ("fax", "onenote", "one note", "evernote", "xps", "microsoft xps")
 _PDF_PRINTER_TOKENS = ("pdf", "foxit", "adobe", "nitro", "pdf24", "pdfcreator")
 
@@ -316,6 +316,11 @@ def _find_layout_index_with_widget(layout, widget):
         found_layout, found_index = _find_layout_index_with_widget(child, widget)
         if found_layout is not None:
             return found_layout, found_index
+        child_widget = item.widget()
+        child_widget_layout = child_widget.layout() if child_widget is not None else None
+        found_layout, found_index = _find_layout_index_with_widget(child_widget_layout, widget)
+        if found_layout is not None:
+            return found_layout, found_index
     return None, -1
 
 
@@ -328,6 +333,11 @@ def _find_layout_with_widget(layout, widget):
             return layout
         child = item.layout()
         found = _find_layout_with_widget(child, widget)
+        if found is not None:
+            return found
+        child_widget = item.widget()
+        child_widget_layout = child_widget.layout() if child_widget is not None else None
+        found = _find_layout_with_widget(child_widget_layout, widget)
         if found is not None:
             return found
     return None
