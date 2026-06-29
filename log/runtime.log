@@ -1,14 +1,41 @@
-2026-06-28 18:02:00,475 | INFO | root | Runtime log started.
-2026-06-28 18:02:00,475 | INFO | root | Runtime log path: C:\Users\ATLAS\AppData\Local\EngineerTools\logs\runtime.log
-2026-06-28 18:02:00,475 | INFO | root | Engineer Tools startup requested.
-2026-06-28 18:02:00,476 | INFO | root | Python executable: C:\Users\ATLAS\AppData\Local\EngineerTools\.venv\Scripts\pythonw.exe
-2026-06-28 18:02:00,476 | INFO | root | Python argv: ['C:\\Users\\ATLAS\\AppData\\Local\\EngineerTools\\src\\engineers_tools\\main.py']
-2026-06-28 18:02:01,130 | ERROR | root | Launcher startup failed.
+2026-06-29 15:24:48,703 | INFO | root | Runtime log started.
+2026-06-29 15:24:48,703 | INFO | root | Runtime log path: C:\Users\ATLAS\AppData\Local\EngineerTools\logs\runtime.log
+2026-06-29 15:24:48,704 | INFO | root | Engineer Tools startup requested.
+2026-06-29 15:24:48,704 | INFO | root | Python executable: C:\Users\ATLAS\AppData\Local\EngineerTools\.venv\Scripts\pythonw.exe
+2026-06-29 15:24:48,704 | INFO | root | Python argv: ['C:\\Users\\ATLAS\\AppData\\Local\\EngineerTools\\src\\engineers_tools\\main.py']
+2026-06-29 15:24:49,495 | INFO | root | interaction_ui_patch: shared icon and control patches installed
+2026-06-29 15:24:49,552 | INFO | root | interaction_ui_patch: engineering workspace patches installed
+2026-06-29 15:24:49,554 | INFO | root | engineering_export_patch: installed
+2026-06-29 15:24:49,554 | INFO | root | engineering_workspace_finalize_patch: installed
+2026-06-29 15:24:49,554 | INFO | root | engineering_zoom_print_patch: installed
+2026-06-29 15:24:50,506 | INFO | root | Launcher shown.
+
+[2026-06-29 15:33:17] ProjectFileDialog.refresh_files failed
 Traceback (most recent call last):
-  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\main.py", line 30, in main
-    from .app.controller import AppController
-  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\controller.py", line 11, in <module>
-    from .module_window import ModuleWindow
-  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\module_window.py", line 26, in <module>
-    from ..ui.start_bar import DEFAULT_START_BAR_TOOLS, StartBar, StartBarTool
-ImportError: cannot import name 'DEFAULT_START_BAR_TOOLS' from 'src.engineers_tools.ui.start_bar' (C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\ui\start_bar.py)
+  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\project_file_dialog.py", line 471, in _refresh_files
+    children = sorted(self._current_dir.iterdir(), key=lambda item: (not item.is_dir(), item.name.lower()))
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ATLAS\AppData\Local\Programs\Python\Python311\Lib\pathlib.py", line 931, in iterdir
+    for name in os.listdir(self):
+                ^^^^^^^^^^^^^^^^
+PermissionError: [WinError 5] Access is denied: 'F:\\System Volume Information'
+
+[2026-06-29 15:33:24] ProjectFileDialog.refresh_files failed
+Traceback (most recent call last):
+  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\project_file_dialog.py", line 471, in _refresh_files
+    children = sorted(self._current_dir.iterdir(), key=lambda item: (not item.is_dir(), item.name.lower()))
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ATLAS\AppData\Local\Programs\Python\Python311\Lib\pathlib.py", line 931, in iterdir
+    for name in os.listdir(self):
+                ^^^^^^^^^^^^^^^^
+PermissionError: [WinError 5] Access is denied: 'F:\\System Volume Information'
+
+[2026-06-29 15:33:26] ProjectFileDialog.refresh_files failed
+Traceback (most recent call last):
+  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\project_file_dialog.py", line 471, in _refresh_files
+    children = sorted(self._current_dir.iterdir(), key=lambda item: (not item.is_dir(), item.name.lower()))
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ATLAS\AppData\Local\Programs\Python\Python311\Lib\pathlib.py", line 931, in iterdir
+    for name in os.listdir(self):
+                ^^^^^^^^^^^^^^^^
+PermissionError: [WinError 5] Access is denied: 'F:\\System Volume Information'
