@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="220" viewBox="0 0 400 220">
+  <rect width="400" height="220" fill="#ffffff"/>
+  <g stroke="#e4ebf5" stroke-width="1">
+    <path d="M0 10H400M0 30H400M0 50H400M0 70H400M0 90H400M0 110H400M0 130H400M0 150H400M0 170H400M0 190H400M0 210H400"/>
+    <path d="M10 0V220M30 0V220M50 0V220M70 0V220M90 0V220M110 0V220M130 0V220M150 0V220M170 0V220M190 0V220M210 0V220M230 0V220M250 0V220M270 0V220M290 0V220M310 0V220M330 0V220M350 0V220M370 0V220M390 0V220"/>
+  </g>
+  <path d="M62 154L128 54l72 84 52-52 86 82" fill="none" stroke="#2d7eea" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  <g fill="#ffbd57" stroke="#132238" stroke-width="3">
+    <circle cx="62" cy="154" r="10"/>
+    <circle cx="128" cy="54" r="10"/>
+    <circle cx="200" cy="138" r="10"/>
+    <circle cx="252" cy="86" r="10"/>
+    <circle cx="338" cy="168" r="10"/>
+  </g>
+  <text x="54" y="30" font-family="Arial" font-size="18" font-weight="700" fill="#132238">Print Grid / Preview test</text>
+</svg>
