@@ -10,7 +10,7 @@ from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import QButtonGroup, QCheckBox, QComboBox, QDoubleSpinBox, QFileDialog, QHBoxLayout, QLabel, QPushButton, QSpinBox, QToolButton
 
 
-HOTFIX_VERSION = "direct-print-7"
+HOTFIX_VERSION = "direct-print-6"
 _SKIP_PRINTER_TOKENS = ("fax", "onenote", "one note", "evernote", "xps", "microsoft xps")
 _PDF_PRINTER_TOKENS = ("pdf", "foxit", "adobe", "nitro", "pdf24", "pdfcreator")
 
@@ -333,26 +333,6 @@ def _find_layout_with_widget(layout, widget):
     return None
 
 
-def _hide_matching_labels(dialog, texts: set[str]) -> None:
-    for label in dialog.findChildren(QLabel):
-        if label.text() in texts:
-            label.hide()
-
-
-def _remove_widget_from_layout(layout, widget) -> bool:
-    if layout is None or widget is None:
-        return False
-    for index in range(layout.count()):
-        item = layout.itemAt(index)
-        if item.widget() is widget:
-            layout.takeAt(index)
-            return True
-        child = item.layout()
-        if _remove_widget_from_layout(child, widget):
-            return True
-    return False
-
-
 def _filter_printer_cards(dialog) -> None:
     grid = getattr(dialog, "_printer_grid", None)
     cards = list(getattr(dialog, "_printer_cards", []))
@@ -417,14 +397,11 @@ def apply_engineering_print_setup_hotfix() -> None:
             self.resize(760, 480)
             _filter_printer_cards(self)
             if isinstance(getattr(self, "_copies", None), QSpinBox):
-                self._copies.setValue(max(1, self._copies.value()))
-                _style_print_spin(self._copies, 50)
+                _style_print_spin(self._copies, 54)
             if isinstance(getattr(self, "_page_from", None), QSpinBox):
-                self._page_from.setValue(max(1, self._page_from.value()))
-                _style_print_spin(self._page_from, 50)
+                _style_print_spin(self._page_from, 52)
             if isinstance(getattr(self, "_page_to", None), QSpinBox):
-                self._page_to.setValue(max(1, self._page_to.value()))
-                _style_print_spin(self._page_to, 50)
+                _style_print_spin(self._page_to, 52)
 
             for label in self.findChildren(QLabel):
                 if label.text() == "Copies":
@@ -454,30 +431,9 @@ def apply_engineering_print_setup_hotfix() -> None:
             self._print_grid.setChecked(False)
             self._print_grid.setStyleSheet(_radio_style())
             self._print_grid.toggled.connect(self._update_preview)
-            _hide_matching_labels(self, {"Copies", "Pages", "From", "To"})
-            _remove_widget_from_layout(self.layout(), getattr(self, "_copies", None))
-            _remove_widget_from_layout(self.layout(), getattr(self, "_page_from", None))
-            _remove_widget_from_layout(self.layout(), getattr(self, "_page_to", None))
             options_row = QHBoxLayout()
             options_row.setContentsMargins(0, 0, 0, 0)
-            options_row.setSpacing(5)
-            copies_label = QLabel("Copies")
-            copies_label.setObjectName("DialogSectionTitle")
-            copies_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-            page_from_label = QLabel("Page From")
-            page_from_label.setObjectName("DialogSectionTitle")
-            page_from_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-            page_to_label = QLabel("To")
-            page_to_label.setObjectName("DialogSectionTitle")
-            page_to_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-            options_row.addWidget(copies_label)
-            options_row.addWidget(self._copies)
-            options_row.addSpacing(6)
-            options_row.addWidget(page_from_label)
-            options_row.addWidget(self._page_from)
-            options_row.addWidget(page_to_label)
-            options_row.addWidget(self._page_to)
-            options_row.addSpacing(8)
+            options_row.setSpacing(12)
             options_row.addWidget(self._all_pages)
             options_row.addWidget(self._print_grid)
             options_row.addStretch(1)
