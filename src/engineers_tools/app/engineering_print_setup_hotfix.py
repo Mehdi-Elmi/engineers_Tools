@@ -7,10 +7,10 @@ from pathlib import Path
 
 from PySide6.QtCore import QRectF, Qt
 from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen
-from PySide6.QtWidgets import QButtonGroup, QCheckBox, QFileDialog, QLabel, QPushButton, QSpinBox, QToolButton
+from PySide6.QtWidgets import QButtonGroup, QCheckBox, QFileDialog, QHBoxLayout, QLabel, QPushButton, QSpinBox, QToolButton
 
 
-HOTFIX_VERSION = "direct-print-4"
+HOTFIX_VERSION = "direct-print-5"
 _SKIP_PRINTER_TOKENS = ("fax", "onenote", "one note", "evernote", "xps", "microsoft xps")
 _PDF_PRINTER_TOKENS = ("pdf", "foxit", "adobe", "nitro", "pdf24", "pdfcreator")
 
@@ -50,7 +50,7 @@ def _style_print_spin(spin: QSpinBox, width: int = 58) -> None:
         }
         QSpinBox#PrintSpinBox::up-button, QSpinBox#PrintSpinBox::down-button {
             width:22px; border:0px; margin:2px 2px 2px 0px;
-            background:qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 #ffd48a, stop:0.48 #f28a1d, stop:1 #d95f00);
+            background:qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 #fff7d8, stop:0.52 #ffbd57, stop:1 #f2a12b);
             subcontrol-origin:border;
         }
         QSpinBox#PrintSpinBox::up-button { subcontrol-position:top right; border-top-right-radius:8px; }
@@ -247,6 +247,20 @@ def _send_print_job(workspace, settings: dict[str, object]) -> bool:
         return False
 
 
+def _find_layout_index_with_widget(layout, widget):
+    if layout is None or widget is None:
+        return None, -1
+    for index in range(layout.count()):
+        item = layout.itemAt(index)
+        if item.widget() is widget:
+            return layout, index
+        child = item.layout()
+        found_layout, found_index = _find_layout_index_with_widget(child, widget)
+        if found_layout is not None:
+            return found_layout, found_index
+    return None, -1
+
+
 def _find_layout_with_widget(layout, widget):
     if layout is None or widget is None:
         return None
@@ -343,23 +357,34 @@ def apply_engineering_print_setup_hotfix() -> None:
             page_layout = _find_layout_with_widget(self.layout(), getattr(self, "_page_to", None))
             if page_layout is not None:
                 try:
-                    page_layout.setSpacing(5)
+                    page_layout.setSpacing(4)
                     page_layout.setContentsMargins(0, 0, 0, 0)
                 except Exception:
                     pass
-                self._all_pages = QCheckBox("All pages")
-                self._all_pages.setObjectName("RadioLikeOption")
-                self._all_pages.setChecked(True)
-                self._all_pages.setStyleSheet(_radio_style())
-                self._all_pages.toggled.connect(self._sync_page_range_state)
+
+            self._all_pages = QCheckBox("All pages")
+            self._all_pages.setObjectName("RadioLikeOption")
+            self._all_pages.setChecked(True)
+            self._all_pages.setStyleSheet(_radio_style())
+            self._all_pages.toggled.connect(self._sync_page_range_state)
+            self._print_grid = QCheckBox("Print grid")
+            self._print_grid.setObjectName("RadioLikeOption")
+            self._print_grid.setChecked(False)
+            self._print_grid.setStyleSheet(_radio_style())
+            self._print_grid.toggled.connect(self._update_preview)
+            options_row = QHBoxLayout()
+            options_row.setContentsMargins(0, 0, 0, 0)
+            options_row.setSpacing(12)
+            options_row.addWidget(self._all_pages)
+            options_row.addWidget(self._print_grid)
+            options_row.addStretch(1)
+            settings_layout, status_index = _find_layout_index_with_widget(self.layout(), getattr(self, "_status", None))
+            if settings_layout is not None and status_index >= 0:
+                settings_layout.insertLayout(status_index, options_row)
+            elif page_layout is not None:
                 page_layout.addWidget(self._all_pages)
-                self._print_grid = QCheckBox("Print grid")
-                self._print_grid.setObjectName("RadioLikeOption")
-                self._print_grid.setChecked(False)
-                self._print_grid.setStyleSheet(_radio_style())
-                self._print_grid.toggled.connect(self._update_preview)
                 page_layout.addWidget(self._print_grid)
-                self._sync_page_range_state(True)
+            self._sync_page_range_state(True)
 
             preview = getattr(self, "_preview", None)
             if preview is not None:
