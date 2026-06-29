@@ -1,22 +1,49 @@
-2026-06-29 17:48:12,055 | INFO | root | Runtime log started.
-2026-06-29 17:48:12,055 | INFO | root | Runtime log path: C:\Users\ATLAS\AppData\Local\EngineerTools\logs\runtime.log
-2026-06-29 17:48:12,055 | INFO | root | Engineer Tools startup requested.
-2026-06-29 17:48:12,055 | INFO | root | Python executable: C:\Users\ATLAS\AppData\Local\EngineerTools\.venv\Scripts\pythonw.exe
-2026-06-29 17:48:12,055 | INFO | root | Python argv: ['C:\\Users\\ATLAS\\AppData\\Local\\EngineerTools\\src\\engineers_tools\\main.py']
-2026-06-29 17:48:12,678 | INFO | root | interaction_ui_patch: shared icon and control patches installed
-2026-06-29 17:48:12,727 | INFO | root | interaction_ui_patch: engineering workspace patches installed
-2026-06-29 17:48:12,728 | INFO | root | engineering_export_patch: installed
-2026-06-29 17:48:12,728 | INFO | root | engineering_workspace_finalize_patch: installed
-2026-06-29 17:48:12,728 | INFO | root | engineering_zoom_print_patch: installed
-2026-06-29 17:48:12,729 | INFO | root | engineering_print_setup_hotfix: installed
-2026-06-29 17:48:13,507 | INFO | root | Launcher shown.
-2026-06-29 17:48:22,218 | ERROR | root | engineering_print_setup_hotfix: print imports failed: cannot import name '_render_engineering_export' from 'src.engineers_tools.app.interaction_ui_patch' (C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\interaction_ui_patch.py)
+2026-06-29 18:18:43,763 | INFO | root | Runtime log started.
+2026-06-29 18:18:43,763 | INFO | root | Runtime log path: C:\Users\ATLAS\AppData\Local\EngineerTools\logs\runtime.log
+2026-06-29 18:18:43,763 | INFO | root | Engineer Tools startup requested.
+2026-06-29 18:18:43,763 | INFO | root | Python executable: C:\Users\ATLAS\AppData\Local\EngineerTools\.venv\Scripts\pythonw.exe
+2026-06-29 18:18:43,763 | INFO | root | Python argv: ['C:\\Users\\ATLAS\\AppData\\Local\\EngineerTools\\src\\engineers_tools\\main.py']
+2026-06-29 18:18:44,338 | INFO | root | interaction_ui_patch: shared icon and control patches installed
+2026-06-29 18:18:44,387 | INFO | root | interaction_ui_patch: engineering workspace patches installed
+2026-06-29 18:18:44,387 | INFO | root | engineering_export_patch: installed
+2026-06-29 18:18:44,388 | INFO | root | engineering_workspace_finalize_patch: installed
+2026-06-29 18:18:44,388 | INFO | root | engineering_zoom_print_patch: installed
+2026-06-29 18:18:44,388 | INFO | root | engineering_print_setup_hotfix: installed version=robust-print-3
+2026-06-29 18:18:45,295 | INFO | root | Launcher shown.
+2026-06-29 18:19:21,515 | INFO | root | engineering_print_setup_hotfix: preparing print version=robust-print-3 requested_printer=EPSON L3250 Series actual_printer=EPSON L3250 Series valid=True output_format=OutputFormat.NativeFormat
+2026-06-29 18:19:21,516 | INFO | root | engineering_print_setup_hotfix: opening native print dialog printer=EPSON L3250 Series copies=111 pages=1-1 all=True
+2026-06-29 18:19:25,821 | ERROR | root | engineering_print_setup_hotfix: print failed: 'PySide6.QtWidgets.QWidget.render' called with wrong argument types:
+  PySide6.QtWidgets.QWidget.render(QPainter)
+Supported signatures:
+  PySide6.QtWidgets.QWidget.render(target: PySide6.QtGui.QPaintDevice, /, targetOffset: PySide6.QtCore.QPoint = Default(QPoint), sourceRegion: PySide6.QtGui.QRegion | PySide6.QtGui.QBitmap | PySide6.QtGui.QPolygon | PySide6.QtCore.QRect = Default(QRegion), renderFlags: PySide6.QtWidgets.QWidget.RenderFlag = Instance(QWidget.RenderFlags(QWidget.RenderFlag.DrawWindowBackground | QWidget.RenderFlag.DrawChildren)))
+  PySide6.QtWidgets.QWidget.render(painter: PySide6.QtGui.QPainter, targetOffset: PySide6.QtCore.QPoint, /, sourceRegion: PySide6.QtGui.QRegion | PySide6.QtGui.QBitmap | PySide6.QtGui.QPolygon | PySide6.QtCore.QRect = Default(QRegion), renderFlags: PySide6.QtWidgets.QWidget.RenderFlag = Instance(QWidget.RenderFlags(QWidget.RenderFlag.DrawWindowBackground | QWidget.RenderFlag.DrawChildren)))
 Traceback (most recent call last):
-  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\engineering_print_setup_hotfix.py", line 48, in _send_print_job
-    from .interaction_ui_patch import _render_engineering_export
-ImportError: cannot import name '_render_engineering_export' from 'src.engineers_tools.app.interaction_ui_patch' (C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\interaction_ui_patch.py)
-2026-06-29 17:48:31,807 | ERROR | root | engineering_print_setup_hotfix: print imports failed: cannot import name '_render_engineering_export' from 'src.engineers_tools.app.interaction_ui_patch' (C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\interaction_ui_patch.py)
+  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\engineering_print_setup_hotfix.py", line 150, in _send_print_job
+    _render_engineering_export(workspace, painter, target, False)
+  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\engineering_print_setup_hotfix.py", line 75, in _fallback_render_engineering_export
+    canvas.render(painter)
+TypeError: 'PySide6.QtWidgets.QWidget.render' called with wrong argument types:
+  PySide6.QtWidgets.QWidget.render(QPainter)
+Supported signatures:
+  PySide6.QtWidgets.QWidget.render(target: PySide6.QtGui.QPaintDevice, /, targetOffset: PySide6.QtCore.QPoint = Default(QPoint), sourceRegion: PySide6.QtGui.QRegion | PySide6.QtGui.QBitmap | PySide6.QtGui.QPolygon | PySide6.QtCore.QRect = Default(QRegion), renderFlags: PySide6.QtWidgets.QWidget.RenderFlag = Instance(QWidget.RenderFlags(QWidget.RenderFlag.DrawWindowBackground | QWidget.RenderFlag.DrawChildren)))
+  PySide6.QtWidgets.QWidget.render(painter: PySide6.QtGui.QPainter, targetOffset: PySide6.QtCore.QPoint, /, sourceRegion: PySide6.QtGui.QRegion | PySide6.QtGui.QBitmap | PySide6.QtGui.QPolygon | PySide6.QtCore.QRect = Default(QRegion), renderFlags: PySide6.QtWidgets.QWidget.RenderFlag = Instance(QWidget.RenderFlags(QWidget.RenderFlag.DrawWindowBackground | QWidget.RenderFlag.DrawChildren)))
+2026-06-29 18:20:40,867 | INFO | root | engineering_print_setup_hotfix: preparing print version=robust-print-3 requested_printer=EPSON L3250 Series actual_printer=EPSON L3250 Series valid=True output_format=OutputFormat.NativeFormat
+2026-06-29 18:20:40,867 | INFO | root | engineering_print_setup_hotfix: opening native print dialog printer=EPSON L3250 Series copies=1 pages=1-1 all=True
+2026-06-29 18:21:14,546 | ERROR | root | engineering_print_setup_hotfix: printer painter inactive printer=Microsoft Print to PDF valid=True output_file=
+2026-06-29 18:22:26,600 | INFO | root | engineering_print_setup_hotfix: preparing print version=robust-print-3 requested_printer=EPSON L3250 Series actual_printer=EPSON L3250 Series valid=True output_format=OutputFormat.NativeFormat
+2026-06-29 18:22:26,600 | INFO | root | engineering_print_setup_hotfix: opening native print dialog printer=EPSON L3250 Series copies=1 pages=1-1 all=True
+2026-06-29 18:22:28,084 | ERROR | root | engineering_print_setup_hotfix: print failed: 'PySide6.QtWidgets.QWidget.render' called with wrong argument types:
+  PySide6.QtWidgets.QWidget.render(QPainter)
+Supported signatures:
+  PySide6.QtWidgets.QWidget.render(target: PySide6.QtGui.QPaintDevice, /, targetOffset: PySide6.QtCore.QPoint = Default(QPoint), sourceRegion: PySide6.QtGui.QRegion | PySide6.QtGui.QBitmap | PySide6.QtGui.QPolygon | PySide6.QtCore.QRect = Default(QRegion), renderFlags: PySide6.QtWidgets.QWidget.RenderFlag = Instance(QWidget.RenderFlags(QWidget.RenderFlag.DrawWindowBackground | QWidget.RenderFlag.DrawChildren)))
+  PySide6.QtWidgets.QWidget.render(painter: PySide6.QtGui.QPainter, targetOffset: PySide6.QtCore.QPoint, /, sourceRegion: PySide6.QtGui.QRegion | PySide6.QtGui.QBitmap | PySide6.QtGui.QPolygon | PySide6.QtCore.QRect = Default(QRegion), renderFlags: PySide6.QtWidgets.QWidget.RenderFlag = Instance(QWidget.RenderFlags(QWidget.RenderFlag.DrawWindowBackground | QWidget.RenderFlag.DrawChildren)))
 Traceback (most recent call last):
-  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\engineering_print_setup_hotfix.py", line 48, in _send_print_job
-    from .interaction_ui_patch import _render_engineering_export
-ImportError: cannot import name '_render_engineering_export' from 'src.engineers_tools.app.interaction_ui_patch' (C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\interaction_ui_patch.py)
+  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\engineering_print_setup_hotfix.py", line 150, in _send_print_job
+    _render_engineering_export(workspace, painter, target, False)
+  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\engineering_print_setup_hotfix.py", line 75, in _fallback_render_engineering_export
+    canvas.render(painter)
+TypeError: 'PySide6.QtWidgets.QWidget.render' called with wrong argument types:
+  PySide6.QtWidgets.QWidget.render(QPainter)
+Supported signatures:
+  PySide6.QtWidgets.QWidget.render(target: PySide6.QtGui.QPaintDevice, /, targetOffset: PySide6.QtCore.QPoint = Default(QPoint), sourceRegion: PySide6.QtGui.QRegion | PySide6.QtGui.QBitmap | PySide6.QtGui.QPolygon | PySide6.QtCore.QRect = Default(QRegion), renderFlags: PySide6.QtWidgets.QWidget.RenderFlag = Instance(QWidget.RenderFlags(QWidget.RenderFlag.DrawWindowBackground | QWidget.RenderFlag.DrawChildren)))
+  PySide6.QtWidgets.QWidget.render(painter: PySide6.QtGui.QPainter, targetOffset: PySide6.QtCore.QPoint, /, sourceRegion: PySide6.QtGui.QRegion | PySide6.QtGui.QBitmap | PySide6.QtGui.QPolygon | PySide6.QtCore.QRect = Default(QRegion), renderFlags: PySide6.QtWidgets.QWidget.RenderFlag = Instance(QWidget.RenderFlags(QWidget.RenderFlag.DrawWindowBackground | QWidget.RenderFlag.DrawChildren)))
