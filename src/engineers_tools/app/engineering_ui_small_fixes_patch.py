@@ -6,9 +6,9 @@ from pathlib import Path
 
 from PySide6.QtCore import QPointF, QRectF, QSize, Qt
 from PySide6.QtGui import QColor, QCursor, QIcon, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap, QPolygonF
-from PySide6.QtWidgets import QLabel, QPushButton, QSizePolicy, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QLabel, QPushButton, QVBoxLayout, QWidget
 
-VERSION = "ui-small-fixes-3"
+VERSION = "ui-small-fixes-4"
 _ORIGINAL_EXPORT_RENDER = None
 _ORIGINAL_EXPORT_WRITE_SVG = None
 _ORIGINAL_SIDE_PANEL = None
@@ -19,12 +19,7 @@ _UNIT_TO_MM = {"mm": 1.0, "cm": 10.0, "m": 1000.0, "px": 25.4 / 96.0, "pt": 25.4
 
 def _grid_requested(options: dict | None) -> bool:
     options = options or {}
-    return bool(
-        options.get("save_grid")
-        or options.get("print_grid")
-        or options.get("show_grid")
-        or options.get("show_grade")
-    )
+    return bool(options.get("save_grid") or options.get("print_grid") or options.get("show_grid") or options.get("show_grade"))
 
 
 def _workspace_page_size(workspace) -> tuple[float, float]:
@@ -98,8 +93,7 @@ def _render_workspace_page(workspace, painter: QPainter, target: QRectF, show_gr
 
 
 def _unified_export_render(window, painter: QPainter, target: QRectF, transparent: bool = False) -> None:
-    options = dict(getattr(window, "_save_options", {}) or {})
-    _render_workspace_page(window, painter, target, _grid_requested(options), transparent)
+    _render_workspace_page(window, painter, target, _grid_requested(dict(getattr(window, "_save_options", {}) or {})), transparent)
 
 
 def _unified_write_svg(window, path: Path) -> bool:
@@ -147,22 +141,15 @@ def _unified_write_svg(window, path: Path) -> bool:
         width = rect.width() * scale
         height = rect.height() * scale
         name = str(getattr(obj, "name", "Object")).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-        object_markup.append(
-            f'<rect x="{x:.3f}" y="{y:.3f}" width="{width:.3f}" height="{height:.3f}" fill="#ffffff" stroke="#465d78" stroke-width="0.35"/>'
-            f'<text x="{x + width / 2:.3f}" y="{y + height / 2:.3f}" text-anchor="middle" dominant-baseline="middle" font-size="4" fill="#132238">{name}</text>'
-        )
-    path.write_text(
-        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width_mm:.3f}mm" height="{height_mm:.3f}mm" viewBox="0 0 {width_mm:.3f} {height_mm:.3f}">{background}{grid}{"".join(object_markup)}</svg>\n',
-        encoding="utf-8",
-    )
+        object_markup.append(f'<rect x="{x:.3f}" y="{y:.3f}" width="{width:.3f}" height="{height:.3f}" fill="#ffffff" stroke="#465d78" stroke-width="0.35"/><text x="{x + width / 2:.3f}" y="{y + height / 2:.3f}" text-anchor="middle" dominant-baseline="middle" font-size="4" fill="#132238">{name}</text>')
+    path.write_text(f'<svg xmlns="http://www.w3.org/2000/svg" width="{width_mm:.3f}mm" height="{height_mm:.3f}mm" viewBox="0 0 {width_mm:.3f} {height_mm:.3f}">{background}{grid}{"".join(object_markup)}</svg>\n', encoding="utf-8")
     return True
 
 
 def _render_print_preview(dialog, painter: QPainter, paper: QRectF) -> None:
     workspace = dialog.parentWidget() if dialog is not None else None
     show_grid = bool(getattr(dialog, "_print_grid", None) and dialog._print_grid.isChecked())
-    target = paper.adjusted(8, 8, -8, -8)
-    _render_workspace_page(workspace, painter, target, show_grid, False)
+    _render_workspace_page(workspace, painter, paper.adjusted(8, 8, -8, -8), show_grid, False)
 
 
 def _send_print_job(workspace, settings: dict[str, object]) -> bool:
@@ -208,10 +195,7 @@ def _send_print_job(workspace, settings: dict[str, object]) -> bool:
         except Exception:
             pass
         show_grid = bool(settings.get("print_grid", False))
-        logging.info(
-            "engineering_ui_small_fixes_patch: direct print version=%s printer=%s copies=%s pages=%s-%s grid=%s pdf=%s valid=%s",
-            VERSION, printer_name, copies, page_from, page_to, show_grid, pdf_output, printer.isValid(),
-        )
+        logging.info("engineering_ui_small_fixes_patch: direct print version=%s printer=%s copies=%s pages=%s-%s grid=%s pdf=%s valid=%s", VERSION, printer_name, copies, page_from, page_to, show_grid, pdf_output, printer.isValid())
         painter = QPainter(printer)
         if not painter.isActive():
             logging.error("engineering_ui_small_fixes_patch: printer painter inactive printer=%s valid=%s output_file=%s", printer.printerName(), printer.isValid(), printer.outputFileName())
@@ -257,9 +241,9 @@ def _set_canvas_hover_cursor(canvas, hover: str | None) -> None:
     elif hover in {"resize_e", "resize_w"}:
         canvas.setCursor(_asset_cursor("resize_horizontal.svg", QCursor(Qt.CursorShape.SizeHorCursor), 12, 12, 24))
     elif hover in {"resize_ne", "resize_sw"}:
-        canvas.setCursor(_asset_cursor("resize_diagonal_back.svg", QCursor(Qt.CursorShape.SizeBDiagCursor), 12, 12, 24))
+        canvas.setCursor(_asset_cursor("corner_resize_b.svg", QCursor(Qt.CursorShape.SizeBDiagCursor), 12, 12, 24))
     elif hover in {"resize_nw", "resize_se"}:
-        canvas.setCursor(_asset_cursor("resize_diagonal_forward.svg", QCursor(Qt.CursorShape.SizeFDiagCursor), 12, 12, 24))
+        canvas.setCursor(_asset_cursor("corner_resize_a.svg", QCursor(Qt.CursorShape.SizeFDiagCursor), 12, 12, 24))
     else:
         canvas.unsetCursor()
 
@@ -269,7 +253,7 @@ def _compact_cursor_from_asset(file_name: str, fallback: QCursor, hot_x: int = 8
         return _asset_cursor(file_name, fallback, hot_x, hot_y, 22)
     if "hand" in file_name:
         return _asset_cursor(file_name, fallback, hot_x, hot_y, 23)
-    if "resize" in file_name or "move" in file_name or "rotate" in file_name:
+    if "resize" in file_name or "move" in file_name or "rotate" in file_name or "corner" in file_name:
         return _asset_cursor(file_name, fallback, hot_x, hot_y, 24)
     return _asset_cursor(file_name, fallback, hot_x, hot_y, 22)
 
@@ -297,117 +281,46 @@ def _layer_state_icon(kind: str, active: bool = True) -> QIcon:
     pixmap.fill(Qt.GlobalColor.transparent)
     painter = QPainter(pixmap)
     painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-    shell = QPainterPath()
-    shell.addRoundedRect(QRectF(2.5, 2.5, 25, 25), 8, 8)
+    shell = QPainterPath(); shell.addRoundedRect(QRectF(2.5, 2.5, 25, 25), 8, 8)
     gradient = QLinearGradient(2, 2, 28, 28)
-    gradient.setColorAt(0.0, QColor("#ffffff"))
-    gradient.setColorAt(0.55, QColor("#e8f8ff" if active else "#eef1f5"))
-    gradient.setColorAt(1.0, QColor("#63d5ed" if active else "#aab6c4"))
-    painter.fillPath(shell, gradient)
-    painter.setPen(QPen(QColor("#55708f"), 1.0))
-    painter.drawPath(shell)
-    ink = QColor("#132238" if active else "#667789")
-    accent = QColor("#2f7df6" if active else "#8b98a8")
-    painter.setPen(QPen(ink, 1.65, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
-    painter.setBrush(Qt.BrushStyle.NoBrush)
+    gradient.setColorAt(0.0, QColor("#ffffff")); gradient.setColorAt(0.55, QColor("#e8f8ff" if active else "#eef1f5")); gradient.setColorAt(1.0, QColor("#63d5ed" if active else "#aab6c4"))
+    painter.fillPath(shell, gradient); painter.setPen(QPen(QColor("#55708f"), 1.0)); painter.drawPath(shell)
+    ink = QColor("#132238" if active else "#667789"); accent = QColor("#2f7df6" if active else "#8b98a8")
+    painter.setPen(QPen(ink, 1.65, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)); painter.setBrush(Qt.BrushStyle.NoBrush)
     if kind == "eye":
         if active:
-            eye = QPainterPath()
-            eye.moveTo(6.0, 15)
-            eye.cubicTo(9.2, 9.2, 20.8, 9.2, 24.0, 15)
-            eye.cubicTo(20.8, 20.8, 9.2, 20.8, 6.0, 15)
-            painter.setBrush(QColor(255, 255, 255, 210))
-            painter.drawPath(eye)
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(accent)
-            painter.drawEllipse(QPointF(15, 15), 3.6, 3.6)
-            painter.setBrush(QColor("#07192f"))
-            painter.drawEllipse(QPointF(15, 15), 1.55, 1.55)
-            painter.setBrush(QColor("#ffffff"))
-            painter.drawEllipse(QPointF(16.2, 13.8), 0.75, 0.75)
+            eye = QPainterPath(); eye.moveTo(6.0, 15); eye.cubicTo(9.2, 9.2, 20.8, 9.2, 24.0, 15); eye.cubicTo(20.8, 20.8, 9.2, 20.8, 6.0, 15)
+            painter.setBrush(QColor(255, 255, 255, 210)); painter.drawPath(eye); painter.setPen(Qt.PenStyle.NoPen); painter.setBrush(accent); painter.drawEllipse(QPointF(15, 15), 3.6, 3.6); painter.setBrush(QColor("#07192f")); painter.drawEllipse(QPointF(15, 15), 1.55, 1.55); painter.setBrush(QColor("#ffffff")); painter.drawEllipse(QPointF(16.2, 13.8), 0.75, 0.75)
         else:
-            painter.setBrush(Qt.BrushStyle.NoBrush)
-            painter.drawArc(QRectF(6.2, 10.8, 17.6, 8.4), 200 * 16, 140 * 16)
-            painter.drawLine(QPointF(8, 15), QPointF(22, 15))
-            painter.drawLine(QPointF(10, 17.2), QPointF(8.8, 19.2))
-            painter.drawLine(QPointF(15, 17.8), QPointF(15, 20.2))
-            painter.drawLine(QPointF(20, 17.2), QPointF(21.2, 19.2))
+            painter.drawArc(QRectF(6.2, 10.8, 17.6, 8.4), 200 * 16, 140 * 16); painter.drawLine(QPointF(8, 15), QPointF(22, 15)); painter.drawLine(QPointF(10, 17.2), QPointF(8.8, 19.2)); painter.drawLine(QPointF(15, 17.8), QPointF(15, 20.2)); painter.drawLine(QPointF(20, 17.2), QPointF(21.2, 19.2))
     elif kind == "lock":
         painter.setPen(QPen(ink, 1.8, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
         if active:
-            painter.drawArc(QRectF(9.0, 7.0, 12.0, 12.0), 0, 180 * 16)
-            painter.drawLine(QPointF(9, 13), QPointF(9, 16))
-            painter.drawLine(QPointF(21, 13), QPointF(21, 16))
+            painter.drawArc(QRectF(9.0, 7.0, 12.0, 12.0), 0, 180 * 16); painter.drawLine(QPointF(9, 13), QPointF(9, 16)); painter.drawLine(QPointF(21, 13), QPointF(21, 16))
         else:
-            painter.drawArc(QRectF(10.0, 6.5, 12.0, 12.0), 35 * 16, 145 * 16)
-            painter.drawLine(QPointF(20.5, 10.8), QPointF(23.8, 8.2))
-        body = QPainterPath()
-        body.addRoundedRect(QRectF(7.6, 15.0, 14.8, 9.0), 2.8, 2.8)
-        body_gradient = QLinearGradient(8, 15, 22, 24)
-        body_gradient.setColorAt(0, QColor("#fff9de" if active else "#ffffff"))
-        body_gradient.setColorAt(1, QColor("#ffc35a" if active else "#d7e2ef"))
-        painter.setBrush(body_gradient)
-        painter.drawPath(body)
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(ink)
-        painter.drawEllipse(QPointF(15, 19.0), 1.2, 1.2)
-        painter.drawRoundedRect(QRectF(14.4, 19.0, 1.2, 3.0), 0.6, 0.6)
+            painter.drawArc(QRectF(10.0, 6.5, 12.0, 12.0), 35 * 16, 145 * 16); painter.drawLine(QPointF(20.5, 10.8), QPointF(23.8, 8.2))
+        body = QPainterPath(); body.addRoundedRect(QRectF(7.6, 15.0, 14.8, 9.0), 2.8, 2.8)
+        body_gradient = QLinearGradient(8, 15, 22, 24); body_gradient.setColorAt(0, QColor("#fff9de" if active else "#ffffff")); body_gradient.setColorAt(1, QColor("#ffc35a" if active else "#d7e2ef"))
+        painter.setBrush(body_gradient); painter.drawPath(body); painter.setPen(Qt.PenStyle.NoPen); painter.setBrush(ink); painter.drawEllipse(QPointF(15, 19.0), 1.2, 1.2); painter.drawRoundedRect(QRectF(14.4, 19.0, 1.2, 3.0), 0.6, 0.6)
     else:
-        painter.setPen(QPen(ink, 1.9, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
-        painter.drawArc(QRectF(8.0, 8.0, 14.0, 14.0), 45 * 16, 280 * 16)
-        painter.setBrush(ink)
-        painter.drawPolygon(QPolygonF([QPointF(21.4, 9.9), QPointF(24.4, 13.0), QPointF(20.2, 13.7)]))
-    painter.end()
-    return QIcon(pixmap)
+        painter.setPen(QPen(ink, 1.9, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)); painter.drawArc(QRectF(8.0, 8.0, 14.0, 14.0), 45 * 16, 280 * 16); painter.setBrush(ink); painter.drawPolygon(QPolygonF([QPointF(21.4, 9.9), QPointF(24.4, 13.0), QPointF(20.2, 13.7)]))
+    painter.end(); return QIcon(pixmap)
 
 
 def _layer_button(self, kind: str, active: bool, tooltip: str, callback) -> QPushButton:
-    button = QPushButton()
-    button.setObjectName("LayerIconButton")
-    button.setToolTip(tooltip)
-    button.setFixedSize(26, 24)
-    button.setIcon(_layer_state_icon(kind, active))
-    button.setIconSize(QSize(23, 23))
-    button.setCursor(_asset_cursor("hand_pointer.svg", QCursor(Qt.CursorShape.PointingHandCursor), 10, 3, 22))
-    button.clicked.connect(callback)
-    return button
+    button = QPushButton(); button.setObjectName("LayerIconButton"); button.setToolTip(tooltip); button.setFixedSize(26, 24); button.setIcon(_layer_state_icon(kind, active)); button.setIconSize(QSize(23, 23)); button.setCursor(_asset_cursor("hand_pointer.svg", QCursor(Qt.CursorShape.PointingHandCursor), 10, 3, 22)); button.clicked.connect(callback); return button
 
 
 def _build_empty_properties_panel(workspace) -> QWidget:
-    panel = QWidget()
-    panel.setObjectName("SidePanel")
-    panel.setMinimumWidth(210)
-    layout = QVBoxLayout(panel)
-    layout.setContentsMargins(12, 12, 12, 12)
-    layout.setSpacing(8)
-    title = QLabel("Properties")
-    title.setObjectName("PanelTitle")
-    layout.addWidget(title)
+    panel = QWidget(); panel.setObjectName("SidePanel"); panel.setMinimumWidth(210)
+    layout = QVBoxLayout(panel); layout.setContentsMargins(12, 12, 12, 12); layout.setSpacing(8)
+    title = QLabel("Properties"); title.setObjectName("PanelTitle"); layout.addWidget(title)
     message = QLabel("No active selection.\n\nSelect a drawing tool, object, group, or layer to view and edit its properties here.")
-    message.setObjectName("PanelItem")
-    message.setWordWrap(True)
-    message.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
-    message.setMinimumHeight(118)
-    message.setStyleSheet(
-        "QLabel#PanelItem {background:rgba(255,255,255,150); border:1px solid #c3d0df; border-radius:10px; "
-        "color:#39516f; font-size:11px; font-style:normal; font-weight:700; padding:9px;}"
-    )
-    layout.addWidget(message)
+    message.setObjectName("PanelItem"); message.setWordWrap(True); message.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft); message.setMinimumHeight(118); message.setStyleSheet("QLabel#PanelItem {background:rgba(255,255,255,150); border:1px solid #c3d0df; border-radius:10px; color:#39516f; font-size:11px; font-style:normal; font-weight:700; padding:9px;}"); layout.addWidget(message)
     hint = QLabel("Context properties will appear here after the active tool or selected object is known.")
-    hint.setObjectName("PanelItem")
-    hint.setWordWrap(True)
-    hint.setStyleSheet(
-        "QLabel#PanelItem {background:transparent; border:0; color:#6a7c91; font-size:10px; "
-        "font-style:normal; font-weight:700; padding:2px;}"
-    )
-    layout.addWidget(hint)
-    layout.addStretch(1)
-
-    def refresh_properties_summary() -> None:
-        return
-
-    panel.refresh_properties_summary = refresh_properties_summary
-    return panel
+    hint.setObjectName("PanelItem"); hint.setWordWrap(True); hint.setStyleSheet("QLabel#PanelItem {background:transparent; border:0; color:#6a7c91; font-size:10px; font-style:normal; font-weight:700; padding:2px;}"); layout.addWidget(hint); layout.addStretch(1)
+    def refresh_properties_summary() -> None: return
+    panel.refresh_properties_summary = refresh_properties_summary; return panel
 
 
 def _install_rendering_patch() -> None:
@@ -416,16 +329,10 @@ def _install_rendering_patch() -> None:
         from . import engineering_export_patch as export_patch
         from . import engineering_print_setup_hotfix as hotfix
     except Exception:
-        logging.exception("engineering_ui_small_fixes_patch: rendering imports failed")
-        return
-    if _ORIGINAL_EXPORT_RENDER is None:
-        _ORIGINAL_EXPORT_RENDER = getattr(export_patch, "_render", None)
-    if _ORIGINAL_EXPORT_WRITE_SVG is None:
-        _ORIGINAL_EXPORT_WRITE_SVG = getattr(export_patch, "_write_svg", None)
-    export_patch._render = _unified_export_render
-    export_patch._write_svg = _unified_write_svg
-    hotfix._render_print_preview = _render_print_preview
-    hotfix._send_print_job = _send_print_job
+        logging.exception("engineering_ui_small_fixes_patch: rendering imports failed"); return
+    if _ORIGINAL_EXPORT_RENDER is None: _ORIGINAL_EXPORT_RENDER = getattr(export_patch, "_render", None)
+    if _ORIGINAL_EXPORT_WRITE_SVG is None: _ORIGINAL_EXPORT_WRITE_SVG = getattr(export_patch, "_write_svg", None)
+    export_patch._render = _unified_export_render; export_patch._write_svg = _unified_write_svg; hotfix._render_print_preview = _render_print_preview; hotfix._send_print_job = _send_print_job
     logging.info("engineering_ui_small_fixes_patch: unified grid/render pipeline installed version=%s", VERSION)
 
 
@@ -436,24 +343,17 @@ def _install_cursor_patch() -> None:
         from src.engineers_tools.ui import start_bar as sb
         from . import interaction_ui_patch as interaction
     except Exception:
-        logging.exception("engineering_ui_small_fixes_patch: cursor imports failed")
-        return
+        logging.exception("engineering_ui_small_fixes_patch: cursor imports failed"); return
     interaction._cursor_from_asset = _compact_cursor_from_asset
-    if _ORIGINAL_CANVAS_MOUSE_MOVE is None:
-        _ORIGINAL_CANVAS_MOUSE_MOVE = edw.EngineeringCanvas.mouseMoveEvent
+    if _ORIGINAL_CANVAS_MOUSE_MOVE is None: _ORIGINAL_CANVAS_MOUSE_MOVE = edw.EngineeringCanvas.mouseMoveEvent
     edw.EngineeringCanvas.mouseMoveEvent = _mouse_move_event
-    if _ORIGINAL_STARTBAR_INIT is None:
-        _ORIGINAL_STARTBAR_INIT = sb.StartBar.__init__
-
+    if _ORIGINAL_STARTBAR_INIT is None: _ORIGINAL_STARTBAR_INIT = sb.StartBar.__init__
     def startbar_init(self, *args, **kwargs):
         _ORIGINAL_STARTBAR_INIT(self, *args, **kwargs)
         pointer = _asset_cursor("hand_pointer.svg", QCursor(Qt.CursorShape.PointingHandCursor), 10, 3, 22)
-        for button in getattr(self, "_buttons", {}).values():
-            button.setCursor(pointer)
-
+        for button in getattr(self, "_buttons", {}).values(): button.setCursor(pointer)
     if getattr(sb.StartBar, "_small_cursor_patch_version", "") != VERSION:
-        sb.StartBar.__init__ = startbar_init
-        sb.StartBar._small_cursor_patch_version = VERSION
+        sb.StartBar.__init__ = startbar_init; sb.StartBar._small_cursor_patch_version = VERSION
     logging.info("engineering_ui_small_fixes_patch: compact cursor and startbar pointer installed version=%s", VERSION)
 
 
@@ -462,11 +362,8 @@ def _install_layer_patch() -> None:
         from modules.mechanics_dynamics_statics import workspace as edw
         from . import engineering_export_patch as export_patch
     except Exception:
-        logging.exception("engineering_ui_small_fixes_patch: layer imports failed")
-        return
-    export_patch._better_layer_icon = _layer_state_icon
-    edw._layer_icon = _layer_state_icon
-    edw.EngineeringDesignWorkspace._layer_button = _layer_button
+        logging.exception("engineering_ui_small_fixes_patch: layer imports failed"); return
+    export_patch._better_layer_icon = _layer_state_icon; edw._layer_icon = _layer_state_icon; edw.EngineeringDesignWorkspace._layer_button = _layer_button
     logging.info("engineering_ui_small_fixes_patch: layer icons installed version=%s", VERSION)
 
 
@@ -475,19 +372,12 @@ def _install_properties_panel_patch() -> None:
     try:
         from modules.mechanics_dynamics_statics import workspace as edw
     except Exception:
-        logging.exception("engineering_ui_small_fixes_patch: properties imports failed")
-        return
-    if _ORIGINAL_SIDE_PANEL is None:
-        _ORIGINAL_SIDE_PANEL = edw.EngineeringDesignWorkspace._build_side_panel
-
+        logging.exception("engineering_ui_small_fixes_patch: properties imports failed"); return
+    if _ORIGINAL_SIDE_PANEL is None: _ORIGINAL_SIDE_PANEL = edw.EngineeringDesignWorkspace._build_side_panel
     def build_side_panel(self, title: str, rows: tuple[str, ...]) -> QWidget:
         if title == "Properties":
-            panel = _build_empty_properties_panel(self)
-            self._properties_panel_widget = panel
-            self._refresh_properties_summary_panel = panel.refresh_properties_summary
-            return panel
+            panel = _build_empty_properties_panel(self); self._properties_panel_widget = panel; self._refresh_properties_summary_panel = panel.refresh_properties_summary; return panel
         return _ORIGINAL_SIDE_PANEL(self, title, rows)
-
     edw.EngineeringDesignWorkspace._build_side_panel = build_side_panel
     logging.info("engineering_ui_small_fixes_patch: empty right properties panel installed version=%s", VERSION)
 
@@ -496,13 +386,8 @@ def apply_engineering_ui_small_fixes_patch() -> None:
     try:
         from modules.mechanics_dynamics_statics import workspace as edw
     except Exception:
-        logging.exception("engineering_ui_small_fixes_patch: engineering workspace import failed")
-        return
-    if getattr(edw.EngineeringDesignWorkspace, "_ui_small_fixes_patch_version", "") == VERSION:
-        return
-    _install_rendering_patch()
-    _install_cursor_patch()
-    _install_layer_patch()
-    _install_properties_panel_patch()
+        logging.exception("engineering_ui_small_fixes_patch: engineering workspace import failed"); return
+    if getattr(edw.EngineeringDesignWorkspace, "_ui_small_fixes_patch_version", "") == VERSION: return
+    _install_rendering_patch(); _install_cursor_patch(); _install_layer_patch(); _install_properties_panel_patch()
     edw.EngineeringDesignWorkspace._ui_small_fixes_patch_version = VERSION
     logging.info("engineering_ui_small_fixes_patch: installed version=%s", VERSION)
