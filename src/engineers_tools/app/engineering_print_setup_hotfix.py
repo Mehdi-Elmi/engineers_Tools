@@ -7,10 +7,10 @@ from pathlib import Path
 
 from PySide6.QtCore import QRectF, Qt
 from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen
-from PySide6.QtWidgets import QButtonGroup, QCheckBox, QFileDialog, QHBoxLayout, QLabel, QPushButton, QSpinBox, QToolButton
+from PySide6.QtWidgets import QButtonGroup, QCheckBox, QComboBox, QDoubleSpinBox, QFileDialog, QHBoxLayout, QLabel, QPushButton, QSpinBox, QToolButton
 
 
-HOTFIX_VERSION = "direct-print-5"
+HOTFIX_VERSION = "direct-print-6"
 _SKIP_PRINTER_TOKENS = ("fax", "onenote", "one note", "evernote", "xps", "microsoft xps")
 _PDF_PRINTER_TOKENS = ("pdf", "foxit", "adobe", "nitro", "pdf24", "pdfcreator")
 
@@ -59,6 +59,64 @@ def _style_print_spin(spin: QSpinBox, width: int = 58) -> None:
         QSpinBox#PrintSpinBox::down-arrow { image:url(%s); width:13px; height:8px; }
         """ % (up_icon, down_icon)
     )
+
+
+def _style_shared_numeric_spin(spin: QDoubleSpinBox) -> None:
+    up_icon = _asset_path("print_spin_up.svg") or _asset_path("spin_up.svg")
+    down_icon = _asset_path("print_spin_down.svg") or _asset_path("spin_down.svg")
+    spin.setButtonSymbols(QDoubleSpinBox.ButtonSymbols.UpDownArrows)
+    spin.setMinimumHeight(31)
+    spin.setMinimumWidth(138)
+    spin.setStyleSheet(
+        """
+        QDoubleSpinBox#FileNameInput {
+            background:#ffffff; border:1px solid #9fb0c5; border-radius:9px;
+            color:#132238; font-size:12px; font-style:normal; font-weight:800; padding:4px 35px 4px 8px;
+        }
+        QDoubleSpinBox#FileNameInput::up-button, QDoubleSpinBox#FileNameInput::down-button {
+            width:31px; border:0px; margin:2px 2px 2px 0px;
+            background:qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 #fff7d8, stop:0.52 #ffbd57, stop:1 #f2a12b);
+            subcontrol-origin:border;
+        }
+        QDoubleSpinBox#FileNameInput::up-button { subcontrol-position:top right; border-top-right-radius:8px; }
+        QDoubleSpinBox#FileNameInput::down-button { subcontrol-position:bottom right; border-bottom-right-radius:8px; }
+        QDoubleSpinBox#FileNameInput::up-arrow { image:url(%s); width:18px; height:11px; }
+        QDoubleSpinBox#FileNameInput::down-arrow { image:url(%s); width:18px; height:11px; }
+        """ % (up_icon, down_icon)
+    )
+
+
+def _style_shared_combo_arrow(combo: QComboBox) -> None:
+    down_icon = _asset_path("combo_down.svg") or _asset_path("print_spin_down.svg") or _asset_path("spin_down.svg")
+    combo.setMinimumHeight(31)
+    combo.setStyleSheet(
+        """
+        QComboBox#FileTypeCombo {
+            background:#ffffff; border:1px solid #9fb0c5; border-radius:9px;
+            color:#132238; font-size:12px; font-style:normal; font-weight:800; padding:5px 33px 5px 8px;
+        }
+        QComboBox#FileTypeCombo::drop-down {
+            width:29px; border:0; margin:1px 1px 1px 0px;
+            background:qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 #fff7d8, stop:0.52 #ffbd57, stop:1 #f2a12b);
+            border-top-right-radius:8px; border-bottom-right-radius:8px;
+        }
+        QComboBox#FileTypeCombo::down-arrow { image:url(%s); width:18px; height:11px; }
+        QComboBox#FileTypeCombo QAbstractItemView {
+            background:#ffffff; border:1px solid #8fa2bb; border-radius:8px; selection-background-color:#cfe7ff;
+        }
+        """ % down_icon
+    )
+
+
+def _install_shared_arrow_styles() -> None:
+    try:
+        from . import interaction_ui_patch as interaction
+    except Exception:
+        logging.exception("engineering_print_setup_hotfix: shared arrow style import failed")
+        return
+    interaction._style_numeric_spin = _style_shared_numeric_spin
+    interaction._style_combo_arrow = _style_shared_combo_arrow
+    logging.info("engineering_print_setup_hotfix: shared yellow arrow styles installed")
 
 
 def _radio_style() -> str:
@@ -323,6 +381,7 @@ def apply_engineering_print_setup_hotfix() -> None:
 
     if getattr(edw.EngineeringDesignWorkspace, "_print_setup_hotfix_version", "") == HOTFIX_VERSION:
         return
+    _install_shared_arrow_styles()
 
     base_dialog = zp.PrintSetupDialog
 
