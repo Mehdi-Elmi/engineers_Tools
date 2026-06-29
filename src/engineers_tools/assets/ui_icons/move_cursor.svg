@@ -1,23 +1,13 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Move cursor icon">
+<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28" role="img" aria-label="Move cursor icon">
   <defs>
-    <linearGradient id="blue" x1="8" y1="8" x2="56" y2="56" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#e3f8ff"/>
-      <stop offset=".45" stop-color="#4db7ff"/>
-      <stop offset="1" stop-color="#1769d1"/>
-    </linearGradient>
-    <linearGradient id="orange" x1="15" y1="10" x2="50" y2="56" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#fff2c6"/>
-      <stop offset=".48" stop-color="#ffbd57"/>
-      <stop offset="1" stop-color="#f36f21"/>
-    </linearGradient>
     <filter id="shadow" x="-25%" y="-25%" width="150%" height="150%">
-      <feDropShadow dx="1.5" dy="2.3" stdDeviation="1.4" flood-color="#132238" flood-opacity=".32"/>
+      <feDropShadow dx="0.55" dy="0.9" stdDeviation="0.45" flood-color="#132238" flood-opacity="0.28"/>
     </filter>
   </defs>
-  <g fill="none" stroke="url(#blue)" stroke-width="6.2" stroke-linecap="round" stroke-linejoin="round" filter="url(#shadow)">
-    <path d="M32 9v46M9 32h46"/>
-    <path d="M32 9 22.5 18.5M32 9l9.5 9.5M32 55l-9.5-9.5M32 55l9.5-9.5M9 32l9.5-9.5M9 32l9.5 9.5M55 32l-9.5-9.5M55 32l-9.5 9.5"/>
+  <g fill="none" stroke="#132238" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" filter="url(#shadow)">
+    <path d="M14 3.7v20.6M3.7 14h20.6"/>
+    <path d="M14 3.7 10.2 7.5M14 3.7l3.8 3.8M14 24.3l-3.8-3.8M14 24.3l3.8-3.8M3.7 14l3.8-3.8M3.7 14l3.8 3.8M24.3 14l-3.8-3.8M24.3 14l-3.8 3.8"/>
   </g>
-  <circle cx="32" cy="32" r="6.2" fill="url(#orange)" stroke="#a94600" stroke-width="2.4" filter="url(#shadow)"/>
-  <path d="M32 15v27M15 32h27" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" opacity=".75"/>
+  <circle cx="14" cy="14" r="3.1" fill="#ffc35a" stroke="#7e5b10" stroke-width="1.2"/>
+  <circle cx="14" cy="14" r="1.15" fill="#ffffff" opacity="0.9"/>
 </svg>
