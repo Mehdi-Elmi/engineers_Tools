@@ -6,7 +6,7 @@ import logging
 from PySide6.QtCore import QRectF, Qt
 from PySide6.QtGui import QColor, QCursor, QPainter, QPixmap
 
-VERSION = "ui-small-fixes-1"
+VERSION = "ui-small-fixes-2"
 
 
 def _render_workspace_page(workspace, painter: QPainter, target: QRectF, print_grid: bool) -> None:
@@ -23,22 +23,23 @@ def _render_workspace_page(workspace, painter: QPainter, target: QRectF, print_g
     old_options = dict(getattr(workspace, "_save_options", {}) or {})
     workspace._save_options = dict(old_options, save_grid=bool(print_grid))
     try:
-        from . import engineering_export_patch as export_patch
-        renderer = getattr(export_patch, "_render", None)
-        if callable(renderer):
-            renderer(workspace, painter, target, False)
-            return
-    except Exception as error:  # noqa: BLE001
-        logging.exception("engineering_ui_small_fixes_patch: export renderer failed: %s", error)
+        try:
+            from . import engineering_export_patch as export_patch
+            renderer = getattr(export_patch, "_render", None)
+            if callable(renderer):
+                renderer(workspace, painter, target, False)
+                return
+        except Exception as error:  # noqa: BLE001
+            logging.exception("engineering_ui_small_fixes_patch: export renderer failed: %s", error)
 
-    try:
-        from . import engineering_print_setup_hotfix as hotfix
-        hotfix._fallback_render_engineering_export(workspace, painter, target, False)
+        try:
+            from . import engineering_print_setup_hotfix as hotfix
+            hotfix._fallback_render_engineering_export(workspace, painter, target, False)
+        except Exception as error:  # noqa: BLE001
+            logging.exception("engineering_ui_small_fixes_patch: fallback renderer failed: %s", error)
+            painter.fillRect(target, QColor("#ffffff"))
     finally:
         workspace._save_options = old_options
-        return
-
-    workspace._save_options = old_options
 
 
 def _render_print_preview(dialog, painter: QPainter, paper: QRectF) -> None:
