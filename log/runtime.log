@@ -1,41 +1,22 @@
-2026-06-29 15:24:48,703 | INFO | root | Runtime log started.
-2026-06-29 15:24:48,703 | INFO | root | Runtime log path: C:\Users\ATLAS\AppData\Local\EngineerTools\logs\runtime.log
-2026-06-29 15:24:48,704 | INFO | root | Engineer Tools startup requested.
-2026-06-29 15:24:48,704 | INFO | root | Python executable: C:\Users\ATLAS\AppData\Local\EngineerTools\.venv\Scripts\pythonw.exe
-2026-06-29 15:24:48,704 | INFO | root | Python argv: ['C:\\Users\\ATLAS\\AppData\\Local\\EngineerTools\\src\\engineers_tools\\main.py']
-2026-06-29 15:24:49,495 | INFO | root | interaction_ui_patch: shared icon and control patches installed
-2026-06-29 15:24:49,552 | INFO | root | interaction_ui_patch: engineering workspace patches installed
-2026-06-29 15:24:49,554 | INFO | root | engineering_export_patch: installed
-2026-06-29 15:24:49,554 | INFO | root | engineering_workspace_finalize_patch: installed
-2026-06-29 15:24:49,554 | INFO | root | engineering_zoom_print_patch: installed
-2026-06-29 15:24:50,506 | INFO | root | Launcher shown.
-
-[2026-06-29 15:33:17] ProjectFileDialog.refresh_files failed
+2026-06-29 17:00:45,808 | INFO | root | Runtime log started.
+2026-06-29 17:00:45,808 | INFO | root | Runtime log path: C:\Users\ATLAS\AppData\Local\EngineerTools\logs\runtime.log
+2026-06-29 17:00:45,808 | INFO | root | Engineer Tools startup requested.
+2026-06-29 17:00:45,808 | INFO | root | Python executable: C:\Users\ATLAS\AppData\Local\EngineerTools\.venv\Scripts\pythonw.exe
+2026-06-29 17:00:45,808 | INFO | root | Python argv: ['C:\\Users\\ATLAS\\AppData\\Local\\EngineerTools\\src\\engineers_tools\\main.py']
+2026-06-29 17:00:46,419 | INFO | root | interaction_ui_patch: shared icon and control patches installed
+2026-06-29 17:00:46,466 | INFO | root | interaction_ui_patch: engineering workspace patches installed
+2026-06-29 17:00:46,467 | INFO | root | engineering_export_patch: installed
+2026-06-29 17:00:46,467 | INFO | root | engineering_workspace_finalize_patch: installed
+2026-06-29 17:00:46,467 | INFO | root | engineering_zoom_print_patch: installed
+2026-06-29 17:00:46,467 | INFO | root | engineering_print_setup_hotfix: installed
+2026-06-29 17:00:47,547 | INFO | root | Launcher shown.
+2026-06-29 17:01:05,182 | ERROR | root | engineering_print_setup_hotfix: print imports failed: cannot import name '_render_engineering_export' from 'src.engineers_tools.app.interaction_ui_patch' (C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\interaction_ui_patch.py)
 Traceback (most recent call last):
-  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\project_file_dialog.py", line 471, in _refresh_files
-    children = sorted(self._current_dir.iterdir(), key=lambda item: (not item.is_dir(), item.name.lower()))
-               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "C:\Users\ATLAS\AppData\Local\Programs\Python\Python311\Lib\pathlib.py", line 931, in iterdir
-    for name in os.listdir(self):
-                ^^^^^^^^^^^^^^^^
-PermissionError: [WinError 5] Access is denied: 'F:\\System Volume Information'
-
-[2026-06-29 15:33:24] ProjectFileDialog.refresh_files failed
+  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\engineering_print_setup_hotfix.py", line 48, in _send_print_job
+    from .interaction_ui_patch import _render_engineering_export
+ImportError: cannot import name '_render_engineering_export' from 'src.engineers_tools.app.interaction_ui_patch' (C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\interaction_ui_patch.py)
+2026-06-29 17:02:12,293 | ERROR | root | engineering_print_setup_hotfix: print imports failed: cannot import name '_render_engineering_export' from 'src.engineers_tools.app.interaction_ui_patch' (C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\interaction_ui_patch.py)
 Traceback (most recent call last):
-  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\project_file_dialog.py", line 471, in _refresh_files
-    children = sorted(self._current_dir.iterdir(), key=lambda item: (not item.is_dir(), item.name.lower()))
-               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "C:\Users\ATLAS\AppData\Local\Programs\Python\Python311\Lib\pathlib.py", line 931, in iterdir
-    for name in os.listdir(self):
-                ^^^^^^^^^^^^^^^^
-PermissionError: [WinError 5] Access is denied: 'F:\\System Volume Information'
-
-[2026-06-29 15:33:26] ProjectFileDialog.refresh_files failed
-Traceback (most recent call last):
-  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\project_file_dialog.py", line 471, in _refresh_files
-    children = sorted(self._current_dir.iterdir(), key=lambda item: (not item.is_dir(), item.name.lower()))
-               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "C:\Users\ATLAS\AppData\Local\Programs\Python\Python311\Lib\pathlib.py", line 931, in iterdir
-    for name in os.listdir(self):
-                ^^^^^^^^^^^^^^^^
-PermissionError: [WinError 5] Access is denied: 'F:\\System Volume Information'
+  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\engineering_print_setup_hotfix.py", line 48, in _send_print_job
+    from .interaction_ui_patch import _render_engineering_export
+ImportError: cannot import name '_render_engineering_export' from 'src.engineers_tools.app.interaction_ui_patch' (C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\interaction_ui_patch.py)
