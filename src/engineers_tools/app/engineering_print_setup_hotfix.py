@@ -10,7 +10,7 @@ from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import QButtonGroup, QCheckBox, QComboBox, QDoubleSpinBox, QFileDialog, QHBoxLayout, QLabel, QPushButton, QSpinBox, QToolButton
 
 
-HOTFIX_VERSION = "direct-print-11"
+HOTFIX_VERSION = "direct-print-12"
 _SKIP_PRINTER_TOKENS = ("fax", "onenote", "one note", "evernote", "xps", "microsoft xps")
 _PDF_PRINTER_TOKENS = ("pdf", "foxit", "adobe", "nitro", "pdf24", "pdfcreator")
 
@@ -356,6 +356,15 @@ def _find_button_by_text(dialog, text: str):
     return None
 
 
+def _hide_buttons_by_text(dialog, text: str) -> int:
+    hidden = 0
+    for button in dialog.findChildren(QPushButton):
+        if button.text() == text:
+            button.hide()
+            hidden += 1
+    return hidden
+
+
 def _inline_print_label(text: str, width: int) -> QLabel:
     label = QLabel(text)
     label.setObjectName("DialogSectionTitle")
@@ -482,18 +491,20 @@ def apply_engineering_print_setup_hotfix() -> None:
             options_row.setSpacing(12)
             options_row.addWidget(self._print_grid)
             options_row.addStretch(1)
-            native_button = _find_button_by_text(self, "System Print Setup")
-            settings_layout, anchor_index = _find_layout_index_with_widget(self.layout(), native_button)
-            if settings_layout is None:
-                settings_layout, anchor_index = _find_layout_index_with_widget(self.layout(), getattr(self, "_status", None))
-            if native_button is not None:
-                native_button.hide()
+            hidden_native = _hide_buttons_by_text(self, "System Print Setup")
+            settings_layout, anchor_index = _find_layout_index_with_widget(self.layout(), getattr(self, "_status", None))
             if settings_layout is not None and anchor_index >= 0:
                 settings_layout.insertLayout(anchor_index, controls_row)
                 settings_layout.insertLayout(anchor_index + 1, options_row)
             elif page_layout is not None:
                 page_layout.addLayout(controls_row)
                 page_layout.addWidget(self._print_grid)
+            logging.info(
+                "engineering_print_setup_hotfix: print controls inserted version=%s hidden_native=%s anchor=%s",
+                HOTFIX_VERSION,
+                hidden_native,
+                anchor_index,
+            )
             self._sync_page_range_state(False)
 
             preview = getattr(self, "_preview", None)
