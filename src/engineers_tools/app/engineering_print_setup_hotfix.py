@@ -9,6 +9,9 @@ from PySide6.QtGui import QPainter
 from PySide6.QtWidgets import QCheckBox, QLabel, QPushButton, QSpinBox, QToolButton
 
 
+HOTFIX_VERSION = "robust-print-3"
+
+
 def _asset_path(name: str) -> str:
     try:
         from .interaction_ui_patch import _asset_icon_path
@@ -95,6 +98,14 @@ def _send_print_job(workspace, settings: dict[str, object]) -> bool:
         copies = max(1, int(settings.get("copies", 1) or 1))
         if hasattr(printer, "setCopyCount"):
             printer.setCopyCount(copies)
+        logging.info(
+            "engineering_print_setup_hotfix: preparing print version=%s requested_printer=%s actual_printer=%s valid=%s output_format=%s",
+            HOTFIX_VERSION,
+            printer_name,
+            printer.printerName(),
+            printer.isValid(),
+            printer.outputFormat(),
+        )
 
         page_count = _workspace_page_count(workspace)
         all_pages = bool(settings.get("all_pages", True))
@@ -125,7 +136,12 @@ def _send_print_job(workspace, settings: dict[str, object]) -> bool:
 
         painter = QPainter(printer)
         if not painter.isActive():
-            logging.error("engineering_print_setup_hotfix: printer painter inactive printer=%s", printer.printerName())
+            logging.error(
+                "engineering_print_setup_hotfix: printer painter inactive printer=%s valid=%s output_file=%s",
+                printer.printerName(),
+                printer.isValid(),
+                printer.outputFileName(),
+            )
             return False
         try:
             painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
@@ -300,4 +316,4 @@ def apply_engineering_print_setup_hotfix() -> None:
     zp.PrintSetupDialog = PrintSetupDialog
     edw.EngineeringDesignWorkspace._print_setup = print_setup
     edw.EngineeringDesignWorkspace._print_setup_hotfix_applied = True
-    logging.info("engineering_print_setup_hotfix: installed")
+    logging.info("engineering_print_setup_hotfix: installed version=%s", HOTFIX_VERSION)
