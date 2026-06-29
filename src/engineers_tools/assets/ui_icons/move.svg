@@ -1,14 +1,19 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Move icon">
   <defs>
-    <linearGradient id="moveStroke" x1="12" y1="12" x2="52" y2="52" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#ffb347"/>
+    <linearGradient id="main" x1="12" y1="8" x2="54" y2="58" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fff1cf"/>
+      <stop offset=".35" stop-color="#ffbd57"/>
       <stop offset="1" stop-color="#f36f21"/>
     </linearGradient>
-    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
-      <feDropShadow dx="0" dy="2" stdDeviation="1.5" flood-color="#7a3000" flood-opacity=".25"/>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="1.5" dy="2.5" stdDeviation="1.6" flood-color="#733000" flood-opacity=".28"/>
     </filter>
+    <style>
+      .stroke { fill: none; stroke: url(#main); stroke-width: 6.5; stroke-linecap: round; stroke-linejoin: round; filter: url(#shadow); }
+      .fill { fill: url(#main); stroke: #bd4a00; stroke-width: 3; stroke-linejoin: round; filter: url(#shadow); }
+    </style>
   </defs>
-  <circle cx="32" cy="32" r="4.5" fill="#f36f21"/>
-  <path d="M32 8v48M8 32h48" fill="none" stroke="url(#moveStroke)" stroke-width="6.5" stroke-linecap="round" filter="url(#softShadow)"/>
-  <path d="M32 8 22.5 18M32 8l9.5 10M32 56l-9.5-10M32 56l9.5-10M8 32l10-9.5M8 32l10 9.5M56 32l-10-9.5M56 32l-10 9.5" fill="none" stroke="url(#moveStroke)" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round" filter="url(#softShadow)"/>
+  <circle cx="32" cy="32" r="5" class="fill"/>
+  <path class="stroke" d="M32 8v48M8 32h48"/>
+  <path class="stroke" d="M32 8 22.5 18M32 8l9.5 10M32 56l-9.5-10M32 56l9.5-10M8 32l10-9.5M8 32l10 9.5M56 32l-10-9.5M56 32l-10 9.5"/>
 </svg>
