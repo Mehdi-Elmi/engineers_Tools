@@ -10,7 +10,7 @@ from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import QButtonGroup, QCheckBox, QComboBox, QDoubleSpinBox, QFileDialog, QHBoxLayout, QLabel, QPushButton, QSpinBox, QToolButton
 
 
-HOTFIX_VERSION = "direct-print-6"
+HOTFIX_VERSION = "direct-print-8"
 _SKIP_PRINTER_TOKENS = ("fax", "onenote", "one note", "evernote", "xps", "microsoft xps")
 _PDF_PRINTER_TOKENS = ("pdf", "foxit", "adobe", "nitro", "pdf24", "pdfcreator")
 
@@ -333,6 +333,32 @@ def _find_layout_with_widget(layout, widget):
     return None
 
 
+def _detach_widget_for_relayout(root_layout, widget) -> None:
+    old_layout = _find_layout_with_widget(root_layout, widget)
+    if old_layout is None:
+        return
+    old_layout.removeWidget(widget)
+    try:
+        old_layout.setSpacing(0)
+        old_layout.setContentsMargins(0, 0, 0, 0)
+    except Exception:
+        pass
+
+
+def _hide_original_print_labels(dialog) -> None:
+    for label in dialog.findChildren(QLabel):
+        if label.text() in {"Copies", "Pages", "From", "To"}:
+            label.hide()
+
+
+def _print_field_label(text: str, width: int) -> QLabel:
+    label = QLabel(text)
+    label.setObjectName("DialogSectionTitle")
+    label.setFixedWidth(width)
+    label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+    return label
+
+
 def _filter_printer_cards(dialog) -> None:
     grid = getattr(dialog, "_printer_grid", None)
     cards = list(getattr(dialog, "_printer_cards", []))
@@ -431,14 +457,35 @@ def apply_engineering_print_setup_hotfix() -> None:
             self._print_grid.setChecked(False)
             self._print_grid.setStyleSheet(_radio_style())
             self._print_grid.toggled.connect(self._update_preview)
+            _hide_original_print_labels(self)
+            root_layout = self.layout()
+            _detach_widget_for_relayout(root_layout, getattr(self, "_copies", None))
+            _detach_widget_for_relayout(root_layout, getattr(self, "_page_from", None))
+            _detach_widget_for_relayout(root_layout, getattr(self, "_page_to", None))
+            controls_row = QHBoxLayout()
+            controls_row.setContentsMargins(0, 0, 0, 0)
+            controls_row.setSpacing(4)
+            controls_row.addWidget(_print_field_label("Copies", 44))
+            controls_row.addWidget(self._copies)
+            controls_row.addSpacing(10)
+            controls_row.addWidget(_print_field_label("Page From", 72))
+            controls_row.addWidget(self._page_from)
+            controls_row.addSpacing(6)
+            controls_row.addWidget(_print_field_label("Page To", 52))
+            controls_row.addWidget(self._page_to)
+            controls_row.addStretch(1)
             options_row = QHBoxLayout()
             options_row.setContentsMargins(0, 0, 0, 0)
             options_row.setSpacing(12)
+            self._all_pages.setText("Select all")
+            options_row.addSpacing(48)
             options_row.addWidget(self._all_pages)
             options_row.addWidget(self._print_grid)
             options_row.addStretch(1)
             settings_layout, status_index = _find_layout_index_with_widget(self.layout(), getattr(self, "_status", None))
             if settings_layout is not None and status_index >= 0:
+                settings_layout.insertLayout(status_index, controls_row)
+                status_index += 1
                 settings_layout.insertLayout(status_index, options_row)
             elif page_layout is not None:
                 page_layout.addWidget(self._all_pages)
