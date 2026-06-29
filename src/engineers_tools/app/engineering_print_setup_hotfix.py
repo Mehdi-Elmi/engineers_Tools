@@ -10,7 +10,7 @@ from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import QButtonGroup, QCheckBox, QComboBox, QDoubleSpinBox, QFileDialog, QHBoxLayout, QLabel, QPushButton, QSpinBox, QToolButton
 
 
-HOTFIX_VERSION = "direct-print-12"
+HOTFIX_VERSION = "direct-print-13"
 _SKIP_PRINTER_TOKENS = ("fax", "onenote", "one note", "evernote", "xps", "microsoft xps")
 _PDF_PRINTER_TOKENS = ("pdf", "foxit", "adobe", "nitro", "pdf24", "pdfcreator")
 
@@ -439,6 +439,7 @@ def apply_engineering_print_setup_hotfix() -> None:
             original_copies = getattr(self, "_copies", None)
             original_page_from = getattr(self, "_page_from", None)
             original_page_to = getattr(self, "_page_to", None)
+            original_page_layout = _find_layout_with_widget(self.layout(), original_page_to)
 
             for label in self.findChildren(QLabel):
                 if label.text() == "Copies":
@@ -460,7 +461,7 @@ def apply_engineering_print_setup_hotfix() -> None:
             self._page_from.valueChanged.connect(self._normalize_page_range)
             self._page_to.valueChanged.connect(self._normalize_page_range)
 
-            page_layout = _find_layout_with_widget(self.layout(), getattr(self, "_page_to", None))
+            page_layout = original_page_layout
             if page_layout is not None:
                 try:
                     page_layout.setSpacing(4)
@@ -500,10 +501,11 @@ def apply_engineering_print_setup_hotfix() -> None:
                 page_layout.addLayout(controls_row)
                 page_layout.addWidget(self._print_grid)
             logging.info(
-                "engineering_print_setup_hotfix: print controls inserted version=%s hidden_native=%s anchor=%s",
+                "engineering_print_setup_hotfix: print controls inserted version=%s hidden_native=%s anchor=%s page_layout=%s",
                 HOTFIX_VERSION,
                 hidden_native,
                 anchor_index,
+                page_layout is not None,
             )
             self._sync_page_range_state(False)
 
