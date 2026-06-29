@@ -25,7 +25,16 @@
     </filter>
     <style>
       .stroke { fill: none; stroke: url(#main); stroke-width: 6.5; stroke-linecap: round; stroke-linejoin: round; filter: url(#shadow); }
+      .thin { fill: none; stroke: url(#main); stroke-width: 4.2; stroke-linecap: round; stroke-linejoin: round; filter: url(#shadow); }
+      .blueStroke { fill: none; stroke: url(#blue); stroke-width: 5.5; stroke-linecap: round; stroke-linejoin: round; filter: url(#shadow); }
+      .greenStroke { fill: none; stroke: url(#green); stroke-width: 5.5; stroke-linecap: round; stroke-linejoin: round; filter: url(#shadow); }
+      .grayStroke { fill: none; stroke: url(#gray); stroke-width: 5.5; stroke-linecap: round; stroke-linejoin: round; filter: url(#shadow); }
+      .fill { fill: url(#main); stroke: #bd4a00; stroke-width: 3; stroke-linejoin: round; filter: url(#shadow); }
+      .blueFill { fill: url(#blue); stroke: #1556aa; stroke-width: 3; stroke-linejoin: round; filter: url(#shadow); }
+      .greenFill { fill: url(#green); stroke: #166534; stroke-width: 3; stroke-linejoin: round; filter: url(#shadow); }
+      .grayFill { fill: url(#gray); stroke: #475569; stroke-width: 3; stroke-linejoin: round; filter: url(#shadow); }
       .shine { fill: none; stroke: #fff8e8; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; opacity: .78; }
+      .dark { fill: none; stroke: #8a3600; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; opacity: .5; }
     </style>
   </defs>
   <path class="stroke" d="M24 16 12 28l12 12"/>
