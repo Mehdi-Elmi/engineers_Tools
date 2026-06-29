@@ -7,7 +7,7 @@ import math
 from pathlib import Path
 
 from PySide6.QtCore import QEvent, QPoint, QPointF, QRect, QRectF, QSize, Qt
-from PySide6.QtGui import QColor, QCursor, QIcon, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap
+from PySide6.QtGui import QColor, QCursor, QIcon, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap, QPolygonF
 from PySide6.QtWidgets import QComboBox, QDialog, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
 from .interaction_ui_patch import _asset_icon_path, _paint_asset_icon
@@ -72,11 +72,13 @@ def _paint_asset_or_arc(painter: QPainter, center: QPointF, radius: float, color
     painter.setBrush(color)
     painter.setPen(Qt.PenStyle.NoPen)
     painter.drawPolygon(
-        [
-            tip,
-            QPointF(base.x() + normal.x() * size * 0.55, base.y() + normal.y() * size * 0.55),
-            QPointF(base.x() - normal.x() * size * 0.55, base.y() - normal.y() * size * 0.55),
-        ]
+        QPolygonF(
+            [
+                tip,
+                QPointF(base.x() + normal.x() * size * 0.55, base.y() + normal.y() * size * 0.55),
+                QPointF(base.x() - normal.x() * size * 0.55, base.y() - normal.y() * size * 0.55),
+            ]
+        )
     )
     painter.restore()
 
