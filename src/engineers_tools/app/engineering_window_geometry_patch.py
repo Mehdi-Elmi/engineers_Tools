@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import logging
 
-from PySide6.QtCore import QPoint, QPointF, QRect, QRectF, QTimer, Qt
+from PySide6.QtCore import QEvent, QObject, QPoint, QPointF, QRect, QRectF, QTimer, Qt
 from PySide6.QtGui import QCursor
+from PySide6.QtWidgets import QApplication, QDialog, QDoubleSpinBox, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
 
-VERSION = "window-geometry-1"
+VERSION = "window-geometry-2"
 EDGE_MARGIN = 8
 RESTORE_SCALE = 0.58
 WORKSPACE_SIZE_MM = (400.0, 220.0)
@@ -19,6 +20,10 @@ _ORIGINAL_MODULE_RELEASE = None
 _ORIGINAL_MODULE_RESIZE = None
 _ORIGINAL_TOGGLE_MAXIMIZE = None
 _ORIGINAL_RESTORE_MAXIMIZE = None
+_ORIGINAL_CANVAS_PAGE_RECT = None
+_ORIGINAL_MENU_DIALOG_INIT = None
+_ORIGINAL_CONTEXT_MENU = None
+_WINDOW_RESIZE_FILTER = None
 
 
 def _available_geometry(window) -> QRect:
@@ -57,6 +62,34 @@ def _window_edges(window, pos: QPoint) -> set[str]:
     return edges
 
 
+def _resizable_toplevel(widget) -> QWidget | None:
+    if not isinstance(widget, QWidget):
+        return None
+    window = widget.window()
+    if not isinstance(window, QWidget):
+        return None
+    flags = window.windowFlags()
+    if flags & Qt.WindowType.Popup:
+        return None
+    if not (flags & Qt.WindowType.FramelessWindowHint):
+        return None
+    if not window.isVisible() or window.isMinimized():
+        return None
+    if window.minimumWidth() <= 0 or window.minimumHeight() <= 0:
+        return None
+    return window
+
+
+def _global_event_position(event) -> QPoint | None:
+    global_position = getattr(event, "globalPosition", None)
+    if callable(global_position):
+        return global_position().toPoint()
+    global_pos = getattr(event, "globalPos", None)
+    if callable(global_pos):
+        return global_pos()
+    return None
+
+
 def _resize_cursor(edges: set[str]) -> QCursor:
     if {"left", "top"} <= edges or {"right", "bottom"} <= edges:
         return QCursor(Qt.CursorShape.SizeFDiagCursor)
@@ -67,6 +100,14 @@ def _resize_cursor(edges: set[str]) -> QCursor:
     if "top" in edges or "bottom" in edges:
         return QCursor(Qt.CursorShape.SizeVerCursor)
     return QCursor(Qt.CursorShape.ArrowCursor)
+
+
+def _set_resize_cursor(widget: QWidget, edges: set[str]) -> None:
+    cursor = _resize_cursor(edges)
+    widget.setCursor(cursor)
+    window = widget.window()
+    if isinstance(window, QWidget):
+        window.setCursor(cursor)
 
 
 def _apply_window_resize(window, global_pos: QPoint) -> None:
@@ -88,6 +129,86 @@ def _apply_window_resize(window, global_pos: QPoint) -> None:
     window.setGeometry(rect)
 
 
+class _FramelessResizeFilter(QObject):
+    """Resize frameless windows from every edge, even when child widgets receive the mouse."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._target: QWidget | None = None
+        self._edges: set[str] = set()
+        self._start_global = QPoint()
+        self._start_geometry = QRect()
+        self._cursor_widget: QWidget | None = None
+
+    def eventFilter(self, watched, event) -> bool:  # noqa: N802
+        event_type = event.type()
+        if event_type not in {
+            QEvent.Type.MouseButtonPress,
+            QEvent.Type.MouseMove,
+            QEvent.Type.MouseButtonRelease,
+            QEvent.Type.Leave,
+        }:
+            return False
+        widget = watched if isinstance(watched, QWidget) else None
+        window = _resizable_toplevel(widget)
+        if event_type == QEvent.Type.MouseButtonRelease and self._target is not None:
+            self._finish_resize()
+            return False
+        if window is None:
+            return False
+        global_pos = _global_event_position(event)
+        if global_pos is None:
+            return False
+        local_pos = window.mapFromGlobal(global_pos)
+        if self._target is not None:
+            if event_type == QEvent.Type.MouseMove and event.buttons() & Qt.MouseButton.LeftButton:
+                _apply_window_resize(self._target, global_pos)
+                _sync_workspace_after_resize(self._target)
+                return True
+            return False
+        edges = _window_edges(window, local_pos)
+        if event_type == QEvent.Type.MouseButtonPress and event.button() == Qt.MouseButton.LeftButton and edges:
+            self._target = window
+            self._edges = edges
+            self._start_global = global_pos
+            self._start_geometry = QRect(window.geometry())
+            window._window_resize_edges = edges
+            window._window_resize_start_global = global_pos
+            window._window_resize_start_geometry = QRect(window.geometry())
+            _set_resize_cursor(widget or window, edges)
+            self._cursor_widget = widget or window
+            event.accept()
+            return True
+        if event_type == QEvent.Type.MouseMove and not (event.buttons() & Qt.MouseButton.LeftButton):
+            if edges:
+                _set_resize_cursor(widget or window, edges)
+                self._cursor_widget = widget or window
+            elif self._cursor_widget is widget:
+                widget.unsetCursor()
+                window.unsetCursor()
+                self._cursor_widget = None
+            return False
+        if event_type == QEvent.Type.Leave and self._cursor_widget is widget:
+            widget.unsetCursor()
+            window.unsetCursor()
+            self._cursor_widget = None
+        return False
+
+    def _finish_resize(self) -> None:
+        target = self._target
+        if target is not None:
+            target._window_resize_edges = set()
+            target._window_resize_start_global = None
+            target._window_resize_start_geometry = None
+            target.unsetCursor()
+            _sync_workspace_after_resize(target)
+        if self._cursor_widget is not None:
+            self._cursor_widget.unsetCursor()
+        self._target = None
+        self._edges = set()
+        self._cursor_widget = None
+
+
 def _page_rect(canvas) -> QRectF:
     width, height = getattr(canvas, "_page_setup_size_mm", WORKSPACE_SIZE_MM)
     width = max(1.0, float(width))
@@ -105,6 +226,22 @@ def _page_rect(canvas) -> QRectF:
         page_width,
         page_height,
     )
+
+
+def _unit_to_canvas_px(start_bar, value: float, unit: str) -> float:
+    """Keep ruler/grid dimensions tied to the fitted page, not raw window pixels."""
+    try:
+        from src.engineers_tools.ui import start_bar as sb
+    except Exception:
+        return max(1.0, value)
+    canvas = start_bar._canvas() if hasattr(start_bar, "_canvas") else None
+    if canvas is None:
+        return max(1.0, value * sb.UNIT_TO_MM[unit] * sb.MM_TO_SCREEN_PX)
+    page = _page_rect(canvas)
+    page_width_mm, _page_height_mm = getattr(canvas, "_page_setup_size_mm", WORKSPACE_SIZE_MM)
+    page_width_mm = max(1.0, float(page_width_mm))
+    mm_value = float(value) * sb.UNIT_TO_MM[unit]
+    return max(1.0, mm_value * page.width() / page_width_mm)
 
 
 def _scene_to_view(canvas, point: QPointF) -> QPointF:
@@ -142,11 +279,13 @@ def _patch_canvas_cursors() -> None:
     try:
         from modules.mechanics_dynamics_statics import workspace as edw
         from . import engineering_ui_small_fixes_patch as small
+        from src.engineers_tools.ui import start_bar as sb
     except Exception:
         logging.exception("engineering_window_geometry_patch: cursor patch imports failed")
         return
 
     edw.EngineeringCanvas._page_rect = _page_rect
+    sb.StartBar._unit_to_canvas_px = _unit_to_canvas_px
 
     def set_canvas_hover_cursor(canvas, hover: str | None) -> None:
         if hover == "move":
@@ -168,6 +307,179 @@ def _patch_canvas_cursors() -> None:
             canvas.unsetCursor()
 
     small._set_canvas_hover_cursor = set_canvas_hover_cursor
+
+
+def _can_rotate_selection(canvas) -> bool:
+    selected = getattr(canvas, "selected_indices", set())
+    objects = getattr(canvas, "objects", [])
+    if not selected:
+        return False
+    for index in selected:
+        if not 0 <= index < len(objects):
+            return False
+        obj = objects[index]
+        if getattr(obj, "locked", False) or not getattr(obj, "rotation_handle_visible", True):
+            return False
+    return True
+
+
+def _rotate_selection_by(canvas, degrees: float) -> bool:
+    if not _can_rotate_selection(canvas):
+        return False
+    try:
+        from modules.mechanics_dynamics_statics import workspace as edw
+    except Exception:
+        logging.exception("engineering_window_geometry_patch: rotate imports failed")
+        return False
+    selected = sorted(getattr(canvas, "selected_indices", set()))
+    objects = getattr(canvas, "objects", [])
+    if hasattr(canvas, "_push_undo"):
+        canvas._push_undo()
+    center = canvas._group_bounds().center() if len(selected) > 1 and hasattr(canvas, "_group_bounds") else objects[selected[0]].rect.center()
+    for index in selected:
+        obj = objects[index]
+        start_rect = QRectF(obj.rect)
+        new_center = center + edw._rotate_vector(start_rect.center() - center, degrees)
+        obj.rect = QRectF(
+            new_center.x() - start_rect.width() / 2,
+            new_center.y() - start_rect.height() / 2,
+            start_rect.width(),
+            start_rect.height(),
+        )
+        obj.rotation = float(getattr(obj, "rotation", 0.0)) + degrees
+    canvas._last_rotation_degrees = degrees
+    if hasattr(canvas, "_emit_object_changes"):
+        canvas._emit_object_changes()
+    canvas.update()
+    return True
+
+
+def _ask_rotation_degrees(parent, default_value: float = 10.0) -> tuple[bool, float]:
+    dialog = QDialog(parent)
+    dialog.setObjectName("ProjectHelpDialog")
+    dialog.setWindowTitle("Rotate")
+    dialog.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.FramelessWindowHint)
+    dialog.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+    dialog.setModal(True)
+    dialog.resize(310, 150)
+
+    shell = QWidget(dialog)
+    shell.setObjectName("ProjectHelpShell")
+    root = QVBoxLayout(dialog)
+    root.setContentsMargins(0, 0, 0, 0)
+    root.addWidget(shell)
+    layout = QVBoxLayout(shell)
+    layout.setContentsMargins(14, 12, 14, 14)
+    layout.setSpacing(10)
+
+    title = QLabel("Rotate Degree")
+    title.setObjectName("HelpTitle")
+    layout.addWidget(title)
+    row = QHBoxLayout()
+    row.setSpacing(8)
+    row.addWidget(QLabel("Degree"))
+    spin = QDoubleSpinBox()
+    spin.setObjectName("FileNameInput")
+    spin.setRange(-3600.0, 3600.0)
+    spin.setDecimals(2)
+    spin.setSingleStep(1.0)
+    spin.setSuffix(" deg")
+    spin.setValue(default_value)
+    row.addWidget(spin, 1)
+    layout.addLayout(row)
+
+    buttons = QHBoxLayout()
+    buttons.addStretch(1)
+    apply_button = QPushButton("Apply")
+    apply_button.setObjectName("PrimaryDialogButton")
+    cancel_button = QPushButton("Cancel")
+    cancel_button.setObjectName("SecondaryDialogButton")
+    apply_button.clicked.connect(dialog.accept)
+    cancel_button.clicked.connect(dialog.reject)
+    buttons.addWidget(apply_button)
+    buttons.addWidget(cancel_button)
+    layout.addLayout(buttons)
+    return (dialog.exec() == QDialog.DialogCode.Accepted, float(spin.value()))
+
+
+def _install_rotation_patch() -> None:
+    global _ORIGINAL_CONTEXT_MENU, _ORIGINAL_MENU_DIALOG_INIT
+    try:
+        from modules.mechanics_dynamics_statics import workspace as edw
+        from . import module_window as mw
+    except Exception:
+        logging.exception("engineering_window_geometry_patch: rotation patch imports failed")
+        return
+
+    edw.EngineeringCanvas.rotate_selection_by = _rotate_selection_by
+    edw.EngineeringCanvas.can_rotate_selection = _can_rotate_selection
+
+    if _ORIGINAL_MENU_DIALOG_INIT is None:
+        _ORIGINAL_MENU_DIALOG_INIT = mw.ProjectMenuDialog.__init__
+
+    def menu_dialog_init(self, title, items, parent=None):
+        _ORIGINAL_MENU_DIALOG_INIT(self, title, items, parent)
+        buttons = [button for button in self.findChildren(QPushButton) if button.objectName() == "MenuItemButton"]
+        for item, button in zip(items, buttons):
+            if getattr(item, "handler", None) is None:
+                button.setEnabled(False)
+                button.setToolTip("Disabled")
+
+    mw.ProjectMenuDialog.__init__ = menu_dialog_init
+
+    def rotate_selection(self) -> None:
+        canvas = getattr(self, "_canvas", None)
+        if canvas is None or not _can_rotate_selection(canvas):
+            self._set_status("Rotate disabled")
+            return
+        default_value = float(getattr(canvas, "_last_rotation_degrees", 10.0))
+        accepted, degrees = _ask_rotation_degrees(self, default_value)
+        if not accepted:
+            self._set_status("Rotate canceled")
+            return
+        if _rotate_selection_by(canvas, degrees):
+            self._set_status(f"Rotate {degrees:.2f} deg")
+        else:
+            self._set_status("Rotate disabled")
+
+    def rotation(self) -> None:
+        rotate_selection(self)
+
+    if _ORIGINAL_CONTEXT_MENU is None:
+        _ORIGINAL_CONTEXT_MENU = edw.EngineeringDesignWorkspace._show_canvas_context_menu
+
+    def show_canvas_context_menu(self, global_pos: QPoint) -> None:
+        canvas = getattr(self, "_canvas", None)
+        rotate_handler = self._rotation if canvas is not None and _can_rotate_selection(canvas) else None
+        self._show_menu_at(
+            "Object",
+            (
+                mw.MenuItemSpec("Repeat", self._repeat_last_tools),
+                mw.MenuItemSpec("Copy", self._copy),
+                mw.MenuItemSpec("Cut", self._cut),
+                mw.MenuItemSpec("Paste", self._paste),
+                mw.MenuItemSpec("Rotate", rotate_handler),
+                mw.MenuItemSpec("Bring to Front", self._bring_to_front),
+                mw.MenuItemSpec("Send to Back", self._send_to_back),
+                mw.MenuItemSpec("Group", self._group),
+                mw.MenuItemSpec("Ungroup", self._ungroup),
+            ),
+            global_pos,
+        )
+
+    edw.EngineeringDesignWorkspace._rotate_selection = rotate_selection
+    edw.EngineeringDesignWorkspace._rotation = rotation
+    edw.EngineeringDesignWorkspace._show_canvas_context_menu = show_canvas_context_menu
+
+
+def _install_global_resize_filter() -> None:
+    global _WINDOW_RESIZE_FILTER
+    app = QApplication.instance()
+    if app is None:
+        return
+    if _WINDOW_RESIZE_FILTER is None:
+        _WINDOW_RESIZE_FILTER = _FramelessResizeFilter()
+        app.installEventFilter(_WINDOW_RESIZE_FILTER)
 
 
 def apply_engineering_window_geometry_patch() -> None:
@@ -266,4 +578,6 @@ def apply_engineering_window_geometry_patch() -> None:
     ModuleWindow.resizeEvent = resize_event
     ModuleWindow._window_geometry_patch_version = VERSION
     _patch_canvas_cursors()
+    _install_rotation_patch()
+    _install_global_resize_filter()
     logging.info("engineering_window_geometry_patch: installed version=%s", VERSION)
