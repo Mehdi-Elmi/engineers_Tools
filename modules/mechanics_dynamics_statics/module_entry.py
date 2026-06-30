@@ -20,6 +20,7 @@ from .startbar_cursor_fixes import apply_startbar_cursor_fixes
 from .ui_refinement_fixes import apply_ui_refinement_fixes
 from .unit_grid_properties_final_patch import apply_unit_grid_properties_final_patch
 from .window_resize_fixes import apply_window_resize_fixes
+from .windows_cursor_ruler_patch import apply_windows_cursor_ruler_patch
 from .workspace import EngineeringDesignWorkspace
 
 
@@ -39,4 +40,5 @@ def create_window(module: LauncherModule) -> ModuleWindow:
     apply_unit_grid_properties_final_patch()
     apply_properties_grid_cleanup_patch()
     apply_file_properties_general_patch()
+    apply_windows_cursor_ruler_patch()
     return EngineeringDesignWorkspace(module)
