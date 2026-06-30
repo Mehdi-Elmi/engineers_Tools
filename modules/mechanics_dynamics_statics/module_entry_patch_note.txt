@@ -1,1 +1,0 @@
-Need module_entry to call apply_top_textbar_fixed_entry_patch after apply_view_textbar_menu_patch.
