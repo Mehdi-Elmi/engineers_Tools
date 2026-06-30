@@ -7,15 +7,100 @@ engineering page size. Window resize changes the viewport only.
 
 from __future__ import annotations
 
-from PySide6.QtCore import QEvent, QObject, QPoint, QRect, Qt
-from PySide6.QtWidgets import QApplication, QWidget
+import math
 
-from .interaction_fixes import project_cursor
+from PySide6.QtCore import QEvent, QObject, QPoint, QPointF, QRect, Qt
+from PySide6.QtGui import QColor, QCursor, QPainter, QPen, QPixmap, QPolygonF
+from PySide6.QtWidgets import QApplication, QAbstractButton, QAbstractSpinBox, QLineEdit, QWidget
 
-PATCH_VERSION = "engineering-window-resize-2026-06-30-a"
-RESIZE_MARGIN = 12
+PATCH_VERSION = "engineering-window-resize-2026-06-30-b"
+RESIZE_MARGIN = 11
+MOVE_BAND_HEIGHT = 46
 WORKSPACE_SIZE_MM = (400.0, 220.0)
 _FILTER: QObject | None = None
+
+_INTERACTIVE_NAMES = {
+    "WindowButton",
+    "CloseButton",
+    "HomeButton",
+    "MenuButton",
+    "ToolButton",
+    "ToolIconButton",
+    "LayerIconButton",
+    "LayerExpandButton",
+    "PageButton",
+    "PageButtonActive",
+    "AddPageButton",
+    "IconChoice",
+    "RadioChoice",
+}
+
+
+def _cursor_arrow(painter: QPainter, tip: QPointF, tail: QPointF, size: float = 5.0) -> None:
+    direction = tip - tail
+    length = max(0.01, math.hypot(direction.x(), direction.y()))
+    unit = QPointF(direction.x() / length, direction.y() / length)
+    normal = QPointF(-unit.y(), unit.x())
+    base = QPointF(tip.x() - unit.x() * size, tip.y() - unit.y() * size)
+    left = QPointF(base.x() + normal.x() * size * 0.48, base.y() + normal.y() * size * 0.48)
+    right = QPointF(base.x() - normal.x() * size * 0.48, base.y() - normal.y() * size * 0.48)
+    painter.drawPolygon(QPolygonF([tip, left, right]))
+
+
+def _window_cursor(kind: str) -> QCursor:
+    pixmap = QPixmap(32, 32)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.Antialiasing, True)
+    glow = QColor("#ffffff")
+    ink = QColor("#dff6ff")
+    edge = QColor("#163452")
+
+    def stroke_line(a: QPointF, b: QPointF) -> None:
+        painter.setPen(QPen(glow, 4.4, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+        painter.drawLine(a, b)
+        painter.setPen(QPen(edge, 2.4, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+        painter.drawLine(a, b)
+        painter.setPen(QPen(ink, 1.15, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+        painter.drawLine(a, b)
+        painter.setBrush(edge)
+        painter.setPen(Qt.PenStyle.NoPen)
+        _cursor_arrow(painter, a, b, 5.4)
+        _cursor_arrow(painter, b, a, 5.4)
+
+    if kind == "resize_h":
+        stroke_line(QPointF(6, 16), QPointF(26, 16))
+    elif kind == "resize_v":
+        stroke_line(QPointF(16, 6), QPointF(16, 26))
+    elif kind == "resize_fdiag":
+        stroke_line(QPointF(8, 8), QPointF(24, 24))
+    elif kind == "resize_bdiag":
+        stroke_line(QPointF(24, 8), QPointF(8, 24))
+    else:
+        stroke_line(QPointF(16, 6), QPointF(16, 26))
+    painter.end()
+    return QCursor(pixmap, 16, 16)
+
+
+def _set_window_cursor(window: QWidget, kind: str | None) -> None:
+    app = QApplication.instance()
+    if app is None:
+        return
+    active = bool(getattr(window, "_engineering_window_cursor_active", False))
+    current = getattr(window, "_engineering_window_cursor_kind", None)
+    if kind is None:
+        if active:
+            app.restoreOverrideCursor()
+        window._engineering_window_cursor_active = False
+        window._engineering_window_cursor_kind = None
+        return
+    if active and current == kind:
+        return
+    if active:
+        app.restoreOverrideCursor()
+    app.setOverrideCursor(_window_cursor(kind))
+    window._engineering_window_cursor_active = True
+    window._engineering_window_cursor_kind = kind
 
 
 def _window_edges(window: QWidget, pos: QPoint) -> frozenset[str]:
@@ -50,6 +135,27 @@ def _cursor_kind(edges: frozenset[str]) -> str | None:
     return None
 
 
+def _interactive_child(widget: QWidget, window: QWidget) -> bool:
+    current: QWidget | None = widget
+    while current is not None and current is not window:
+        if isinstance(current, (QAbstractButton, QAbstractSpinBox, QLineEdit)):
+            return True
+        if current.objectName() in _INTERACTIVE_NAMES:
+            return True
+        current = current.parentWidget()
+    return False
+
+
+def _is_move_surface(widget: QWidget, window: QWidget, window_pos: QPoint) -> bool:
+    if getattr(window, "_is_manually_maximized", False) or window.isMaximized():
+        return False
+    if window_pos.y() > MOVE_BAND_HEIGHT:
+        return False
+    if _window_edges(window, window_pos):
+        return False
+    return not _interactive_child(widget, window)
+
+
 def _apply_window_resize(window: QWidget, global_pos: QPoint) -> None:
     edges: frozenset[str] = getattr(window, "_engineering_resize_edges", frozenset())
     start_global: QPoint = getattr(window, "_engineering_resize_start_global", global_pos)
@@ -72,24 +178,10 @@ def _apply_window_resize(window: QWidget, global_pos: QPoint) -> None:
     _sync_fixed_workspace_metadata(window)
 
 
-def _set_edge_cursor(widget: QWidget, window: QWidget, edges: frozenset[str]) -> None:
-    kind = _cursor_kind(edges)
-    previous = getattr(window, "_engineering_resize_cursor_widget", None)
-    if previous is not None and previous is not widget:
-        try:
-            previous.unsetCursor()
-        except RuntimeError:
-            pass
-    if kind is None:
-        if previous is not None:
-            try:
-                previous.unsetCursor()
-            except RuntimeError:
-                pass
-        window._engineering_resize_cursor_widget = None
-        return
-    widget.setCursor(project_cursor(kind))
-    window._engineering_resize_cursor_widget = widget
+def _apply_window_move(window: QWidget, global_pos: QPoint) -> None:
+    start_global: QPoint = getattr(window, "_engineering_move_start_global", global_pos)
+    start_geometry: QRect = getattr(window, "_engineering_move_start_geometry", window.geometry())
+    window.move(start_geometry.topLeft() + (global_pos - start_global))
 
 
 def _sync_fixed_workspace_metadata(window: QWidget) -> None:
@@ -117,13 +209,15 @@ class _WindowResizeFilter(QObject):
         window = watched.window()
         if not isinstance(window, self._module_window_cls):
             return False
-        if getattr(window, "_is_manually_maximized", False) or window.isMaximized():
-            return False
         event_type = event.type()
-        if event_type not in {QEvent.Type.MouseMove, QEvent.Type.MouseButtonPress, QEvent.Type.MouseButtonRelease}:
+        if event_type not in {QEvent.Type.MouseMove, QEvent.Type.MouseButtonPress, QEvent.Type.MouseButtonRelease, QEvent.Type.Leave}:
             return False
 
         try:
+            if event_type == QEvent.Type.Leave:
+                if not getattr(window, "_engineering_resize_active", False):
+                    _set_window_cursor(window, None)
+                return False
             local_pos = event.position().toPoint()
             window_pos = watched.mapTo(window, local_pos)
             global_pos = event.globalPosition().toPoint()
@@ -137,7 +231,14 @@ class _WindowResizeFilter(QObject):
                 window._engineering_resize_edges = edges
                 window._engineering_resize_start_global = global_pos
                 window._engineering_resize_start_geometry = QRect(window.geometry())
-                _set_edge_cursor(watched, window, edges)
+                _set_window_cursor(window, _cursor_kind(edges))
+                event.accept()
+                return True
+            if _is_move_surface(watched, window, window_pos):
+                window._engineering_move_active = True
+                window._engineering_move_start_global = global_pos
+                window._engineering_move_start_geometry = QRect(window.geometry())
+                window._drag_position = None
                 event.accept()
                 return True
             return False
@@ -145,22 +246,31 @@ class _WindowResizeFilter(QObject):
         if event_type == QEvent.Type.MouseMove:
             if getattr(window, "_engineering_resize_active", False):
                 _apply_window_resize(window, global_pos)
-                _set_edge_cursor(watched, window, getattr(window, "_engineering_resize_edges", frozenset()))
+                _set_window_cursor(window, _cursor_kind(getattr(window, "_engineering_resize_edges", frozenset())))
+                event.accept()
+                return True
+            if getattr(window, "_engineering_move_active", False):
+                _apply_window_move(window, global_pos)
                 event.accept()
                 return True
             if event.buttons() & Qt.MouseButton.LeftButton:
                 return False
             edges = _window_edges(window, window_pos)
-            _set_edge_cursor(watched, window, edges)
+            _set_window_cursor(window, _cursor_kind(edges))
             return False
 
-        if event_type == QEvent.Type.MouseButtonRelease and getattr(window, "_engineering_resize_active", False):
-            window._engineering_resize_active = False
-            window._engineering_resize_edges = frozenset()
-            _set_edge_cursor(watched, window, frozenset())
-            _sync_fixed_workspace_metadata(window)
-            event.accept()
-            return True
+        if event_type == QEvent.Type.MouseButtonRelease:
+            if getattr(window, "_engineering_resize_active", False):
+                window._engineering_resize_active = False
+                window._engineering_resize_edges = frozenset()
+                _set_window_cursor(window, None)
+                _sync_fixed_workspace_metadata(window)
+                event.accept()
+                return True
+            if getattr(window, "_engineering_move_active", False):
+                window._engineering_move_active = False
+                event.accept()
+                return True
 
         return False
 
