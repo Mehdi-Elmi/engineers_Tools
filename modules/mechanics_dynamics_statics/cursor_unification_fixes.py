@@ -12,7 +12,7 @@ import math
 from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import QColor, QCursor, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap, QPolygonF
 
-PATCH_VERSION = "engineering-cursor-unification-2026-06-30-b"
+PATCH_VERSION = "engineering-cursor-unification-2026-06-30-c"
 
 
 def _arrow_head(painter: QPainter, tip: QPointF, tail: QPointF, size: float = 5.2) -> None:
@@ -26,18 +26,32 @@ def _arrow_head(painter: QPainter, tip: QPointF, tail: QPointF, size: float = 5.
     painter.drawPolygon(QPolygonF([tip, left, right]))
 
 
-def _paint_resize_line(painter: QPainter, a: QPointF, b: QPointF) -> None:
+def _paint_stroked_line(painter: QPainter, a: QPointF, b: QPointF, ink: QColor) -> None:
     painter.setPen(QPen(QColor("#ffffff"), 4.4, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
     painter.drawLine(a, b)
-    painter.setPen(QPen(QColor("#132238"), 2.1, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+    painter.setPen(QPen(ink, 2.1, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
     painter.drawLine(a, b)
-    painter.setBrush(QColor("#132238"))
+
+
+def _paint_resize_line(painter: QPainter, a: QPointF, b: QPointF) -> None:
+    ink = QColor("#132238")
+    direction = b - a
+    length = max(0.01, math.hypot(direction.x(), direction.y()))
+    unit = QPointF(direction.x() / length, direction.y() / length)
+    center = QPointF((a.x() + b.x()) / 2.0, (a.y() + b.y()) / 2.0)
+    gap = 5.2
+    left_inner = QPointF(center.x() - unit.x() * gap, center.y() - unit.y() * gap)
+    right_inner = QPointF(center.x() + unit.x() * gap, center.y() + unit.y() * gap)
+
+    _paint_stroked_line(painter, a, left_inner, ink)
+    _paint_stroked_line(painter, right_inner, b, ink)
+    painter.setBrush(ink)
     painter.setPen(Qt.PenStyle.NoPen)
-    _arrow_head(painter, a, b)
-    _arrow_head(painter, b, a)
+    _arrow_head(painter, a, left_inner, 5.8)
+    _arrow_head(painter, b, right_inner, 5.8)
     painter.setBrush(QColor("#ffc35a"))
-    painter.setPen(QPen(QColor("#132238"), 1.1))
-    painter.drawEllipse(QPointF(16, 16), 3.4, 3.4)
+    painter.setPen(QPen(ink, 1.1))
+    painter.drawEllipse(center, 3.4, 3.4)
 
 
 def _paint_hand(painter: QPainter, closed: bool) -> None:
@@ -73,20 +87,19 @@ def project_cursor(kind: str) -> QCursor:
     painter.setRenderHint(QPainter.Antialiasing, True)
 
     if kind in {"resize_h", "guide_v"}:
-        _paint_resize_line(painter, QPointF(6, 16), QPointF(26, 16))
+        _paint_resize_line(painter, QPointF(5, 16), QPointF(27, 16))
     elif kind in {"resize_v", "guide_h"}:
-        _paint_resize_line(painter, QPointF(16, 6), QPointF(16, 26))
+        _paint_resize_line(painter, QPointF(16, 5), QPointF(16, 27))
     elif kind == "resize_fdiag":
-        _paint_resize_line(painter, QPointF(8, 8), QPointF(24, 24))
+        _paint_resize_line(painter, QPointF(7, 7), QPointF(25, 25))
     elif kind == "resize_bdiag":
-        _paint_resize_line(painter, QPointF(24, 8), QPointF(8, 24))
+        _paint_resize_line(painter, QPointF(25, 7), QPointF(7, 25))
     elif kind == "move":
+        ink = QColor("#145f8f")
         for tip, tail in ((QPointF(16, 5), QPointF(16, 15)), (QPointF(27, 16), QPointF(17, 16)), (QPointF(16, 27), QPointF(16, 17)), (QPointF(5, 16), QPointF(15, 16))):
-            painter.setPen(QPen(QColor("#ffffff"), 3.8, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
-            painter.drawLine(tail, tip)
-            painter.setPen(QPen(QColor("#132238"), 1.8, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
-            painter.drawLine(tail, tip)
-            painter.setBrush(QColor("#132238"))
+            _paint_stroked_line(painter, tail, tip, ink)
+            painter.setBrush(ink)
+            painter.setPen(Qt.PenStyle.NoPen)
             _arrow_head(painter, tip, tail, 4.8)
         painter.setBrush(QColor("#ffc35a"))
         painter.setPen(QPen(QColor("#132238"), 1.0))
