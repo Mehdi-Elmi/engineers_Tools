@@ -6,10 +6,10 @@ import base64
 import json
 from pathlib import Path
 
-from PySide6.QtCore import QBuffer, QByteArray, QIODevice, QMarginsF, QPoint, QPointF, QRect, QRectF, QSizeF, Qt
+from PySide6.QtCore import QBuffer, QByteArray, QIODevice, QMarginsF, QPointF, QRectF, QSizeF, Qt
 from PySide6.QtGui import QColor, QImage, QPainter, QPageLayout, QPageSize, QPdfWriter, QPen, QPixmap
 
-PATCH_VERSION = "engineering-file-export-project-fixes-2026-06-30-b"
+PATCH_VERSION = "engineering-file-export-project-fixes-2026-06-30-c"
 PROJECT_SUFFIXES = {".etools", ".etool"}
 
 
@@ -26,15 +26,19 @@ def _rect_from_list(values: object) -> QRectF:
     return QRectF(80.0, 80.0, 240.0, 160.0)
 
 
-def _pixmap_to_base64(pixmap: QPixmap) -> str:
-    if pixmap.isNull():
-        return ""
+def _png_base64_from_image(image: QImage) -> str:
     data = QByteArray()
     buffer = QBuffer(data)
     buffer.open(QIODevice.OpenModeFlag.WriteOnly)
-    pixmap.save(buffer, "PNG")
+    image.save(buffer, "PNG")
     buffer.close()
     return bytes(data.toBase64()).decode("ascii")
+
+
+def _pixmap_to_base64(pixmap: QPixmap) -> str:
+    if pixmap.isNull():
+        return ""
+    return _png_base64_from_image(pixmap.toImage())
 
 
 def _pixmap_from_base64(value: object) -> QPixmap:
@@ -42,6 +46,17 @@ def _pixmap_from_base64(value: object) -> QPixmap:
     if isinstance(value, str) and value:
         pixmap.loadFromData(QByteArray.fromBase64(value.encode("ascii")), "PNG")
     return pixmap
+
+
+def _white_to_transparent_image(pixmap: QPixmap, threshold: int = 248) -> QImage:
+    image = pixmap.toImage().convertToFormat(QImage.Format.Format_ARGB32)
+    for y in range(image.height()):
+        for x in range(image.width()):
+            color = image.pixelColor(x, y)
+            if color.red() >= threshold and color.green() >= threshold and color.blue() >= threshold:
+                color.setAlpha(0)
+                image.setPixelColor(x, y, color)
+    return image
 
 
 def _object_to_data(obj) -> dict[str, object]:
@@ -121,12 +136,56 @@ def _placed_target(printable: QRectF, source: QRectF, placement: str) -> QRectF:
     return QRectF(x, y, width, height)
 
 
+def _draw_source_grid(painter: QPainter, source: QRectF) -> None:
+    spacing = 24.0
+    painter.save()
+    painter.setPen(QPen(QColor(70, 96, 130, 46), 1.0))
+    x = source.left() - (source.left() % spacing)
+    while x <= source.right():
+        painter.drawLine(QPointF(x, source.top()), QPointF(x, source.bottom()))
+        x += spacing
+    y = source.top() - (source.top() % spacing)
+    while y <= source.bottom():
+        painter.drawLine(QPointF(source.left(), y), QPointF(source.right(), y))
+        y += spacing
+    painter.restore()
+
+
+def _draw_export_object(painter: QPainter, obj, remove_white: bool) -> None:
+    rect = QRectF(getattr(obj, "rect", QRectF()))
+    painter.save()
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+    painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, True)
+    painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
+    painter.translate(rect.center())
+    painter.rotate(float(getattr(obj, "rotation", 0.0)))
+    local = QRectF(-rect.width() / 2, -rect.height() / 2, rect.width(), rect.height())
+    pixmap = getattr(obj, "pixmap", QPixmap())
+    if isinstance(pixmap, QPixmap) and not pixmap.isNull():
+        if remove_white:
+            painter.drawImage(local, _white_to_transparent_image(pixmap), QRectF(pixmap.rect()))
+        else:
+            painter.setPen(QPen(QColor("#d6e2f0"), 1.2))
+            painter.setBrush(QColor("#ffffff"))
+            painter.drawRect(local)
+            painter.drawPixmap(local, pixmap, QRectF(pixmap.rect()))
+    else:
+        if not remove_white:
+            painter.setPen(QPen(QColor("#d6e2f0"), 1.2))
+            painter.setBrush(QColor("#ffffff"))
+            painter.drawRect(local)
+        painter.setPen(QPen(QColor("#465d78"), 1.2))
+        painter.drawText(local.adjusted(10, 10, -10, -10), Qt.AlignmentFlag.AlignCenter, getattr(obj, "path", Path("Object")).name)
+    painter.restore()
+
+
 def _draw_export(canvas, painter: QPainter, target: QRectF, options: dict[str, object]) -> None:
     painter.save()
     painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
     painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, True)
     painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
-    if not options.get("remove_white_background", False):
+    remove_white = bool(options.get("remove_white_background", False))
+    if not remove_white:
         painter.fillRect(target, QColor("#ffffff"))
     objects = _visible_objects(canvas)
     source = _content_bounds(canvas, objects)
@@ -138,10 +197,9 @@ def _draw_export(canvas, painter: QPainter, target: QRectF, options: dict[str, o
     painter.scale(scale, scale)
     painter.translate(-source.topLeft())
     if options.get("save_grid", False):
-        canvas.render(painter, QPoint(0, 0), QRect(0, 0, canvas.width(), canvas.height()))
-    else:
-        for obj in objects:
-            canvas._paint_object(painter, obj)
+        _draw_source_grid(painter, source)
+    for obj in objects:
+        _draw_export_object(painter, obj, remove_white)
     painter.restore()
 
 
@@ -175,34 +233,77 @@ def _save_pdf(workspace, path: Path) -> bool:
     return True
 
 
+def _svg_escape(value: object) -> str:
+    return str(value).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+
+
+def _build_svg(workspace) -> str:
+    canvas = getattr(workspace, "_canvas", None)
+    if canvas is None:
+        return '<svg xmlns="http://www.w3.org/2000/svg"/>'
+    width_mm, height_mm = _page_size_mm(canvas)
+    options = getattr(workspace, "_save_options", {}) or {}
+    remove_white = bool(options.get("remove_white_background", False))
+    objects = _visible_objects(canvas)
+    source = _content_bounds(canvas, objects)
+    printable = QRectF(0, 0, width_mm, height_mm).adjusted(2, 2, -2, -2)
+    placed = _placed_target(printable, source, str(getattr(canvas, "_page_setup_position", None) or "Center"))
+    scale = placed.width() / max(1.0, source.width())
+    parts = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{width_mm:.3f}mm" height="{height_mm:.3f}mm" viewBox="0 0 {width_mm:.3f} {height_mm:.3f}">']
+    if not remove_white:
+        parts.append(f'<rect x="0" y="0" width="{width_mm:.3f}" height="{height_mm:.3f}" fill="white"/>')
+    if options.get("save_grid", False):
+        grid = []
+        x = 0.0
+        while x <= width_mm + 0.001:
+            grid.append(f'<line x1="{x:.3f}" y1="0" x2="{x:.3f}" y2="{height_mm:.3f}" stroke="#d8e3ef" stroke-width="0.15"/>')
+            x += 10.0
+        y = 0.0
+        while y <= height_mm + 0.001:
+            grid.append(f'<line x1="0" y1="{y:.3f}" x2="{width_mm:.3f}" y2="{y:.3f}" stroke="#d8e3ef" stroke-width="0.15"/>')
+            y += 10.0
+        parts.extend(grid)
+    for obj in objects:
+        rect = QRectF(getattr(obj, "rect", QRectF()))
+        x = placed.left() + (rect.left() - source.left()) * scale
+        y = placed.top() + (rect.top() - source.top()) * scale
+        width = rect.width() * scale
+        height = rect.height() * scale
+        cx = x + width / 2.0
+        cy = y + height / 2.0
+        angle = float(getattr(obj, "rotation", 0.0))
+        parts.append(f'<g transform="rotate({angle:.6f} {cx:.6f} {cy:.6f})">')
+        pixmap = getattr(obj, "pixmap", QPixmap())
+        if isinstance(pixmap, QPixmap) and not pixmap.isNull():
+            image = _white_to_transparent_image(pixmap) if remove_white else pixmap.toImage()
+            encoded = _png_base64_from_image(image)
+            if not remove_white:
+                parts.append(f'<rect x="{x:.6f}" y="{y:.6f}" width="{width:.6f}" height="{height:.6f}" fill="white" stroke="#d6e2f0" stroke-width="0.2"/>')
+            parts.append(f'<image x="{x:.6f}" y="{y:.6f}" width="{width:.6f}" height="{height:.6f}" href="data:image/png;base64,{encoded}" preserveAspectRatio="none"/>')
+        else:
+            if not remove_white:
+                parts.append(f'<rect x="{x:.6f}" y="{y:.6f}" width="{width:.6f}" height="{height:.6f}" fill="white" stroke="#465d78" stroke-width="0.35"/>')
+            parts.append(f'<text x="{cx:.6f}" y="{cy:.6f}" text-anchor="middle" dominant-baseline="middle" font-size="4" fill="#132238">{_svg_escape(getattr(obj, "name", "Object"))}</text>')
+        parts.append("</g>")
+    parts.append("</svg>\n")
+    return "".join(parts)
+
+
 def apply_file_export_project_fixes() -> None:
     from . import workspace as edw
+    from . import cursor_unification_fixes as cursors
     from src.engineers_tools.app.project_file_dialog import ProjectFileDialog
 
     if getattr(edw.EngineeringDesignWorkspace, "_engineering_file_export_project_patch", "") == PATCH_VERSION:
         return
 
     original_write_document = edw.EngineeringDesignWorkspace._write_document
+    original_mouse_press = edw.EngineeringCanvas.mousePressEvent
+    original_mouse_move = edw.EngineeringCanvas.mouseMoveEvent
+    original_mouse_release = edw.EngineeringCanvas.mouseReleaseEvent
 
     def paint_object(self, painter: QPainter, obj) -> None:
-        painter.save()
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-        painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, True)
-        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
-        rect = obj.rect
-        painter.translate(rect.center())
-        painter.rotate(float(getattr(obj, "rotation", 0.0)))
-        local = QRectF(-rect.width() / 2, -rect.height() / 2, rect.width(), rect.height())
-        painter.setPen(QPen(QColor("#d6e2f0"), 1.2))
-        painter.setBrush(QColor("#ffffff"))
-        painter.drawRect(local)
-        pixmap = getattr(obj, "pixmap", QPixmap())
-        if isinstance(pixmap, QPixmap) and not pixmap.isNull():
-            painter.drawPixmap(local, pixmap, QRectF(pixmap.rect()))
-        else:
-            painter.setPen(QPen(QColor("#465d78"), 1.2))
-            painter.drawText(local.adjusted(10, 10, -10, -10), Qt.AlignmentFlag.AlignCenter, obj.path.name)
-        painter.restore()
+        _draw_export_object(painter, obj, False)
 
     def save_project(self, path: Path) -> None:
         canvas = getattr(self, "_canvas", None)
@@ -286,10 +387,40 @@ def apply_file_export_project_fixes() -> None:
             return
         elif suffix == ".pdf" and _save_pdf(self, path):
             return
+        elif suffix == ".svg":
+            path.write_text(_build_svg(self), encoding="utf-8")
         else:
             original_write_document(self, path)
 
+    def set_rotate_cursor(canvas) -> None:
+        canvas.setCursor(cursors.project_cursor("hand_closed"))
+
+    def mouse_press(self, event) -> None:
+        original_mouse_press(self, event)
+        if getattr(self, "_drag_action", None) == "rotate":
+            set_rotate_cursor(self)
+
+    def mouse_move(self, event) -> None:
+        original_mouse_move(self, event)
+        if getattr(self, "_drag_action", None) == "rotate":
+            set_rotate_cursor(self)
+            return
+        point = self._to_canvas_point(event.position()) if hasattr(self, "_to_canvas_point") else event.position()
+        _index, hover = self._hit_test_object(point) if hasattr(self, "_hit_test_object") else (None, None)
+        if hover == "rotate":
+            self.setCursor(cursors.project_cursor("hand_open"))
+
+    def mouse_release(self, event) -> None:
+        original_mouse_release(self, event)
+        point = self._to_canvas_point(event.position()) if hasattr(self, "_to_canvas_point") else event.position()
+        _index, hover = self._hit_test_object(point) if hasattr(self, "_hit_test_object") else (None, None)
+        if hover == "rotate":
+            self.setCursor(cursors.project_cursor("hand_open"))
+
     edw.EngineeringCanvas._paint_object = paint_object
+    edw.EngineeringCanvas.mousePressEvent = mouse_press
+    edw.EngineeringCanvas.mouseMoveEvent = mouse_move
+    edw.EngineeringCanvas.mouseReleaseEvent = mouse_release
     edw.EngineeringDesignWorkspace._open_file = open_file
     edw.EngineeringDesignWorkspace._import_file = import_file
     edw.EngineeringDesignWorkspace._write_document = write_document
