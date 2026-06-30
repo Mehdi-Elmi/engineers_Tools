@@ -9,6 +9,7 @@ from .current_interaction_cleanup_fixes import apply_current_interaction_cleanup
 from .cursor_unification_fixes import apply_cursor_unification_fixes
 from .file_export_project_fixes import apply_file_export_project_fixes
 from .final_interaction_policy_fixes import apply_final_interaction_policy_fixes
+from .final_ui_repair_fixes import apply_final_ui_repair_fixes
 from .fixed_workspace_dimension_fixes import apply_fixed_workspace_dimension_fixes
 from .interaction_fixes import apply_interaction_fixes
 from .ruler_precision_fixes import apply_ruler_precision_fixes
@@ -29,4 +30,5 @@ def create_window(module: LauncherModule) -> ModuleWindow:
     apply_final_interaction_policy_fixes()
     apply_current_interaction_cleanup_fixes()
     apply_file_export_project_fixes()
+    apply_final_ui_repair_fixes()
     return EngineeringDesignWorkspace(module)
