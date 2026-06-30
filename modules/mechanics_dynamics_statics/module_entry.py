@@ -6,9 +6,11 @@ from src.engineers_tools.app.module_window import ModuleWindow
 from src.engineers_tools.app.modules import LauncherModule
 
 from .current_interaction_cleanup_fixes import apply_current_interaction_cleanup_fixes
+from .cursor_stability_final_patch import apply_cursor_stability_final_patch
 from .cursor_unification_fixes import apply_cursor_unification_fixes
 from .file_export_project_fixes import apply_file_export_project_fixes
 from .file_properties_general_patch import apply_file_properties_general_patch
+from .file_properties_view_final_patch import apply_file_properties_view_final_patch
 from .final_interaction_policy_fixes import apply_final_interaction_policy_fixes
 from .final_ui_repair_fixes import apply_final_ui_repair_fixes
 from .fixed_workspace_dimension_fixes import apply_fixed_workspace_dimension_fixes
@@ -19,6 +21,7 @@ from .ruler_precision_fixes import apply_ruler_precision_fixes
 from .ruler_unit_origin_final_patch import apply_ruler_unit_origin_final_patch
 from .startbar_cursor_fixes import apply_startbar_cursor_fixes
 from .svg_cursor_assets_activation_patch import apply_svg_cursor_assets_activation_patch
+from .text_toolbar_toggle_patch import apply_text_toolbar_toggle_patch
 from .ui_refinement_fixes import apply_ui_refinement_fixes
 from .unit_grid_properties_final_patch import apply_unit_grid_properties_final_patch
 from .window_resize_fixes import apply_window_resize_fixes
@@ -45,4 +48,7 @@ def create_window(module: LauncherModule) -> ModuleWindow:
     apply_windows_cursor_ruler_patch()
     apply_ruler_unit_origin_final_patch()
     apply_svg_cursor_assets_activation_patch()
+    apply_text_toolbar_toggle_patch()
+    apply_file_properties_view_final_patch()
+    apply_cursor_stability_final_patch()
     return EngineeringDesignWorkspace(module)
