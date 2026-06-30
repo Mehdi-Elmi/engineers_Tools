@@ -9,10 +9,10 @@ from __future__ import annotations
 
 import math
 
-from PySide6.QtCore import QPointF, Qt
+from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import QColor, QCursor, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap, QPolygonF
 
-PATCH_VERSION = "engineering-cursor-unification-2026-06-30-a"
+PATCH_VERSION = "engineering-cursor-unification-2026-06-30-b"
 
 
 def _arrow_head(painter: QPainter, tip: QPointF, tail: QPointF, size: float = 5.2) -> None:
@@ -48,17 +48,17 @@ def _paint_hand(painter: QPainter, closed: bool) -> None:
     fill.setColorAt(1.0, QColor("#78b8ff" if closed else "#8dc1ff"))
     path = QPainterPath()
     if closed:
-        path.addRoundedRect(8, 11, 17, 15, 6, 6)
-        path.addRoundedRect(9, 7, 4, 9, 2, 2)
-        path.addRoundedRect(13, 6, 4, 10, 2, 2)
-        path.addRoundedRect(17, 7, 4, 9, 2, 2)
-        path.addRoundedRect(21, 10, 4, 8, 2, 2)
+        path.addRoundedRect(QRectF(8, 11, 17, 15), 6, 6)
+        path.addRoundedRect(QRectF(9, 7, 4, 9), 2, 2)
+        path.addRoundedRect(QRectF(13, 6, 4, 10), 2, 2)
+        path.addRoundedRect(QRectF(17, 7, 4, 9), 2, 2)
+        path.addRoundedRect(QRectF(21, 10, 4, 8), 2, 2)
     else:
-        path.addRoundedRect(8, 12, 15, 15, 6, 6)
-        path.addRoundedRect(8, 5, 4, 13, 2, 2)
-        path.addRoundedRect(12, 4, 4, 14, 2, 2)
-        path.addRoundedRect(16, 5, 4, 13, 2, 2)
-        path.addRoundedRect(20, 8, 4, 11, 2, 2)
+        path.addRoundedRect(QRectF(8, 12, 15, 15), 6, 6)
+        path.addRoundedRect(QRectF(8, 5, 4, 13), 2, 2)
+        path.addRoundedRect(QRectF(12, 4, 4, 14), 2, 2)
+        path.addRoundedRect(QRectF(16, 5, 4, 13), 2, 2)
+        path.addRoundedRect(QRectF(20, 8, 4, 11), 2, 2)
     painter.fillPath(path, fill)
     painter.setPen(QPen(QColor("#ffffff"), 3.0, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
     painter.drawPath(path)
