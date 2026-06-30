@@ -1,9 +1,4 @@
-"""Strict fixed-page viewport behavior for Engineering Design Tools.
-
-This patch runs after the larger fixed-page rotation patch. It deliberately
-keeps the real engineering page at 400 x 220 mm while window resizing only
-changes the viewport fit.
-"""
+"""Strict fixed-page viewport behavior for Engineering Design Tools."""
 
 from __future__ import annotations
 
@@ -13,14 +8,12 @@ from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import QCursor
 
 
-VERSION = "fixed-viewport-v1"
+VERSION = "fixed-viewport-v2"
 WORKSPACE_SIZE_MM = (400.0, 220.0)
 EDGE_MARGIN = 30
 
 
-def _page_rect(canvas) -> QRectF:
-    """Return the fitted page rect inside the usable viewport, never a new page size."""
-    width_mm, height_mm = WORKSPACE_SIZE_MM
+def _usable_area(canvas) -> QRectF:
     ruler_left = 0
     ruler_top = 0
     try:
@@ -33,25 +26,63 @@ def _page_rect(canvas) -> QRectF:
     except Exception:
         ruler_left = 0
         ruler_top = 0
-
-    available = QRectF(
+    return QRectF(
         ruler_left + 6,
         ruler_top + 3,
         max(80.0, float(canvas.width() - ruler_left - 12)),
         max(80.0, float(canvas.height() - ruler_top - 8)),
     )
-    ratio = height_mm / width_mm
-    page_width = min(available.width(), available.height() / ratio)
+
+
+def _fit_page_in(area: QRectF) -> QRectF:
+    ratio = WORKSPACE_SIZE_MM[1] / WORKSPACE_SIZE_MM[0]
+    page_width = min(area.width(), area.height() / ratio)
     page_height = page_width * ratio
-    if page_height > available.height():
-        page_height = available.height()
+    if page_height > area.height():
+        page_height = area.height()
         page_width = page_height / ratio
     return QRectF(
-        available.center().x() - page_width / 2.0,
-        available.center().y() - page_height / 2.0,
+        area.center().x() - page_width / 2.0,
+        area.center().y() - page_height / 2.0,
         page_width,
         page_height,
     )
+
+
+def _baseline_size(canvas, candidate: QRectF) -> tuple[float, float]:
+    """Lock the approved page display size; never grow past it during resize."""
+    window = canvas.window()
+    is_maximized = bool(getattr(window, "_is_manually_maximized", False) or window.isMaximized())
+    baseline = getattr(canvas, "_fixed_viewport_page_px", None)
+    locked = bool(getattr(canvas, "_fixed_viewport_page_locked", False))
+
+    if baseline is None:
+        baseline = (candidate.width(), candidate.height())
+        canvas._fixed_viewport_page_px = baseline
+        canvas._fixed_viewport_page_locked = is_maximized
+        return baseline
+
+    if is_maximized and not locked:
+        baseline = (candidate.width(), candidate.height())
+        canvas._fixed_viewport_page_px = baseline
+        canvas._fixed_viewport_page_locked = True
+        return baseline
+
+    return float(baseline[0]), float(baseline[1])
+
+
+def _page_rect(canvas) -> QRectF:
+    """Return a fixed approved page rect; window resize changes viewport fit only."""
+    area = _usable_area(canvas)
+    candidate = _fit_page_in(area)
+    baseline_w, baseline_h = _baseline_size(canvas, candidate)
+
+    # If the viewport becomes smaller than the approved page display, scale down.
+    # If it becomes larger, keep the approved display size centered in the area.
+    scale = min(1.0, candidate.width() / max(1.0, baseline_w), candidate.height() / max(1.0, baseline_h))
+    width = max(1.0, baseline_w * scale)
+    height = max(1.0, baseline_h * scale)
+    return QRectF(area.center().x() - width / 2.0, area.center().y() - height / 2.0, width, height)
 
 
 def _unit_to_canvas_px(start_bar, value: float, unit: str, orientation: str = "top") -> float:
