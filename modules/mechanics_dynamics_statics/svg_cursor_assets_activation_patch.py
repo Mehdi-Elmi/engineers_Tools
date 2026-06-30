@@ -12,47 +12,18 @@ from pathlib import Path
 
 from PySide6.QtCore import QRectF, QSize, Qt
 from PySide6.QtGui import QCursor, QIcon, QPainter, QPixmap
-from PySide6.QtWidgets import (
-    QCheckBox,
-    QComboBox,
-    QDialog,
-    QDoubleSpinBox,
-    QFrame,
-    QGridLayout,
-    QHBoxLayout,
-    QLabel,
-    QMenu,
-    QPushButton,
-    QSizePolicy,
-    QSpinBox,
-    QVBoxLayout,
-    QWidget,
-)
+from PySide6.QtWidgets import QCheckBox, QComboBox, QDialog, QDoubleSpinBox, QFrame, QHBoxLayout, QLabel, QMenu, QPushButton, QSpinBox, QVBoxLayout, QWidget
 
-PATCH_VERSION = "engineering-svg-cursor-assets-2026-06-30-b"
-
-FONT_CHOICES = (
-    "Times New Roman",
-    "Arial",
-    "Cambria Math",
-    "Segoe UI Symbol",
-    "Symbol",
-    "Consolas",
-    "Cascadia Mono",
-    "Courier New",
-    "Calibri",
-    "B Nazanin",
-    "B Zar",
-    "B Homa",
-    "Tahoma",
-    "Microsoft Sans Serif",
-)
+PATCH_VERSION = "engineering-svg-cursor-assets-2026-06-30-c"
+FONT_CHOICES = ("Times New Roman",)
 
 _CURSOR_ASSET_MAP = {
-    "default": ("mouse_cursor.svg", 4, 4, 24),
-    "select": ("mouse_cursor.svg", 4, 4, 24),
-    "pointer": ("hand_pointer.svg", 10, 3, 22),
-    "hand_pointer": ("hand_pointer.svg", 10, 3, 22),
+    "default": ("mouse_cursor.svg", 3, 3, 24),
+    "select": ("mouse_cursor.svg", 3, 3, 24),
+    "pointer": ("mouse_cursor.svg", 3, 3, 24),
+    "hand_pointer": ("mouse_cursor.svg", 3, 3, 24),
+    "pan_open": ("hand_open.svg", 12, 8, 24),
+    "pan_closed": ("hand_closed.svg", 12, 8, 24),
     "hand_open": ("hand_open.svg", 12, 8, 24),
     "hand_closed": ("hand_closed.svg", 12, 8, 24),
     "rotate": ("rotate_cursor.svg", 12, 12, 24),
@@ -76,7 +47,7 @@ _CURSOR_ASSET_MAP = {
     "resize_bdiag": ("corner_resize_b.svg", 12, 12, 24),
     "guide_h": ("resize_vertical.svg", 12, 12, 24),
     "guide_v": ("resize_horizontal.svg", 12, 12, 24),
-    "origin": ("mouse_cursor.svg", 4, 4, 24),
+    "origin": ("mouse_cursor.svg", 3, 3, 24),
     "zoom": ("zoom.svg", 12, 12, 24),
     "zoom_in": ("zoom_in.svg", 12, 12, 24),
     "zoom_out": ("zoom_out.svg", 12, 12, 24),
@@ -86,8 +57,10 @@ _CURSOR_ASSET_MAP = {
 _FALLBACKS = {
     "default": Qt.CursorShape.ArrowCursor,
     "select": Qt.CursorShape.ArrowCursor,
-    "pointer": Qt.CursorShape.PointingHandCursor,
-    "hand_pointer": Qt.CursorShape.PointingHandCursor,
+    "pointer": Qt.CursorShape.ArrowCursor,
+    "hand_pointer": Qt.CursorShape.ArrowCursor,
+    "pan_open": Qt.CursorShape.OpenHandCursor,
+    "pan_closed": Qt.CursorShape.ClosedHandCursor,
     "hand_open": Qt.CursorShape.OpenHandCursor,
     "hand_closed": Qt.CursorShape.ClosedHandCursor,
     "rotate": Qt.CursorShape.CrossCursor,
@@ -200,10 +173,8 @@ def asset_cursor(file_name: str, fallback: QCursor | Qt.CursorShape, hot_x: int 
 
 
 def project_cursor(kind: str) -> QCursor:
-    asset = _CURSOR_ASSET_MAP.get(kind) or _CURSOR_ASSET_MAP["default"]
-    file_name, hot_x, hot_y, max_side = asset
-    fallback = _FALLBACKS.get(kind, Qt.CursorShape.ArrowCursor)
-    return asset_cursor(file_name, fallback, hot_x, hot_y, max_side)
+    file_name, hot_x, hot_y, max_side = _CURSOR_ASSET_MAP.get(kind, _CURSOR_ASSET_MAP["default"])
+    return asset_cursor(file_name, _FALLBACKS.get(kind, Qt.CursorShape.ArrowCursor), hot_x, hot_y, max_side)
 
 
 def asset_icon(file_name: str) -> QIcon:
@@ -222,15 +193,35 @@ def _canvas_kind_from_hover(hover: str | None, drag_action: str | None = None) -
     return _HOVER_TO_KIND.get(str(hover), "default")
 
 
+def _set_cursor_kind(widget, kind: str) -> None:
+    if getattr(widget, "_svg_cursor_kind", None) == kind:
+        return
+    widget._svg_cursor_kind = kind
+    widget.setCursor(project_cursor(kind))
+
+
 def _set_canvas_hover_cursor(canvas, hover: str | None) -> None:
-    canvas.setCursor(project_cursor(_canvas_kind_from_hover(hover)))
+    _set_cursor_kind(canvas, _canvas_kind_from_hover(hover))
 
 
-def _install_startbar_pointer(start_bar) -> None:
-    pointer = project_cursor("hand_pointer")
+def _reset_canvas_interaction(canvas) -> None:
+    canvas._drag_action = None
+    canvas._selection_origin = None
+    canvas._selection_rect = None
+    canvas._drag_start_rects = {}
+    canvas._drag_start_rotations = {}
+    _set_cursor_kind(canvas, "default")
+    canvas.update()
+
+
+def _install_default_cursor_tree(widget) -> None:
+    cursor = project_cursor("default")
     try:
-        for button in getattr(start_bar, "_buttons", {}).values():
-            button.setCursor(pointer)
+        widget.setCursor(cursor)
+        widget._svg_cursor_kind = "default"
+        for child in widget.findChildren(QWidget):
+            child.setCursor(cursor)
+            child._svg_cursor_kind = "default"
     except Exception:
         return
 
@@ -239,9 +230,9 @@ def _style_spin(spin) -> None:
     up = _asset_url("spin_up.svg")
     down = _asset_url("spin_down.svg")
     spin.setStyleSheet(
-        "QDoubleSpinBox, QSpinBox {background:#fff9de; border:1px solid #b38621; border-radius:7px; color:#132238; font-size:10px; font-style:normal; font-weight:800; padding:1px 25px 1px 5px;}"
-        "QDoubleSpinBox::up-button, QSpinBox::up-button {width:22px; border:0; subcontrol-origin:border; subcontrol-position:top right; background:#fff1bf; border-top-right-radius:6px;}"
-        "QDoubleSpinBox::down-button, QSpinBox::down-button {width:22px; border:0; subcontrol-origin:border; subcontrol-position:bottom right; background:#fff1bf; border-bottom-right-radius:6px;}"
+        "QDoubleSpinBox, QSpinBox {background:#fff8d9; border:1px solid #b38621; border-radius:7px; color:#132238; font-size:10px; font-style:normal; font-weight:800; padding:1px 25px 1px 5px;}"
+        "QDoubleSpinBox::up-button, QSpinBox::up-button {width:22px; border:0; subcontrol-origin:border; subcontrol-position:top right; background:#ffe083; border-top-right-radius:6px;}"
+        "QDoubleSpinBox::down-button, QSpinBox::down-button {width:22px; border:0; subcontrol-origin:border; subcontrol-position:bottom right; background:#ffe083; border-bottom-right-radius:6px;}"
         f"QDoubleSpinBox::up-arrow, QSpinBox::up-arrow {{image:url({up}); width:16px; height:10px;}}"
         f"QDoubleSpinBox::down-arrow, QSpinBox::down-arrow {{image:url({down}); width:16px; height:10px;}}"
     )
@@ -252,7 +243,7 @@ def _icon_button(text: str, tooltip: str, width: int = 34) -> QPushButton:
     button.setObjectName("TextToolButton")
     button.setToolTip(tooltip)
     button.setFixedSize(width, 28)
-    button.setCursor(project_cursor("hand_pointer"))
+    button.setCursor(project_cursor("default"))
     font = button.font()
     font.setFamily("Times New Roman")
     font.setBold(True)
@@ -269,15 +260,15 @@ def _icon_button(text: str, tooltip: str, width: int = 34) -> QPushButton:
 
 def _show_symbol_menu(parent: QWidget, button: QPushButton) -> None:
     menu = QMenu(parent)
+    menu.setCursor(project_cursor("default"))
     menu.setStyleSheet("QMenu {background:#ffffff; border:1px solid #8fa2bb; border-radius:9px; padding:5px;} QMenu::item {padding:5px 18px; color:#132238;} QMenu::item:selected {background:#fff4cf;}")
-    greek = ("α", "β", "γ", "δ", "Δ", "θ", "λ", "μ", "π", "ρ", "σ", "Σ", "φ", "Ω")
-    operators = ("±", "×", "÷", "≈", "≠", "≤", "≥", "∞", "∂", "∇", "∫", "√")
-    greek_menu = menu.addMenu("Greek Symbols")
-    for symbol in greek:
-        greek_menu.addAction(symbol)
-    operator_menu = menu.addMenu("Math Operators")
-    for symbol in operators:
-        operator_menu.addAction(symbol)
+    for title, symbols in {
+        "Greek Symbols": ("α", "β", "γ", "δ", "Δ", "θ", "λ", "μ", "π", "ρ", "σ", "Σ", "φ", "Ω"),
+        "Math Operators": ("±", "×", "÷", "≈", "≠", "≤", "≥", "∞", "∂", "∇", "∫", "√"),
+    }.items():
+        sub = menu.addMenu(title)
+        for symbol in symbols:
+            sub.addAction(symbol)
     menu.exec(button.mapToGlobal(button.rect().bottomLeft()))
 
 
@@ -295,16 +286,15 @@ def _show_snap_popup(self, key: str) -> None:
         if self._popup is not None:
             self._popup.close()
 
-    enable_button = self._radio_button("Snap On", bool(self._snap_enabled), lambda checked=False: set_snap(True))
-    off_button = self._radio_button("Snap Off", not bool(self._snap_enabled), lambda checked=False: set_snap(False))
-    row.addWidget(enable_button)
-    row.addWidget(off_button)
+    row.addWidget(self._radio_button("Snap On", bool(self._snap_enabled), lambda checked=False: set_snap(True)))
+    row.addWidget(self._radio_button("Snap Off", not bool(self._snap_enabled), lambda checked=False: set_snap(False)))
     layout.addLayout(row)
+    _install_default_cursor_tree(popup)
     self._show_popup_near(key, popup)
 
 
 def _show_text_toolbar(self, key: str) -> None:
-    popup, layout = self._popup_base(760)
+    popup, layout = self._popup_base(520)
     row = QHBoxLayout()
     row.setContentsMargins(2, 2, 2, 2)
     row.setSpacing(6)
@@ -313,7 +303,7 @@ def _show_text_toolbar(self, key: str) -> None:
     font_combo.addItems(list(FONT_CHOICES))
     font_combo.setCurrentText("Times New Roman")
     font_combo.setToolTip("Font")
-    font_combo.setFixedSize(150, 28)
+    font_combo.setFixedSize(142, 28)
     font_combo.setStyleSheet("QComboBox {background:#ffffff; border:1px solid #9fb0c5; border-radius:8px; color:#132238; font-size:10px; font-style:italic; font-weight:800; padding:2px 7px;} QComboBox::drop-down {width:22px; border:0;} QComboBox::down-arrow {image:url(%s); width:14px; height:9px;}" % _asset_url("combo_down.svg"))
     row.addWidget(font_combo)
 
@@ -326,17 +316,17 @@ def _show_text_toolbar(self, key: str) -> None:
     _style_spin(size_spin)
     row.addWidget(size_spin)
 
-    for text, tooltip in (("B", "Bold"), ("I", "Italic"), ("•", "Bullet Library"), ("1.", "Numeric Library"), ("L", "Align Left"), ("C", "Align Center"), ("R", "Align Right"), ("J", "Justify"), ("↔", "Line and Paragraph Spacing"), ("LTR", "Left to Right"), ("RTL", "Right to Left")):
+    for text, tooltip in (("B", "Bold"), ("I", "Italic"), ("•", "Bullet Library"), ("1.", "Numeric Library"), ("L", "Align Left"), ("C", "Align Center"), ("R", "Align Right"), ("RTL", "Right To Left")):
         row.addWidget(_icon_button(text, tooltip, 42 if len(text) > 1 else 34))
 
     eq_button = _icon_button("Σ", "Math Equation and Symbols", 36)
     eq_button.clicked.connect(lambda checked=False, b=eq_button: _show_symbol_menu(self, b))
     row.addWidget(eq_button)
-
     layout.addLayout(row)
+    _install_default_cursor_tree(popup)
     self._show_popup_near(key, popup)
     self.tool_requested.emit("text")
-    self._set_host_status("Text tool: click once for a text point or drag to define a text box")
+    self._set_host_status("Text tool")
 
 
 def _patch_file_properties_general(epp, fpg) -> None:
@@ -346,13 +336,12 @@ def _patch_file_properties_general(epp, fpg) -> None:
     fpg._WaveSection.mousePressEvent = no_toggle
 
     def text_block(dialog, general: dict):
-        section = fpg._WaveSection("Text", dialog, collapsed=False, open_height=96)
+        section = fpg._WaveSection("Text", dialog, collapsed=False, open_height=92)
         dialog.text_font = QComboBox()
         dialog.text_font.addItems(list(FONT_CHOICES))
-        current = str(general.get("text_font", "Times New Roman"))
-        dialog.text_font.setCurrentText(current if current in FONT_CHOICES else "Times New Roman")
+        dialog.text_font.setCurrentText("Times New Roman")
         dialog.text_font.setObjectName("PropertiesCombo")
-        dialog.text_font.setFixedHeight(26)
+        dialog.text_font.setFixedHeight(25)
         dialog.text_font.setStyleSheet("QComboBox {background:#ffffff; border:1px solid #9fb0c5; border-radius:7px; color:#132238; font-size:10px; font-style:italic; font-weight:800; padding:1px 7px;} QComboBox::drop-down {width:22px; border:0;} QComboBox::down-arrow {image:url(%s); width:14px; height:9px;}" % _asset_url("combo_down.svg"))
         dialog.text_size = QSpinBox()
         dialog.text_size.setRange(1, 300)
@@ -365,7 +354,7 @@ def _patch_file_properties_general(epp, fpg) -> None:
         return section
 
     def snap_block(dialog, general: dict):
-        section = fpg._WaveSection("Snap", dialog, collapsed=False, open_height=70)
+        section = fpg._WaveSection("Snap", dialog, collapsed=False, open_height=66)
         current = bool(general.get("snap_enabled", False))
         dialog.snap_check.setChecked(current)
         button = fpg._choice_button("Snap On" if current else "Snap Off", current, lambda checked=False: None, width=104)
@@ -382,7 +371,7 @@ def _patch_file_properties_general(epp, fpg) -> None:
         return section
 
     def page_setup_block(dialog, _general: dict):
-        section = fpg._WaveSection("Page Setup", dialog, collapsed=False, open_height=58)
+        section = fpg._WaveSection("Page Setup", dialog, collapsed=False, open_height=56)
         label = QLabel("Defaults are edited from Page Setup.")
         label.setStyleSheet("QLabel {background:transparent; color:#5d6f85; font-size:10px; font-style:italic; font-weight:800; padding:1px 4px;}")
         section.add_body_widget(label)
@@ -400,15 +389,8 @@ def _patch_file_properties_general(epp, fpg) -> None:
         self.unit_combo.addItems(list(fpg.UNITS))
         self.unit_combo.setCurrentText(str(general.get("unit", "mm")) if str(general.get("unit", "mm")) in fpg.UNITS else "mm")
         self.unit_combo.hide()
-
-        self.grid_check = QCheckBox()
-        self.grid_check.setChecked(bool(general.get("grid_enabled", True)))
-        self.grid_check.hide()
-
-        self.snap_check = QCheckBox()
-        self.snap_check.setChecked(bool(general.get("snap_enabled", False)))
-        self.snap_check.hide()
-
+        self.grid_check = QCheckBox(); self.grid_check.setChecked(bool(general.get("grid_enabled", True))); self.grid_check.hide()
+        self.snap_check = QCheckBox(); self.snap_check.setChecked(bool(general.get("snap_enabled", False))); self.snap_check.hide()
         self.grid_spacing = QDoubleSpinBox()
         self.grid_spacing.setRange(0.000001, 1000000.0)
         self.grid_spacing.setDecimals(6)
@@ -423,7 +405,6 @@ def _patch_file_properties_general(epp, fpg) -> None:
             hidden_layout.addWidget(widget)
         hidden.hide()
         layout.addWidget(hidden)
-
         layout.addWidget(fpg._unit_block(self, general))
         layout.addWidget(fpg._grid_block(self, general))
         layout.addWidget(text_block(self, general))
@@ -463,6 +444,10 @@ def apply_svg_cursor_assets_activation_patch() -> None:
     original_canvas_press = edw.EngineeringCanvas.mousePressEvent
     original_canvas_move = edw.EngineeringCanvas.mouseMoveEvent
     original_canvas_release = edw.EngineeringCanvas.mouseReleaseEvent
+    original_delete_selected = edw.EngineeringCanvas._delete_selected_objects
+    original_restore_snapshot = edw.EngineeringCanvas._restore_snapshot
+    original_key_press = edw.EngineeringCanvas.keyPressEvent
+    original_workspace_init = edw.EngineeringDesignWorkspace.__init__
     original_startbar_init = sb.StartBar.__init__
     original_startbar_show = sb.StartBar.showEvent
     original_handle_tool_click = sb.StartBar._handle_tool_click
@@ -472,12 +457,15 @@ def apply_svg_cursor_assets_activation_patch() -> None:
     original_corner_init = sb._RulerCorner.__init__
 
     def set_from_event(canvas, event, drag_action: str | None = None) -> None:
+        if not getattr(canvas, "objects", None):
+            _set_cursor_kind(canvas, "default")
+            return
         try:
             point = canvas._to_canvas_point(event.position())
             _index, hover = canvas._hit_test_object(point)
-            canvas.setCursor(project_cursor(_canvas_kind_from_hover(hover, drag_action)))
+            _set_cursor_kind(canvas, _canvas_kind_from_hover(hover, drag_action))
         except Exception:
-            canvas.setCursor(project_cursor(_canvas_kind_from_hover(None, drag_action)))
+            _set_cursor_kind(canvas, _canvas_kind_from_hover(None, drag_action))
 
     def canvas_press(self, event) -> None:
         set_from_event(self, event)
@@ -485,26 +473,45 @@ def apply_svg_cursor_assets_activation_patch() -> None:
         set_from_event(self, event, getattr(self, "_drag_action", None))
 
     def canvas_move(self, event) -> None:
-        drag_action = getattr(self, "_drag_action", None)
-        if drag_action:
-            self.setCursor(project_cursor(_canvas_kind_from_hover(None, drag_action)))
         original_canvas_move(self, event)
-        drag_action = getattr(self, "_drag_action", None)
-        set_from_event(self, event, drag_action)
+        set_from_event(self, event, getattr(self, "_drag_action", None))
 
     def canvas_release(self, event) -> None:
         original_canvas_release(self, event)
         set_from_event(self, event)
 
+    def delete_selected(self) -> None:
+        original_delete_selected(self)
+        _reset_canvas_interaction(self)
+
+    def restore_snapshot(self, snapshot) -> None:
+        original_restore_snapshot(self, snapshot)
+        _reset_canvas_interaction(self)
+
+    def key_press(self, event) -> None:
+        if event.key() in {Qt.Key.Key_Delete, Qt.Key.Key_Backspace} and getattr(self, "selected_indices", None):
+            self._push_undo()
+            self._delete_selected_objects()
+            event.accept()
+            return
+        original_key_press(self, event)
+
+    def workspace_init(self, module) -> None:
+        original_workspace_init(self, module)
+        _install_default_cursor_tree(self)
+        canvas = getattr(self, "_canvas", None)
+        if canvas is not None:
+            _set_cursor_kind(canvas, "default")
+
     def startbar_init(self, *args, **kwargs) -> None:
         original_startbar_init(self, *args, **kwargs)
-        _install_startbar_pointer(self)
+        _install_default_cursor_tree(self)
         if not hasattr(self, "_snap_enabled"):
             self._snap_enabled = False
 
     def startbar_show(self, event) -> None:
         original_startbar_show(self, event)
-        _install_startbar_pointer(self)
+        _install_default_cursor_tree(self)
 
     def handle_tool_click(self, key: str) -> None:
         if key == "snap":
@@ -521,18 +528,19 @@ def apply_svg_cursor_assets_activation_patch() -> None:
         if popup is not None:
             for spin in popup.findChildren(QDoubleSpinBox):
                 _style_spin(spin)
+            _install_default_cursor_tree(popup)
 
     def guide_init(self, orientation: str, position: float, parent, start_bar=None, persistent: bool = True) -> None:
         original_guide_init(self, orientation, position, parent, start_bar, persistent)
-        self.setCursor(project_cursor("guide_h" if orientation == "horizontal" else "guide_v"))
+        _set_cursor_kind(self, "guide_h" if orientation == "horizontal" else "guide_v")
 
     def overlay_init(self, start_bar, orientation: str, parent) -> None:
         original_overlay_init(self, start_bar, orientation, parent)
-        self.setCursor(project_cursor("guide_h" if orientation == "top" else "guide_v"))
+        _set_cursor_kind(self, "guide_h" if orientation == "top" else "guide_v")
 
     def corner_init(self, start_bar, parent) -> None:
         original_corner_init(self, start_bar, parent)
-        self.setCursor(project_cursor("origin"))
+        _set_cursor_kind(self, "origin")
 
     def layer_button(self, kind: str, active: bool, tooltip: str, callback) -> QPushButton:
         button = QPushButton()
@@ -541,22 +549,19 @@ def apply_svg_cursor_assets_activation_patch() -> None:
         button.setFixedSize(26, 24)
         button.setIcon(edw._layer_icon(kind, active))
         button.setIconSize(QSize(23, 23))
-        button.setCursor(project_cursor("hand_pointer"))
+        button.setCursor(project_cursor("default"))
         button.setAutoDefault(False)
         button.setDefault(False)
-
-        def run_callback(checked: bool = False) -> None:
-            callback()
-            setter = getattr(self, "_set_status", None)
-            if callable(setter):
-                setter(f"Layer {tooltip}")
-
-        button.clicked.connect(run_callback)
+        button.clicked.connect(lambda checked=False: callback())
         return button
 
     edw.EngineeringCanvas.mousePressEvent = canvas_press
     edw.EngineeringCanvas.mouseMoveEvent = canvas_move
     edw.EngineeringCanvas.mouseReleaseEvent = canvas_release
+    edw.EngineeringCanvas._delete_selected_objects = delete_selected
+    edw.EngineeringCanvas._restore_snapshot = restore_snapshot
+    edw.EngineeringCanvas.keyPressEvent = key_press
+    edw.EngineeringDesignWorkspace.__init__ = workspace_init
     sb.StartBar.__init__ = startbar_init
     sb.StartBar.showEvent = startbar_show
     sb.StartBar._handle_tool_click = handle_tool_click
