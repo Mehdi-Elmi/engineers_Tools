@@ -8,6 +8,7 @@ from src.engineers_tools.app.modules import LauncherModule
 from .current_interaction_cleanup_fixes import apply_current_interaction_cleanup_fixes
 from .cursor_unification_fixes import apply_cursor_unification_fixes
 from .file_export_project_fixes import apply_file_export_project_fixes
+from .file_properties_general_patch import apply_file_properties_general_patch
 from .final_interaction_policy_fixes import apply_final_interaction_policy_fixes
 from .final_ui_repair_fixes import apply_final_ui_repair_fixes
 from .fixed_workspace_dimension_fixes import apply_fixed_workspace_dimension_fixes
@@ -37,4 +38,5 @@ def create_window(module: LauncherModule) -> ModuleWindow:
     apply_page_setup_properties_hotfix()
     apply_unit_grid_properties_final_patch()
     apply_properties_grid_cleanup_patch()
+    apply_file_properties_general_patch()
     return EngineeringDesignWorkspace(module)
