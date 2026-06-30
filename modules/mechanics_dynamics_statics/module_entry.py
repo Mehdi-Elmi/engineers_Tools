@@ -11,6 +11,7 @@ from .cursor_unification_fixes import apply_cursor_unification_fixes
 from .file_export_project_fixes import apply_file_export_project_fixes
 from .file_properties_general_patch import apply_file_properties_general_patch
 from .file_properties_view_final_patch import apply_file_properties_view_final_patch
+from .final_cursor_properties_textbar_patch import apply_final_cursor_properties_textbar_patch
 from .final_interaction_policy_fixes import apply_final_interaction_policy_fixes
 from .final_ui_repair_fixes import apply_final_ui_repair_fixes
 from .fixed_workspace_dimension_fixes import apply_fixed_workspace_dimension_fixes
@@ -53,4 +54,5 @@ def create_window(module: LauncherModule) -> ModuleWindow:
     apply_file_properties_view_final_patch()
     apply_cursor_stability_final_patch()
     apply_view_textbar_menu_patch()
+    apply_final_cursor_properties_textbar_patch()
     return EngineeringDesignWorkspace(module)
