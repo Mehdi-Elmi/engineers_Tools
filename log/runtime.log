@@ -1,47 +1,39 @@
-2026-06-30 19:33:54,152 | INFO | root | Runtime log started.
-2026-06-30 19:33:54,152 | INFO | root | Runtime log path: C:\Users\ATLAS\AppData\Local\EngineerTools\logs\runtime.log
-2026-06-30 19:33:54,152 | INFO | root | Engineer Tools startup requested.
-2026-06-30 19:33:54,153 | INFO | root | Python executable: C:\Users\ATLAS\AppData\Local\EngineerTools\.venv\Scripts\pythonw.exe
-2026-06-30 19:33:54,153 | INFO | root | Python argv: ['C:\\Users\\ATLAS\\AppData\\Local\\EngineerTools\\src\\engineers_tools\\main.py']
-2026-06-30 19:33:55,023 | INFO | root | interaction_ui_patch: shared icon and control patches installed
-2026-06-30 19:33:55,077 | INFO | root | interaction_ui_patch: engineering workspace patches installed
-2026-06-30 19:33:55,077 | INFO | root | engineering_export_patch: installed
-2026-06-30 19:33:55,077 | INFO | root | engineering_workspace_finalize_patch: installed
-2026-06-30 19:33:55,078 | INFO | root | engineering_zoom_print_patch: installed
-2026-06-30 19:33:55,078 | INFO | root | engineering_print_setup_hotfix: shared yellow arrow styles installed
-2026-06-30 19:33:55,078 | INFO | root | engineering_print_setup_hotfix: installed version=direct-print-14
-2026-06-30 19:33:55,078 | INFO | root | engineering_print_setup_final_patch: installed version=direct-print-final-2
-2026-06-30 19:33:55,078 | INFO | root | engineering_properties_patch: print setup Apply button disabled
-2026-06-30 19:33:55,078 | INFO | root | engineering_properties_patch: installed version=properties-settings-1
-2026-06-30 19:33:55,079 | INFO | root | engineering_ui_small_fixes_patch: unified grid/render pipeline installed version=ui-small-fixes-4
-2026-06-30 19:33:55,079 | INFO | root | engineering_ui_small_fixes_patch: compact cursor and startbar pointer installed version=ui-small-fixes-4
-2026-06-30 19:33:55,079 | INFO | root | engineering_ui_small_fixes_patch: layer icons installed version=ui-small-fixes-4
-2026-06-30 19:33:55,079 | INFO | root | engineering_ui_small_fixes_patch: empty right properties panel installed version=ui-small-fixes-4
-2026-06-30 19:33:55,079 | INFO | root | engineering_ui_small_fixes_patch: installed version=ui-small-fixes-4
-2026-06-30 19:33:55,079 | INFO | root | engineering_window_geometry_patch: installed version=window-geometry-2
-2026-06-30 19:33:55,080 | INFO | root | engineering_fixed_page_rotation_patch: installed version=fixed-page-resize-rotation-2
-2026-06-30 19:33:55,080 | INFO | root | engineering_fixed_viewport_patch: installed version=fixed-viewport-v5
-2026-06-30 19:33:56,123 | INFO | root | Launcher shown.
-2026-06-30 19:33:59,407 | INFO | root | engineering_properties_patch: shortcuts installed count=17
-2026-06-30 19:33:59,419 | INFO | root | engineering_properties_patch: shortcuts installed count=17
-2026-06-30 19:33:59,420 | INFO | root | engineering_properties_patch: startup settings loaded path=C:\Users\ATLAS\AppData\Local\EngineerTools\settings\engineer_tools_properties.etprops
-2026-06-30 19:34:21,946 | CRITICAL | root | Uncaught exception
+2026-06-30 21:01:52,603 | INFO | root | Runtime log started.
+2026-06-30 21:01:52,603 | INFO | root | Runtime log path: C:\Users\ATLAS\AppData\Local\EngineerTools\logs\runtime.log
+2026-06-30 21:01:52,603 | INFO | root | Engineer Tools startup requested.
+2026-06-30 21:01:52,604 | INFO | root | Python executable: C:\Users\ATLAS\AppData\Local\EngineerTools\.venv\Scripts\pythonw.exe
+2026-06-30 21:01:52,604 | INFO | root | Python argv: ['C:\\Users\\ATLAS\\AppData\\Local\\EngineerTools\\src\\engineers_tools\\main.py']
+2026-06-30 21:01:53,463 | INFO | root | interaction_ui_patch: shared icon and control patches installed
+2026-06-30 21:01:53,515 | INFO | root | interaction_ui_patch: engineering workspace patches installed
+2026-06-30 21:01:53,516 | INFO | root | engineering_export_patch: installed
+2026-06-30 21:01:53,516 | INFO | root | engineering_workspace_finalize_patch: installed
+2026-06-30 21:01:53,516 | INFO | root | engineering_zoom_print_patch: installed
+2026-06-30 21:01:53,516 | INFO | root | engineering_print_setup_hotfix: shared yellow arrow styles installed
+2026-06-30 21:01:53,516 | INFO | root | engineering_print_setup_hotfix: installed version=direct-print-14
+2026-06-30 21:01:53,516 | INFO | root | engineering_print_setup_final_patch: installed version=direct-print-final-2
+2026-06-30 21:01:53,516 | INFO | root | engineering_properties_patch: print setup Apply button disabled
+2026-06-30 21:01:53,517 | INFO | root | engineering_properties_patch: installed version=properties-settings-1
+2026-06-30 21:01:53,517 | INFO | root | engineering_ui_small_fixes_patch: unified grid/render pipeline installed version=ui-small-fixes-4
+2026-06-30 21:01:53,517 | INFO | root | engineering_ui_small_fixes_patch: compact cursor and startbar pointer installed version=ui-small-fixes-4
+2026-06-30 21:01:53,517 | INFO | root | engineering_ui_small_fixes_patch: layer icons installed version=ui-small-fixes-4
+2026-06-30 21:01:53,517 | INFO | root | engineering_ui_small_fixes_patch: empty right properties panel installed version=ui-small-fixes-4
+2026-06-30 21:01:53,517 | INFO | root | engineering_ui_small_fixes_patch: installed version=ui-small-fixes-4
+2026-06-30 21:01:53,517 | INFO | root | engineering_window_geometry_patch: F8 shortcut registered
+2026-06-30 21:01:53,518 | INFO | root | engineering_window_geometry_patch: installed version=window-geometry-3
+2026-06-30 21:01:53,518 | INFO | root | engineering_fixed_page_rotation_patch: installed version=fixed-page-resize-rotation-2
+2026-06-30 21:01:53,518 | INFO | root | engineering_fixed_viewport_patch: installed version=fixed-viewport-v5
+2026-06-30 21:01:53,518 | INFO | root | engineering_last_mile_patch: installed version=last-mile-1
+2026-06-30 21:01:54,434 | INFO | root | Launcher shown.
+2026-06-30 21:01:57,806 | INFO | root | engineering_properties_patch: shortcuts installed count=18
+2026-06-30 21:01:57,816 | INFO | root | engineering_properties_patch: shortcuts installed count=18
+2026-06-30 21:01:57,817 | INFO | root | engineering_properties_patch: startup settings loaded path=C:\Users\ATLAS\AppData\Local\EngineerTools\settings\engineer_tools_properties.etprops
+
+[2026-06-30 21:04:47] ProjectFileDialog.refresh_files failed
 Traceback (most recent call last):
-  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\module_window.py", line 444, in run
-    handler()
-TypeError: 'dict' object is not callable
-2026-06-30 19:34:24,327 | CRITICAL | root | Uncaught exception
-Traceback (most recent call last):
-  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\module_window.py", line 444, in run
-    handler()
-TypeError: 'dict' object is not callable
-2026-06-30 19:34:24,519 | CRITICAL | root | Uncaught exception
-Traceback (most recent call last):
-  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\module_window.py", line 444, in run
-    handler()
-TypeError: 'dict' object is not callable
-2026-06-30 19:34:24,718 | CRITICAL | root | Uncaught exception
-Traceback (most recent call last):
-  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\module_window.py", line 444, in run
-    handler()
-TypeError: 'dict' object is not callable
+  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\project_file_dialog.py", line 471, in _refresh_files
+    children = sorted(self._current_dir.iterdir(), key=lambda item: (not item.is_dir(), item.name.lower()))
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ATLAS\AppData\Local\Programs\Python\Python311\Lib\pathlib.py", line 931, in iterdir
+    for name in os.listdir(self):
+                ^^^^^^^^^^^^^^^^
+PermissionError: [WinError 5] Access is denied: 'F:\\System Volume Information'
