@@ -6,6 +6,7 @@ from PySide6.QtCore import QObject, QEvent, QTimer, Qt
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
+    QDoubleSpinBox,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -17,7 +18,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-PATCH_VERSION = "engineering-final-cursor-properties-textbar-2026-06-30-a"
+PATCH_VERSION = "engineering-final-cursor-properties-textbar-2026-06-30-b"
 
 
 _SPECIAL_CURSOR_WIDGET_NAMES = {
@@ -45,10 +46,43 @@ class _EngineerCursorFilter(QObject):
         self._default_cursor = svg.project_cursor("default")
 
     def _belongs_to_workspace(self, widget: QWidget) -> bool:
+        current = widget
+        while current is not None:
+            if current is self._workspace:
+                return True
+            try:
+                current = current.parentWidget()
+            except Exception:
+                current = None
+        current_obj = widget
+        while current_obj is not None:
+            if current_obj is self._workspace:
+                return True
+            try:
+                current_obj = current_obj.parent()
+            except Exception:
+                current_obj = None
+        return False
+
+    def _style_control(self, widget: QWidget) -> None:
         try:
-            return widget is self._workspace or widget.window() is self._workspace
+            if isinstance(widget, (QSpinBox, QDoubleSpinBox)):
+                styler = getattr(self._svg, "_style_spin", None)
+                if callable(styler):
+                    styler(widget)
+                return
+            if isinstance(widget, QComboBox):
+                if widget.property("engineerComboArrowStyled"):
+                    return
+                arrow = self._svg._asset_url("combo_down.svg") if hasattr(self._svg, "_asset_url") else ""
+                widget.setStyleSheet(
+                    widget.styleSheet()
+                    + " QComboBox::drop-down {width:22px; border:0;}"
+                    + f" QComboBox::down-arrow {{image:url({arrow}); width:14px; height:9px;}}"
+                )
+                widget.setProperty("engineerComboArrowStyled", True)
         except Exception:
-            return False
+            return
 
     def _restore_default(self, widget: QWidget) -> None:
         if _is_special_cursor_widget(widget):
@@ -56,6 +90,7 @@ class _EngineerCursorFilter(QObject):
         try:
             widget.setCursor(self._default_cursor)
             widget._svg_cursor_kind = "default"
+            self._style_control(widget)
         except Exception:
             return
 
@@ -71,15 +106,6 @@ class _EngineerCursorFilter(QObject):
                 self._restore_default(obj)
                 QTimer.singleShot(0, lambda widget=obj: self._restore_default(widget))
         return False
-
-
-def _force_cursor_kind(svg, widget: QWidget, kind: str) -> None:
-    try:
-        widget._svg_cursor_kind = None
-        widget.setCursor(svg.project_cursor(kind))
-        widget._svg_cursor_kind = kind
-    except Exception:
-        return
 
 
 def _make_text_button(svg, text: str, width: int = 30) -> QPushButton:
@@ -125,6 +151,7 @@ def _install_cursor_filter(workspace, svg) -> None:
         if not _is_special_cursor_widget(child):
             child.setCursor(svg.project_cursor("default"))
             child._svg_cursor_kind = "default"
+            cursor_filter._style_control(child)
 
 
 def _wrap_properties_general_page(epp) -> None:
