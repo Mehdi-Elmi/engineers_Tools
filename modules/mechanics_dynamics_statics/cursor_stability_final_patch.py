@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from PySide6.QtCore import QRectF, Qt
 
-PATCH_VERSION = "engineering-cursor-stability-final-2026-06-30-c"
+PATCH_VERSION = "engineering-cursor-stability-final-2026-06-30-d"
 
 
 def _kind(hover: str | None, action: str | None = None) -> str:
@@ -30,29 +30,32 @@ def apply_cursor_stability_final_patch() -> None:
     if getattr(edw.EngineeringDesignWorkspace, "_engineering_cursor_stability_final_patch", "") == PATCH_VERSION:
         return
 
-    svg._CURSOR_ASSET_MAP.update(
-        {
-            "default": ("mouse_cursor.svg", 3, 3, 24),
-            "pointer": ("mouse_cursor.svg", 3, 3, 24),
-            "hand_pointer": ("mouse_cursor.svg", 3, 3, 24),
-            "move": ("move_cursor.svg", 12, 12, 24),
-            "rotate": ("rotate.svg", 12, 12, 24),
-            "rotate_drag": ("rotate.svg", 12, 12, 24),
-            "resize_h": ("resize_horizontal.svg", 12, 12, 24),
-            "resize_v": ("resize_vertical.svg", 12, 12, 24),
-            "resize_horizontal": ("resize_horizontal.svg", 12, 12, 24),
-            "resize_vertical": ("resize_vertical.svg", 12, 12, 24),
-            "resize_n": ("resize_vertical.svg", 12, 12, 24),
-            "resize_s": ("resize_vertical.svg", 12, 12, 24),
-            "resize_e": ("resize_horizontal.svg", 12, 12, 24),
-            "resize_w": ("resize_horizontal.svg", 12, 12, 24),
-            "resize_ne": ("corner_resize_b.svg", 12, 12, 24),
-            "resize_sw": ("corner_resize_b.svg", 12, 12, 24),
-            "resize_nw": ("corner_resize_a.svg", 12, 12, 24),
-            "resize_se": ("corner_resize_a.svg", 12, 12, 24),
-        }
-    )
-    svg._CURSOR_CACHE.clear()
+    def force_map() -> None:
+        svg._CURSOR_ASSET_MAP.update(
+            {
+                "default": ("mouse_cursor.svg", 3, 3, 24),
+                "pointer": ("mouse_cursor.svg", 3, 3, 24),
+                "hand_pointer": ("mouse_cursor.svg", 3, 3, 24),
+                "move": ("move_cursor.svg", 12, 12, 24),
+                "rotate": ("rotate.svg", 12, 12, 24),
+                "rotate_drag": ("rotate.svg", 12, 12, 24),
+                "resize_h": ("resize_horizontal.svg", 12, 12, 24),
+                "resize_v": ("resize_vertical.svg", 12, 12, 24),
+                "resize_horizontal": ("resize_horizontal.svg", 12, 12, 24),
+                "resize_vertical": ("resize_vertical.svg", 12, 12, 24),
+                "resize_n": ("resize_vertical.svg", 12, 12, 24),
+                "resize_s": ("resize_vertical.svg", 12, 12, 24),
+                "resize_e": ("resize_horizontal.svg", 12, 12, 24),
+                "resize_w": ("resize_horizontal.svg", 12, 12, 24),
+                "resize_ne": ("corner_resize_b.svg", 12, 12, 24),
+                "resize_sw": ("corner_resize_b.svg", 12, 12, 24),
+                "resize_nw": ("corner_resize_a.svg", 12, 12, 24),
+                "resize_se": ("corner_resize_a.svg", 12, 12, 24),
+            }
+        )
+        svg._CURSOR_CACHE.clear()
+
+    force_map()
 
     old_press = edw.EngineeringCanvas.mousePressEvent
     old_release = edw.EngineeringCanvas.mouseReleaseEvent
@@ -60,6 +63,7 @@ def apply_cursor_stability_final_patch() -> None:
     old_restore = edw.EngineeringCanvas._restore_snapshot
 
     def set_kind(canvas, kind: str) -> None:
+        force_map()
         setter = getattr(svg, "_set_cursor_kind", None)
         if callable(setter):
             setter(canvas, kind)
