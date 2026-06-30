@@ -18,6 +18,7 @@ from .properties_grid_cleanup_patch import apply_properties_grid_cleanup_patch
 from .ruler_precision_fixes import apply_ruler_precision_fixes
 from .ruler_unit_origin_final_patch import apply_ruler_unit_origin_final_patch
 from .startbar_cursor_fixes import apply_startbar_cursor_fixes
+from .svg_cursor_assets_activation_patch import apply_svg_cursor_assets_activation_patch
 from .ui_refinement_fixes import apply_ui_refinement_fixes
 from .unit_grid_properties_final_patch import apply_unit_grid_properties_final_patch
 from .window_resize_fixes import apply_window_resize_fixes
@@ -43,4 +44,5 @@ def create_window(module: LauncherModule) -> ModuleWindow:
     apply_file_properties_general_patch()
     apply_windows_cursor_ruler_patch()
     apply_ruler_unit_origin_final_patch()
+    apply_svg_cursor_assets_activation_patch()
     return EngineeringDesignWorkspace(module)
