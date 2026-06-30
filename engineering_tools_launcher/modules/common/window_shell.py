@@ -115,6 +115,8 @@ class BaseShell(tk.Tk):
         self.ox = 0.0
         self.oy = 0.0
         self.normal_geometry = ""
+        self.normal_size = (design_w, design_h)
+        self._enforcing_geometry = False
         self.is_maximized = False
         self.drag_offset = (0, 0)
         self.drag_active = False
@@ -123,6 +125,7 @@ class BaseShell(tk.Tk):
         self.controls: dict[str, tuple[float, float, float, float]] = {}
 
         self._center(design_w, design_h)
+        self.resizable(False, False)
         self._bind_events()
         self._prepare_assets()
         self._draw()
@@ -138,7 +141,7 @@ class BaseShell(tk.Tk):
 
     def _bind_events(self) -> None:
         self.bind("<Map>", self._restore_titleless)
-        self.bind("<Configure>", lambda event: self._draw() if event.widget is self else None)
+        self.bind("<Configure>", self._on_configure)
         self.canvas.bind("<ButtonPress-1>", self._down)
         self.canvas.bind("<B1-Motion>", self._drag)
         self.canvas.bind("<ButtonRelease-1>", self._up)
@@ -156,6 +159,24 @@ class BaseShell(tk.Tk):
         self.scale = max(0.82, min(self.scale, 1.18))
         self.ox = (width - self.design_w * self.scale) / 2
         self.oy = TITLE_H * (1.0 - self.scale)
+
+    def _on_configure(self, event: tk.Event) -> None:
+        if event.widget is not self:
+            return
+        if self._enforcing_geometry:
+            return
+        if not self.is_maximized:
+            target_w, target_h = self.normal_size
+            if event.width != target_w or event.height != target_h:
+                self._enforcing_geometry = True
+                self.geometry(f"{target_w}x{target_h}+{self.winfo_x()}+{self.winfo_y()}")
+                self.after_idle(self._clear_geometry_enforcement)
+                return
+        self._draw()
+
+    def _clear_geometry_enforcement(self) -> None:
+        self._enforcing_geometry = False
+        self._draw()
 
     def _x(self, value: float) -> float:
         return self.ox + value * self.scale
@@ -285,10 +306,14 @@ class BaseShell(tk.Tk):
             self.state("iconic")
         elif name == "max":
             if self.is_maximized:
+                self.resizable(True, True)
                 self.geometry(self.normal_geometry)
                 self.is_maximized = False
+                self.resizable(False, False)
             else:
                 self.normal_geometry = self.geometry()
+                self.normal_size = (self.winfo_width(), self.winfo_height())
+                self.resizable(True, True)
                 x, y, width, height = self._usable_screen_geometry()
                 self.geometry(f"{width}x{height}+{x}+{y}")
                 self.is_maximized = True
