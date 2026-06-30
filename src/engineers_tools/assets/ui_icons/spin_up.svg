@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 16" role="img" aria-label="Spin up arrow">
+  <defs>
+    <linearGradient id="ink" x1="4" y1="3" x2="20" y2="13" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0c2444"/>
+      <stop offset=".5" stop-color="#1769d1"/>
+      <stop offset="1" stop-color="#08182d"/>
+    </linearGradient>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx=".7" dy="1" stdDeviation=".6" flood-color="#000000" flood-opacity=".30"/>
+    </filter>
+  </defs>
+  <path d="M12 3 21 12h-5.4v1.2H8.4V12H3z" fill="url(#ink)" stroke="#ffffff" stroke-width="1.2" stroke-linejoin="round" filter="url(#shadow)"/>
+</svg>
