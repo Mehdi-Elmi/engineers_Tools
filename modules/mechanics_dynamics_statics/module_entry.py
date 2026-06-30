@@ -5,6 +5,7 @@ from __future__ import annotations
 from src.engineers_tools.app.module_window import ModuleWindow
 from src.engineers_tools.app.modules import LauncherModule
 
+from .current_interaction_cleanup_fixes import apply_current_interaction_cleanup_fixes
 from .cursor_unification_fixes import apply_cursor_unification_fixes
 from .final_interaction_policy_fixes import apply_final_interaction_policy_fixes
 from .fixed_workspace_dimension_fixes import apply_fixed_workspace_dimension_fixes
@@ -23,4 +24,5 @@ def create_window(module: LauncherModule) -> ModuleWindow:
     apply_fixed_workspace_dimension_fixes()
     apply_ruler_precision_fixes()
     apply_final_interaction_policy_fixes()
+    apply_current_interaction_cleanup_fixes()
     return EngineeringDesignWorkspace(module)
