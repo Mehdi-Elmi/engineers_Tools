@@ -1,15 +1,16 @@
 """Fixed engineering workspace dimensions for viewport resize.
 
 Window resize must not redefine the engineering page. The page remains
-400 x 220 engineering units and is fitted inside the visible canvas; grid and
-ruler conversions scale from that fitted page rectangle.
+400 x 220 engineering units and is fitted inside the visible canvas; the white
+page, grid, and ruler conversions scale from that fitted page rectangle.
 """
 
 from __future__ import annotations
 
-from PySide6.QtCore import QPointF, QRectF
+from PySide6.QtCore import QPointF, QRectF, Qt
+from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen
 
-PATCH_VERSION = "engineering-fixed-workspace-dimensions-2026-06-30-a"
+PATCH_VERSION = "engineering-fixed-workspace-dimensions-2026-06-30-b"
 WORKSPACE_SIZE = (400.0, 220.0)
 PAGE_MARGIN = 8.0
 
@@ -36,6 +37,58 @@ def _page_rect(canvas) -> QRectF:
     )
 
 
+def _install_page_grid(start_bar, canvas) -> None:
+    def paint_grid(canvas_self, painter: QPainter) -> None:
+        page = _page_rect(canvas_self)
+        painter.save()
+        painter.setRenderHint(QPainter.Antialiasing, True)
+        painter.fillRect(QRectF(0, 0, canvas_self.width(), canvas_self.height()), QColor("#edf3f8"))
+        page_path = QPainterPath()
+        page_path.addRoundedRect(page, 2.5, 2.5)
+        painter.fillPath(page_path, QColor("#ffffff"))
+        painter.setPen(QPen(QColor("#c6d4e4"), 1.0))
+        painter.drawPath(page_path)
+
+        if not getattr(canvas_self, "_grid_visible", True):
+            painter.restore()
+            return
+
+        spacing = max(1.0, min(start_bar._unit_to_canvas_px(start_bar._grid_spacing, start_bar._unit), 10000.0))
+        origin = getattr(start_bar, "_ruler_origin", QPointF(page.center()))
+        painter.setClipRect(page.adjusted(1, 1, -1, -1))
+        painter.setPen(QPen(QColor(70, 96, 130, 46), 1))
+
+        x = origin.x()
+        while x <= page.right():
+            painter.drawLine(QPointF(x, page.top()), QPointF(x, page.bottom()))
+            x += spacing
+        x = origin.x() - spacing
+        while x >= page.left():
+            painter.drawLine(QPointF(x, page.top()), QPointF(x, page.bottom()))
+            x -= spacing
+
+        y = origin.y()
+        while y <= page.bottom():
+            painter.drawLine(QPointF(page.left(), y), QPointF(page.right(), y))
+            y += spacing
+        y = origin.y() - spacing
+        while y >= page.top():
+            painter.drawLine(QPointF(page.left(), y), QPointF(page.right(), y))
+            y -= spacing
+
+        axis_pen = QPen(QColor("#ff8a35"), 1.2, Qt.PenStyle.SolidLine)
+        painter.setPen(axis_pen)
+        if page.left() <= origin.x() <= page.right():
+            painter.drawLine(QPointF(origin.x(), page.top()), QPointF(origin.x(), page.bottom()))
+        if page.top() <= origin.y() <= page.bottom():
+            painter.drawLine(QPointF(page.left(), origin.y()), QPointF(page.right(), origin.y()))
+        painter.restore()
+
+    canvas._paint_grid = paint_grid.__get__(canvas, canvas.__class__)
+    canvas._start_bar_grid_hooked = True
+    canvas.update()
+
+
 def apply_fixed_workspace_dimension_fixes() -> None:
     from src.engineers_tools.ui import start_bar as sb
     from . import workspace as edw
@@ -44,6 +97,7 @@ def apply_fixed_workspace_dimension_fixes() -> None:
         return
 
     original_resize_event = edw.EngineeringCanvas.resizeEvent
+    original_ensure_canvas_hooks = sb.StartBar._ensure_canvas_hooks
 
     def unit_to_canvas_px(self, value: float, unit: str) -> float:
         canvas = self._canvas()
@@ -83,12 +137,21 @@ def apply_fixed_workspace_dimension_fixes() -> None:
         self._ruler_corner_origin_active = True
         self._set_ruler_origin(QPointF(_page_rect(canvas).topLeft()), custom=True)
 
+    def ensure_canvas_hooks(self) -> None:
+        original_ensure_canvas_hooks(self)
+        canvas = self._canvas()
+        if canvas is not None:
+            if not getattr(self, "_ruler_origin_custom", False):
+                self._center_ruler_origin()
+            _install_page_grid(self, canvas)
+
     def resize_event(self, event) -> None:
         original_resize_event(self, event)
         start_bar = getattr(self.window(), "_start_bar_widget", None)
         if start_bar is not None:
             if not getattr(start_bar, "_ruler_origin_custom", False):
                 start_bar._center_ruler_origin()
+            _install_page_grid(start_bar, self)
             if getattr(start_bar, "_ruler_enabled", False):
                 start_bar._position_rulers()
             self.update()
@@ -96,6 +159,7 @@ def apply_fixed_workspace_dimension_fixes() -> None:
     sb.StartBar._unit_to_canvas_px = unit_to_canvas_px
     sb.StartBar._center_ruler_origin = center_ruler_origin
     sb.StartBar._toggle_ruler_corner_origin = toggle_ruler_corner_origin
+    sb.StartBar._ensure_canvas_hooks = ensure_canvas_hooks
     edw.EngineeringCanvas._page_rect = _page_rect
     edw.EngineeringCanvas.resizeEvent = resize_event
     sb.StartBar._engineering_fixed_workspace_dimension_patch = PATCH_VERSION
