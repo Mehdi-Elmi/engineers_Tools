@@ -1,7 +1,7 @@
 @echo off
 setlocal EnableExtensions DisableDelayedExpansion
 
-set "APP_NAME=EngineeringTools"
+set "APP_NAME=EngineerTools"
 set "REPO_OWNER=Mehdi-Elmi"
 set "REPO_NAME=engineers_Tools"
 set "BRANCH=main"
@@ -156,7 +156,7 @@ if not defined PYTHON_EXE (
 )
 
 if defined PYTHONW_EXE (
-    call :log "Using Python GUI runner: %PYTHONW_EXE%"
+    call :log "Using Python GUI runner: %PYTHONW_EX%"
     "%PYTHONW_EXE%" "%APP_DIR%\main.py"
 ) else (
     where pyw >nul 2>nul
