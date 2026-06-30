@@ -8,9 +8,9 @@ from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import QCursor
 
 
-VERSION = "fixed-viewport-v2"
+VERSION = "fixed-viewport-v3"
 WORKSPACE_SIZE_MM = (400.0, 220.0)
-EDGE_MARGIN = 30
+EDGE_MARGIN = 0
 
 
 def _usable_area(canvas) -> QRectF:
@@ -121,6 +121,23 @@ def _resize_cursor(edges: set[str]) -> QCursor:
     return QCursor(Qt.CursorShape.ArrowCursor)
 
 
+def _disable_shell_edge_resize(fixed) -> None:
+    """Keep the main shell move-only; canvas object resize remains separate."""
+    fixed.EDGE_MARGIN = 0
+    fixed._window_edges = lambda _window, _pos: set()
+
+    def no_window_resize(window, _global_pos) -> None:
+        window._fixed_resize_edges = set()
+        window._fixed_resize_start_global = None
+        window._fixed_resize_start_geometry = None
+        try:
+            window.setCursor(QCursor(Qt.CursorShape.ArrowCursor))
+        except Exception:
+            pass
+
+    fixed._apply_window_resize = no_window_resize
+
+
 def _sync_open_rulers(start_bar, canvas) -> None:
     try:
         canvas._page_setup_size_mm = WORKSPACE_SIZE_MM
@@ -180,11 +197,11 @@ def apply_engineering_fixed_viewport_patch() -> None:
         return
 
     fixed.WORKSPACE_SIZE_MM = WORKSPACE_SIZE_MM
-    fixed.EDGE_MARGIN = EDGE_MARGIN
     fixed._fixed_page_size = lambda _canvas=None: WORKSPACE_SIZE_MM
     fixed._page_rect = _page_rect
     fixed._unit_to_canvas_px = _unit_to_canvas_px
     fixed._resize_cursor = _resize_cursor
+    _disable_shell_edge_resize(fixed)
     edw.EngineeringCanvas._page_rect = _page_rect
     sb.StartBar._unit_to_canvas_px = _unit_to_canvas_px
 
