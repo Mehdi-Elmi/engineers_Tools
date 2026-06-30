@@ -156,7 +156,7 @@ if not defined PYTHON_EXE (
 )
 
 if defined PYTHONW_EXE (
-    call :log "Using Python GUI runner: %PYTHONW_EX%"
+    call :log "Using Python GUI runner: %PYTHONW_EXE%"
     "%PYTHONW_EXE%" "%APP_DIR%\main.py"
 ) else (
     where pyw >nul 2>nul
