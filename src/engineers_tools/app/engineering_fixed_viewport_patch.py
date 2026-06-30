@@ -8,7 +8,7 @@ from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import QCursor
 
 
-VERSION = "fixed-viewport-v3"
+VERSION = "fixed-viewport-v4"
 WORKSPACE_SIZE_MM = (400.0, 220.0)
 EDGE_MARGIN = 0
 
@@ -121,21 +121,24 @@ def _resize_cursor(edges: set[str]) -> QCursor:
     return QCursor(Qt.CursorShape.ArrowCursor)
 
 
-def _disable_shell_edge_resize(fixed) -> None:
+def _disable_shell_edge_resize(patch_module) -> None:
     """Keep the main shell move-only; canvas object resize remains separate."""
-    fixed.EDGE_MARGIN = 0
-    fixed._window_edges = lambda _window, _pos: set()
+    patch_module.EDGE_MARGIN = 0
+    patch_module._window_edges = lambda _window, _pos: set()
 
     def no_window_resize(window, _global_pos) -> None:
         window._fixed_resize_edges = set()
         window._fixed_resize_start_global = None
         window._fixed_resize_start_geometry = None
+        window._window_resize_edges = set()
+        window._window_resize_start_global = None
+        window._window_resize_start_geometry = None
         try:
             window.setCursor(QCursor(Qt.CursorShape.ArrowCursor))
         except Exception:
             pass
 
-    fixed._apply_window_resize = no_window_resize
+    patch_module._apply_window_resize = no_window_resize
 
 
 def _sync_open_rulers(start_bar, canvas) -> None:
@@ -186,6 +189,7 @@ def _install_rotation_drag_cursor() -> None:
 def apply_engineering_fixed_viewport_patch() -> None:
     try:
         from . import engineering_fixed_page_rotation_patch as fixed
+        from . import engineering_window_geometry_patch as geometry
         from .module_window import ModuleWindow
         from modules.mechanics_dynamics_statics import workspace as edw
         from src.engineers_tools.ui import start_bar as sb
@@ -201,6 +205,7 @@ def apply_engineering_fixed_viewport_patch() -> None:
     fixed._page_rect = _page_rect
     fixed._unit_to_canvas_px = _unit_to_canvas_px
     fixed._resize_cursor = _resize_cursor
+    _disable_shell_edge_resize(geometry)
     _disable_shell_edge_resize(fixed)
     edw.EngineeringCanvas._page_rect = _page_rect
     sb.StartBar._unit_to_canvas_px = _unit_to_canvas_px
