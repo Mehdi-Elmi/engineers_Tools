@@ -1,19 +1,16 @@
 """Current interaction cleanup for the Engineering Design Tools shell.
 
-This patch is intentionally applied last. It removes duplicated rotation angle
-feedback, replaces the temporary Rotate dialog behavior with the project dialog
-standard, and makes ruler-origin dragging follow the mouse with a direct grab.
+Applied last: keep one rotation angle badge, use the project Rotate dialog, and
+make ruler-origin dragging follow the mouse directly.
 """
 
 from __future__ import annotations
 
-import math
-
-from PySide6.QtCore import QEvent, QObject, QPoint, QPointF, QRectF, QSize, Qt
-from PySide6.QtGui import QColor, QIcon, QKeySequence, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap, QPolygonF, QShortcut
+from PySide6.QtCore import QEvent, QObject, QPoint, QPointF, QSize, Qt
+from PySide6.QtGui import QColor, QIcon, QKeySequence, QPainter, QPen, QPixmap, QPolygonF, QShortcut
 from PySide6.QtWidgets import QAbstractSpinBox, QDialog, QDoubleSpinBox, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
-PATCH_VERSION = "engineering-current-interaction-cleanup-2026-06-30-a"
+PATCH_VERSION = "engineering-current-interaction-cleanup-2026-06-30-b"
 
 
 def _angle_delta(a: float, b: float) -> float:
@@ -36,9 +33,7 @@ def _selection_angle(canvas) -> float:
 def _can_rotate_selection(canvas) -> bool:
     selected = getattr(canvas, "selected_indices", set())
     objects = getattr(canvas, "objects", [])
-    if any(0 <= index < len(objects) for index in selected):
-        return True
-    return getattr(canvas, "_object_rect", None) is not None
+    return any(0 <= index < len(objects) for index in selected) or getattr(canvas, "_object_rect", None) is not None
 
 
 def _rotate_selection_by(canvas, degrees: float) -> bool:
@@ -51,9 +46,8 @@ def _rotate_selection_by(canvas, degrees: float) -> bool:
             push_undo()
         for index in valid:
             obj = objects[index]
-            if getattr(obj, "locked", False):
-                continue
-            obj.rotation = (float(getattr(obj, "rotation", 0.0)) + float(degrees)) % 360.0
+            if not getattr(obj, "locked", False):
+                obj.rotation = (float(getattr(obj, "rotation", 0.0)) + float(degrees)) % 360.0
         canvas._last_rotation_degrees = float(degrees)
         emit = getattr(canvas, "_emit_object_changes", None)
         if callable(emit):
@@ -107,7 +101,7 @@ def _arrow_icon(direction: str) -> QIcon:
     pixmap = QPixmap(22, 10)
     pixmap.fill(Qt.GlobalColor.transparent)
     painter = QPainter(pixmap)
-    painter.setRenderHint(QPainter.Antialiasing, True)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
     painter.setPen(QPen(QColor("#ffffff"), 0.9))
     painter.setBrush(QColor("#132238"))
     points = QPolygonF([QPointF(11, 1), QPointF(20, 9), QPointF(2, 9)]) if direction == "up" else QPolygonF([QPointF(2, 1), QPointF(20, 1), QPointF(11, 9)])
@@ -223,9 +217,7 @@ def _ask_rotation_degrees(parent, default_value: float = 10.0) -> tuple[bool, fl
     spin.setFont(spin_font)
     if spin.lineEdit() is not None:
         spin.lineEdit().setFont(spin_font)
-    spin.setStyleSheet(
-        "QDoubleSpinBox#RotateDegreeInput {background:#fff9de; border:1px solid #b38621; border-radius:8px; color:#132238; font-size:12px; font-style:normal; font-weight:800; padding:3px 6px; selection-background-color:#43d3bd;}"
-    )
+    spin.setStyleSheet("QDoubleSpinBox#RotateDegreeInput {background:#fff9de; border:1px solid #b38621; border-radius:8px; color:#132238; font-size:12px; font-style:normal; font-weight:800; padding:3px 6px; selection-background-color:#43d3bd;}")
     row.addWidget(spin)
 
     arrows = QWidget()
@@ -295,10 +287,7 @@ def _install_rotation_cleanup() -> None:
         if not accepted:
             self._set_status("Rotate canceled")
             return
-        if _rotate_selection_by(canvas, degrees):
-            self._set_status(f"Rotate {degrees:.2f}°")
-        else:
-            self._set_status("Rotate disabled")
+        self._set_status(f"Rotate {degrees:.2f}°" if _rotate_selection_by(canvas, degrees) else "Rotate disabled")
 
     def snap_rotation(self) -> None:
         canvas = getattr(self, "_canvas", None)
@@ -307,10 +296,10 @@ def _install_rotation_cleanup() -> None:
         else:
             self._set_status("F8 Rotate snap disabled")
 
+    original_shortcuts = edw.EngineeringDesignWorkspace._install_engineering_shortcuts
+
     def install_shortcuts(self) -> None:
-        original = getattr(self, "_engineering_cleanup_original_shortcuts", None)
-        if callable(original):
-            original(self)
+        original_shortcuts(self)
         if getattr(self, "_cleanup_f8_rotate_snap_installed", False):
             return
         shortcut = QShortcut(QKeySequence("F8"), self)
@@ -321,9 +310,6 @@ def _install_rotation_cleanup() -> None:
             self._engineering_shortcuts = []
         self._engineering_shortcuts.append(shortcut)
         self._cleanup_f8_rotate_snap_installed = True
-
-    if not hasattr(edw.EngineeringDesignWorkspace, "_engineering_cleanup_original_shortcuts"):
-        edw.EngineeringDesignWorkspace._engineering_cleanup_original_shortcuts = edw.EngineeringDesignWorkspace._install_engineering_shortcuts
 
     edw.EngineeringCanvas.paintEvent = paint_event
     edw.EngineeringCanvas.rotate_selection_by = _rotate_selection_by
