@@ -22,6 +22,16 @@ TITLE_H = 42
 EDGE = 9
 MOVE_EDGE_GUARD = 18
 APP_USER_MODEL_ID = "MehdiElmi.EngineeringTools"
+GWL_STYLE = -16
+GWL_EXSTYLE = -20
+WS_THICKFRAME = 0x00040000
+WS_MAXIMIZEBOX = 0x00010000
+WS_EX_TOOLWINDOW = 0x00000080
+WS_EX_APPWINDOW = 0x00040000
+SWP_NOSIZE = 0x0001
+SWP_NOMOVE = 0x0002
+SWP_NOZORDER = 0x0004
+SWP_FRAMECHANGED = 0x0020
 
 COLORS = {
     "frame": "#1198d4",
@@ -126,6 +136,7 @@ class BaseShell(tk.Tk):
 
         self._center(design_w, design_h)
         self.resizable(False, False)
+        self._lock_native_resize()
         self._bind_events()
         self._prepare_assets()
         self._draw()
@@ -176,6 +187,7 @@ class BaseShell(tk.Tk):
 
     def _clear_geometry_enforcement(self) -> None:
         self._enforcing_geometry = False
+        self._lock_native_resize()
         self._draw()
 
     def _x(self, value: float) -> float:
@@ -306,22 +318,52 @@ class BaseShell(tk.Tk):
             self.state("iconic")
         elif name == "max":
             if self.is_maximized:
-                self.resizable(True, True)
                 self.geometry(self.normal_geometry)
                 self.is_maximized = False
-                self.resizable(False, False)
+                self._lock_native_resize()
             else:
                 self.normal_geometry = self.geometry()
                 self.normal_size = (self.winfo_width(), self.winfo_height())
-                self.resizable(True, True)
                 x, y, width, height = self._usable_screen_geometry()
                 self.geometry(f"{width}x{height}+{x}+{y}")
                 self.is_maximized = True
+                self._lock_native_resize()
         elif name == "close":
             self.destroy()
 
     def _restore_titleless(self, _event: tk.Event) -> None:
-        self.after(10, lambda: self.overrideredirect(True))
+        self.after(10, self._restore_borderless_window)
+
+    def _restore_borderless_window(self) -> None:
+        self.overrideredirect(True)
+        self._lock_native_resize()
+
+    def _lock_native_resize(self) -> None:
+        self.resizable(False, False)
+        if sys.platform != "win32":
+            return
+        try:
+            user32 = ctypes.windll.user32
+            hwnds = [self.winfo_id()]
+            parent = user32.GetParent(hwnds[0])
+            if parent and parent not in hwnds:
+                hwnds.append(parent)
+            for hwnd in hwnds:
+                style = user32.GetWindowLongW(hwnd, GWL_STYLE)
+                style &= ~WS_THICKFRAME
+                style &= ~WS_MAXIMIZEBOX
+                user32.SetWindowLongW(hwnd, GWL_STYLE, style)
+                user32.SetWindowPos(
+                    hwnd,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED,
+                )
+        except (AttributeError, OSError, tk.TclError):
+            pass
 
     def _usable_screen_geometry(self) -> tuple[int, int, int, int]:
         if sys.platform == "win32":
@@ -340,9 +382,10 @@ class BaseShell(tk.Tk):
             return
         try:
             hwnd = ctypes.windll.user32.GetParent(self.winfo_id())
-            style = ctypes.windll.user32.GetWindowLongW(hwnd, -20)
-            style = (style & ~0x00000080) | 0x00040000
-            ctypes.windll.user32.SetWindowLongW(hwnd, -20, style)
+            style = ctypes.windll.user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
+            style = (style & ~WS_EX_TOOLWINDOW) | WS_EX_APPWINDOW
+            ctypes.windll.user32.SetWindowLongW(hwnd, GWL_EXSTYLE, style)
+            self._lock_native_resize()
             self.withdraw()
             self.after(10, self.deiconify)
         except (AttributeError, OSError, tk.TclError):
