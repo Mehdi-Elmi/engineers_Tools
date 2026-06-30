@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Hide icon eye closed">
+  <defs>
+    <linearGradient id="main" x1="12" y1="8" x2="54" y2="58" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fff1cf"/>
+      <stop offset=".35" stop-color="#ffbd57"/>
+      <stop offset="1" stop-color="#f36f21"/>
+    </linearGradient>
+    <linearGradient id="blue" x1="10" y1="8" x2="56" y2="58" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#dff6ff"/>
+      <stop offset=".45" stop-color="#4db7ff"/>
+      <stop offset="1" stop-color="#1769d1"/>
+    </linearGradient>
+    <linearGradient id="green" x1="10" y1="8" x2="56" y2="58" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#e8ffd9"/>
+      <stop offset=".45" stop-color="#6bd85d"/>
+      <stop offset="1" stop-color="#16853a"/>
+    </linearGradient>
+    <linearGradient id="gray" x1="10" y1="8" x2="56" y2="58" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset=".45" stop-color="#cfd8e3"/>
+      <stop offset="1" stop-color="#64748b"/>
+    </linearGradient>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="1.5" dy="2.5" stdDeviation="1.6" flood-color="#733000" flood-opacity=".28"/>
+    </filter>
+    <style>
+      .stroke { fill: none; stroke: url(#main); stroke-width: 6.5; stroke-linecap: round; stroke-linejoin: round; filter: url(#shadow); }
+      .thin { fill: none; stroke: url(#main); stroke-width: 4.2; stroke-linecap: round; stroke-linejoin: round; filter: url(#shadow); }
+      .blueStroke { fill: none; stroke: url(#blue); stroke-width: 5.5; stroke-linecap: round; stroke-linejoin: round; filter: url(#shadow); }
+      .greenStroke { fill: none; stroke: url(#green); stroke-width: 5.5; stroke-linecap: round; stroke-linejoin: round; filter: url(#shadow); }
+      .grayStroke { fill: none; stroke: url(#gray); stroke-width: 5.5; stroke-linecap: round; stroke-linejoin: round; filter: url(#shadow); }
+      .fill { fill: url(#main); stroke: #bd4a00; stroke-width: 3; stroke-linejoin: round; filter: url(#shadow); }
+      .blueFill { fill: url(#blue); stroke: #1556aa; stroke-width: 3; stroke-linejoin: round; filter: url(#shadow); }
+      .greenFill { fill: url(#green); stroke: #166534; stroke-width: 3; stroke-linejoin: round; filter: url(#shadow); }
+      .grayFill { fill: url(#gray); stroke: #475569; stroke-width: 3; stroke-linejoin: round; filter: url(#shadow); }
+      .shine { fill: none; stroke: #fff8e8; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; opacity: .78; }
+      .dark { fill: none; stroke: #8a3600; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; opacity: .5; }
+    </style>
+  </defs>
+  <path class="blueStroke" d="M9 31c6.2 8.2 13.8 12 23 12s16.8-3.8 23-12"/>
+  <path class="blueStroke" d="M16 42l-4 6M27 46l-1 7M38 46l1 7M49 42l4 6"/>
+  <path class="thin" d="M10 16 54 52"/>
+  <path class="shine" d="M18 33c4.3 3.5 9.1 5.2 14 5.2"/>
+</svg>
