@@ -10,8 +10,8 @@ from PySide6.QtGui import QColor, QCursor, QKeySequence, QPainter, QPainterPath,
 from PySide6.QtWidgets import QApplication, QDialog, QDoubleSpinBox, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
 
-VERSION = "fixed-page-resize-rotation-1"
-EDGE_MARGIN = 16
+VERSION = "fixed-page-resize-rotation-2"
+EDGE_MARGIN = 22
 WORKSPACE_SIZE_MM = (400.0, 220.0)
 _WINDOW_FILTER: QObject | None = None
 _ORIGINAL_MODULE_PRESS = None
@@ -21,6 +21,7 @@ _ORIGINAL_MODULE_RESIZE = None
 _ORIGINAL_CANVAS_PAINT = None
 _ORIGINAL_CANVAS_MOUSE_RELEASE = None
 _ORIGINAL_SHORTCUTS = None
+_ORIGINAL_STARTBAR_HOOKS = None
 
 
 def _fixed_page_size(_canvas=None) -> tuple[float, float]:
@@ -121,6 +122,7 @@ def _sync_fixed_page(window) -> None:
         if start_bar is not None:
             if hasattr(start_bar, "_ensure_canvas_hooks"):
                 start_bar._ensure_canvas_hooks()
+            _install_clipped_grid_for_startbar(start_bar, canvas)
             page = _page_rect(canvas)
             if getattr(start_bar, "_ruler_enabled", False):
                 if getattr(start_bar, "_ruler_corner_origin_active", False):
@@ -132,6 +134,66 @@ def _sync_fixed_page(window) -> None:
         canvas.update()
     except Exception:
         logging.exception("engineering_fixed_page_rotation_patch: fixed page sync failed")
+
+
+def _install_clipped_grid_for_startbar(start_bar, canvas) -> None:
+    try:
+        from src.engineers_tools.ui import start_bar as sb
+    except Exception:
+        return
+
+    def paint_grid(canvas_self, painter: QPainter) -> None:
+        if not getattr(canvas_self, "_grid_visible", True):
+            return
+        page = _page_rect(canvas_self)
+        unit = getattr(start_bar, "_unit", "mm")
+        spacing_value = float(getattr(start_bar, "_grid_spacing", 4.0))
+        x_spacing = max(1.0, _unit_to_canvas_px(start_bar, spacing_value, unit, "top"))
+        y_spacing = max(1.0, _unit_to_canvas_px(start_bar, spacing_value, unit, "left"))
+        origin = getattr(start_bar, "_ruler_origin", page.center())
+        if not isinstance(origin, QPointF):
+            origin = QPointF(origin)
+        painter.save()
+        painter.setClipRect(page)
+        minor = QPen(QColor(70, 96, 130, 42), 1)
+        major = QPen(QColor(70, 96, 130, 72), 1)
+        x = origin.x()
+        index = 0
+        while x <= page.right() + 0.5:
+            if x >= page.left() - 0.5:
+                painter.setPen(major if index % 5 == 0 else minor)
+                painter.drawLine(QPointF(x, page.top()), QPointF(x, page.bottom()))
+            x += x_spacing
+            index += 1
+        x = origin.x() - x_spacing
+        index = 1
+        while x >= page.left() - 0.5:
+            if x <= page.right() + 0.5:
+                painter.setPen(major if index % 5 == 0 else minor)
+                painter.drawLine(QPointF(x, page.top()), QPointF(x, page.bottom()))
+            x -= x_spacing
+            index += 1
+        y = origin.y()
+        index = 0
+        while y <= page.bottom() + 0.5:
+            if y >= page.top() - 0.5:
+                painter.setPen(major if index % 5 == 0 else minor)
+                painter.drawLine(QPointF(page.left(), y), QPointF(page.right(), y))
+            y += y_spacing
+            index += 1
+        y = origin.y() - y_spacing
+        index = 1
+        while y >= page.top() - 0.5:
+            if y <= page.bottom() + 0.5:
+                painter.setPen(major if index % 5 == 0 else minor)
+                painter.drawLine(QPointF(page.left(), y), QPointF(page.right(), y))
+            y -= y_spacing
+            index += 1
+        painter.restore()
+
+    canvas._paint_grid = paint_grid.__get__(canvas, canvas.__class__)
+    canvas._grid_spacing = getattr(start_bar, "_grid_spacing", 4.0)
+    canvas._grid_unit = getattr(start_bar, "_unit", "mm")
 
 
 def _resizable_toplevel(widget) -> QWidget | None:
@@ -289,6 +351,7 @@ def _install_window_resize_patch() -> None:
 
 
 def _install_ruler_patch() -> None:
+    global _ORIGINAL_STARTBAR_HOOKS
     try:
         from . import engineering_ui_small_fixes_patch as small
         from src.engineers_tools.ui import start_bar as sb
@@ -298,6 +361,15 @@ def _install_ruler_patch() -> None:
         return
     edw.EngineeringCanvas._page_rect = _page_rect
     sb.StartBar._unit_to_canvas_px = _unit_to_canvas_px
+    if _ORIGINAL_STARTBAR_HOOKS is None:
+        _ORIGINAL_STARTBAR_HOOKS = sb.StartBar._ensure_canvas_hooks
+
+    def ensure_canvas_hooks(self) -> None:
+        _ORIGINAL_STARTBAR_HOOKS(self)
+        canvas = self._canvas()
+        if canvas is not None:
+            canvas._page_setup_size_mm = WORKSPACE_SIZE_MM
+            _install_clipped_grid_for_startbar(self, canvas)
 
     def center_ruler_origin(self) -> None:
         canvas = self._canvas()
@@ -335,15 +407,26 @@ def _install_ruler_patch() -> None:
         painter.setFont(font)
         painter.setPen(QPen(QColor("#ffffff"), 1.0))
         orientation = getattr(self, "_orientation", "top")
+        canvas = self.parentWidget()
+        page = _page_rect(canvas) if canvas is not None else QRectF(0, 0, self.width(), self.height())
+        top_left = _scene_to_view(canvas, page.topLeft()) if canvas is not None else QPointF(0, 0)
+        bottom_right = _scene_to_view(canvas, page.bottomRight()) if canvas is not None else QPointF(self.width(), self.height())
         spacing = max(1.0, _unit_to_canvas_px(self._start_bar, 1.0, self._start_bar._unit, orientation))
         length = self.width() if orientation == "top" else self.height()
         zero = self._start_bar._ruler_origin.x() - self.x() if orientation == "top" else self._start_bar._ruler_origin.y() - self.y()
+        page_start = top_left.x() - self.x() if orientation == "top" else top_left.y() - self.y()
+        page_end = bottom_right.x() - self.x() if orientation == "top" else bottom_right.y() - self.y()
+        page_start = max(0.0, min(float(length), page_start))
+        page_end = max(0.0, min(float(length), page_end))
+        if page_end < page_start:
+            page_start, page_end = page_end, page_start
+        painter.fillRect(QRectF(page_start, 0, max(0.0, page_end - page_start), self.height()) if orientation == "top" else QRectF(0, page_start, self.width(), max(0.0, page_end - page_start)), QColor(255, 255, 255, 18))
         index = int(-zero / spacing) - 2
         while True:
             position = zero + index * spacing
-            if position > length + spacing:
+            if position > min(float(length), page_end) + spacing:
                 break
-            if position >= 0:
+            if page_start <= position <= page_end:
                 abs_index = abs(index)
                 tick = 23 if abs_index % 10 == 0 else 16 if abs_index % 5 == 0 else 8
                 if orientation == "top":
@@ -378,6 +461,7 @@ def _install_ruler_patch() -> None:
         self.setCursor(small._asset_cursor("hand_pointer.svg", QCursor(Qt.CursorShape.PointingHandCursor), 10, 3, 22))
 
     sb.StartBar._center_ruler_origin = center_ruler_origin
+    sb.StartBar._ensure_canvas_hooks = ensure_canvas_hooks
     sb.StartBar._toggle_ruler_corner_origin = toggle_corner_origin
     sb._RulerOverlay.paintEvent = ruler_paint
     sb._GuideLine._fixed_cursor_original_init = original_guide_init
