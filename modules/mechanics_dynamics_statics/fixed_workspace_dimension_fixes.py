@@ -7,10 +7,10 @@ page, grid, and ruler conversions scale from that fitted page rectangle.
 
 from __future__ import annotations
 
-from PySide6.QtCore import QPointF, QRectF, Qt
+from PySide6.QtCore import QPointF, QRectF
 from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen
 
-PATCH_VERSION = "engineering-fixed-workspace-dimensions-2026-06-30-b"
+PATCH_VERSION = "engineering-fixed-workspace-dimensions-2026-06-30-c"
 WORKSPACE_SIZE = (400.0, 220.0)
 PAGE_MARGIN = 8.0
 
@@ -76,12 +76,6 @@ def _install_page_grid(start_bar, canvas) -> None:
             painter.drawLine(QPointF(page.left(), y), QPointF(page.right(), y))
             y -= spacing
 
-        axis_pen = QPen(QColor("#ff8a35"), 1.2, Qt.PenStyle.SolidLine)
-        painter.setPen(axis_pen)
-        if page.left() <= origin.x() <= page.right():
-            painter.drawLine(QPointF(origin.x(), page.top()), QPointF(origin.x(), page.bottom()))
-        if page.top() <= origin.y() <= page.bottom():
-            painter.drawLine(QPointF(page.left(), origin.y()), QPointF(page.right(), origin.y()))
         painter.restore()
 
     canvas._paint_grid = paint_grid.__get__(canvas, canvas.__class__)
