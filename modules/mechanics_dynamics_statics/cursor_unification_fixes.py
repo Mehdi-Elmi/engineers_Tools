@@ -12,7 +12,7 @@ import math
 from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import QColor, QCursor, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap, QPolygonF
 
-PATCH_VERSION = "engineering-cursor-unification-2026-06-30-c"
+PATCH_VERSION = "engineering-cursor-unification-2026-06-30-d"
 
 
 def _arrow_head(painter: QPainter, tip: QPointF, tail: QPointF, size: float = 5.2) -> None:
@@ -54,33 +54,12 @@ def _paint_resize_line(painter: QPainter, a: QPointF, b: QPointF) -> None:
     painter.drawEllipse(center, 3.4, 3.4)
 
 
-def _paint_hand(painter: QPainter, closed: bool) -> None:
-    ink = QColor("#132238")
-    fill = QLinearGradient(7, 4, 25, 29)
-    fill.setColorAt(0.0, QColor("#ffffff"))
-    fill.setColorAt(0.54, QColor("#dff4ff"))
-    fill.setColorAt(1.0, QColor("#78b8ff" if closed else "#8dc1ff"))
-    path = QPainterPath()
-    if closed:
-        path.addRoundedRect(QRectF(8, 11, 17, 15), 6, 6)
-        path.addRoundedRect(QRectF(9, 7, 4, 9), 2, 2)
-        path.addRoundedRect(QRectF(13, 6, 4, 10), 2, 2)
-        path.addRoundedRect(QRectF(17, 7, 4, 9), 2, 2)
-        path.addRoundedRect(QRectF(21, 10, 4, 8), 2, 2)
-    else:
-        path.addRoundedRect(QRectF(8, 12, 15, 15), 6, 6)
-        path.addRoundedRect(QRectF(8, 5, 4, 13), 2, 2)
-        path.addRoundedRect(QRectF(12, 4, 4, 14), 2, 2)
-        path.addRoundedRect(QRectF(16, 5, 4, 13), 2, 2)
-        path.addRoundedRect(QRectF(20, 8, 4, 11), 2, 2)
-    painter.fillPath(path, fill)
-    painter.setPen(QPen(QColor("#ffffff"), 3.0, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
-    painter.drawPath(path)
-    painter.setPen(QPen(ink, 1.35, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
-    painter.drawPath(path)
-
-
 def project_cursor(kind: str) -> QCursor:
+    if kind in {"rotate", "hand_open"}:
+        return QCursor(Qt.CursorShape.OpenHandCursor)
+    if kind == "hand_closed":
+        return QCursor(Qt.CursorShape.ClosedHandCursor)
+
     pixmap = QPixmap(32, 32)
     pixmap.fill(Qt.GlobalColor.transparent)
     painter = QPainter(pixmap)
@@ -104,10 +83,6 @@ def project_cursor(kind: str) -> QCursor:
         painter.setBrush(QColor("#ffc35a"))
         painter.setPen(QPen(QColor("#132238"), 1.0))
         painter.drawEllipse(QPointF(16, 16), 2.8, 2.8)
-    elif kind in {"rotate", "hand_open"}:
-        _paint_hand(painter, closed=False)
-    elif kind == "hand_closed":
-        _paint_hand(painter, closed=True)
     elif kind == "origin":
         painter.setPen(QPen(QColor("#ffffff"), 3.4, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
         painter.drawLine(QPointF(8, 16), QPointF(24, 16))
