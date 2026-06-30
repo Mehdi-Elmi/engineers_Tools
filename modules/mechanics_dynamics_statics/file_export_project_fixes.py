@@ -6,10 +6,10 @@ import base64
 import json
 from pathlib import Path
 
-from PySide6.QtCore import QBuffer, QByteArray, QIODevice, QPoint, QPointF, QRect, QRectF, QSize, QSizeF, Qt
-from PySide6.QtGui import QColor, QImage, QPainter, QPageLayout, QPageSize, QPdfWriter, QPixmap
+from PySide6.QtCore import QBuffer, QByteArray, QIODevice, QMarginsF, QPoint, QPointF, QRect, QRectF, QSizeF, Qt
+from PySide6.QtGui import QColor, QImage, QPainter, QPageLayout, QPageSize, QPdfWriter, QPen, QPixmap
 
-PATCH_VERSION = "engineering-file-export-project-fixes-2026-06-30-a"
+PATCH_VERSION = "engineering-file-export-project-fixes-2026-06-30-b"
 PROJECT_SUFFIXES = {".etools", ".etool"}
 
 
@@ -18,7 +18,7 @@ def _rect_to_list(rect: QRectF) -> list[float]:
 
 
 def _rect_from_list(values: object) -> QRectF:
-    if isinstance(values, list | tuple) and len(values) >= 4:
+    if isinstance(values, (list, tuple)) and len(values) >= 4:
         try:
             return QRectF(float(values[0]), float(values[1]), float(values[2]), float(values[3]))
         except (TypeError, ValueError):
@@ -60,7 +60,7 @@ def _object_to_data(obj) -> dict[str, object]:
 
 def _page_size_mm(canvas) -> tuple[float, float]:
     size = getattr(canvas, "_page_setup_size_mm", None)
-    if isinstance(size, tuple | list) and len(size) >= 2:
+    if isinstance(size, (tuple, list)) and len(size) >= 2:
         try:
             return max(1.0, float(size[0])), max(1.0, float(size[1]))
         except (TypeError, ValueError):
@@ -182,10 +182,7 @@ def apply_file_export_project_fixes() -> None:
     if getattr(edw.EngineeringDesignWorkspace, "_engineering_file_export_project_patch", "") == PATCH_VERSION:
         return
 
-    original_open_file = edw.EngineeringDesignWorkspace._open_file
-    original_import_file = edw.EngineeringDesignWorkspace._import_file
     original_write_document = edw.EngineeringDesignWorkspace._write_document
-    original_paint_object = edw.EngineeringCanvas._paint_object
 
     def paint_object(self, painter: QPainter, obj) -> None:
         painter.save()
@@ -256,6 +253,12 @@ def apply_file_export_project_fixes() -> None:
         self._set_status(f"Opened {path.name}")
         return True
 
+    def load_regular_file(self, path: Path, verb: str) -> None:
+        if self._canvas is not None:
+            self._canvas.load_file(path)
+            self._last_file_dir = path.parent
+            self._set_status(f"{verb} {path.name}")
+
     def open_file(self):
         result = ProjectFileDialog.get_open_file(self, self._last_file_dir)
         if result is None:
@@ -263,7 +266,7 @@ def apply_file_export_project_fixes() -> None:
             return
         if result.path.suffix.lower() in PROJECT_SUFFIXES and restore_project(self, result.path):
             return
-        original_open_file(self)
+        load_regular_file(self, result.path, "Opened")
 
     def import_file(self):
         result = ProjectFileDialog.get_import_file(self, self._last_file_dir)
@@ -272,10 +275,7 @@ def apply_file_export_project_fixes() -> None:
             return
         if result.path.suffix.lower() in PROJECT_SUFFIXES and restore_project(self, result.path):
             return
-        if self._canvas is not None:
-            self._canvas.load_file(result.path)
-            self._last_file_dir = result.path.parent
-            self._set_status(f"Imported {result.path.name}")
+        load_regular_file(self, result.path, "Imported")
 
     def write_document(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
