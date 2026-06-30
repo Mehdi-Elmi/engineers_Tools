@@ -10,7 +10,7 @@ from PySide6.QtCore import QEvent, QObject, QPoint, QPointF, QSize, Qt
 from PySide6.QtGui import QColor, QIcon, QKeySequence, QPainter, QPen, QPixmap, QPolygonF, QShortcut
 from PySide6.QtWidgets import QAbstractSpinBox, QDialog, QDoubleSpinBox, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
-PATCH_VERSION = "engineering-current-interaction-cleanup-2026-06-30-b"
+PATCH_VERSION = "engineering-current-interaction-cleanup-2026-06-30-c"
 
 
 def _angle_delta(a: float, b: float) -> float:
@@ -98,13 +98,13 @@ def _snap_rotation_to_axis(canvas) -> bool:
 
 
 def _arrow_icon(direction: str) -> QIcon:
-    pixmap = QPixmap(22, 10)
+    pixmap = QPixmap(18, 8)
     pixmap.fill(Qt.GlobalColor.transparent)
     painter = QPainter(pixmap)
     painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-    painter.setPen(QPen(QColor("#ffffff"), 0.9))
+    painter.setPen(QPen(QColor("#ffffff"), 0.8))
     painter.setBrush(QColor("#132238"))
-    points = QPolygonF([QPointF(11, 1), QPointF(20, 9), QPointF(2, 9)]) if direction == "up" else QPolygonF([QPointF(2, 1), QPointF(20, 1), QPointF(11, 9)])
+    points = QPolygonF([QPointF(9, 1), QPointF(16, 7), QPointF(2, 7)]) if direction == "up" else QPolygonF([QPointF(2, 1), QPointF(16, 1), QPointF(9, 7)])
     painter.drawPolygon(points)
     painter.end()
     return QIcon(pixmap)
@@ -113,11 +113,11 @@ def _arrow_icon(direction: str) -> QIcon:
 def _arrow_button(direction: str) -> QPushButton:
     button = QPushButton()
     button.setObjectName("RotateArrowButton")
-    button.setFixedSize(28, 12)
+    button.setFixedSize(24, 10)
     button.setIcon(_arrow_icon(direction))
-    button.setIconSize(QSize(22, 10))
+    button.setIconSize(QSize(18, 8))
     button.setStyleSheet(
-        "QPushButton#RotateArrowButton {background:qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #fff9de, stop:1 #ffc35a); border:1px solid #7e5b10; border-radius:4px; padding:0px;}"
+        "QPushButton#RotateArrowButton {background:qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #fff9de, stop:1 #ffc35a); border:1px solid #7e5b10; border-radius:3px; padding:0px;}"
         "QPushButton#RotateArrowButton:hover {background:#ff8a35; border-color:#ffffff;}"
         "QPushButton#RotateArrowButton:pressed {background:#d46a16; padding-top:1px;}"
     )
@@ -155,7 +155,7 @@ def _ask_rotation_degrees(parent, default_value: float = 10.0) -> tuple[bool, fl
     dialog.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.FramelessWindowHint)
     dialog.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
     dialog.setModal(True)
-    dialog.resize(340, 184)
+    dialog.resize(352, 184)
 
     shell = QWidget(dialog)
     shell.setObjectName("ProjectHelpShell")
@@ -202,6 +202,16 @@ def _ask_rotation_degrees(parent, default_value: float = 10.0) -> tuple[bool, fl
     label.setFont(label_font)
     row.addWidget(label)
 
+    degree_box = QWidget()
+    degree_box.setObjectName("RotateDegreeBox")
+    degree_box.setFixedSize(124, 28)
+    degree_box.setStyleSheet(
+        "QWidget#RotateDegreeBox {background:#fff9de; border:1px solid #b38621; border-radius:8px;}"
+    )
+    degree_layout = QHBoxLayout(degree_box)
+    degree_layout.setContentsMargins(6, 2, 3, 2)
+    degree_layout.setSpacing(3)
+
     spin = QDoubleSpinBox()
     spin.setObjectName("RotateDegreeInput")
     spin.setRange(-3600.0, 3600.0)
@@ -209,7 +219,7 @@ def _ask_rotation_degrees(parent, default_value: float = 10.0) -> tuple[bool, fl
     spin.setSingleStep(1.0)
     spin.setSuffix(" °")
     spin.setValue(default_value)
-    spin.setFixedWidth(92)
+    spin.setFixedSize(86, 22)
     spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
     spin_font = spin.font()
     spin_font.setItalic(False)
@@ -217,20 +227,25 @@ def _ask_rotation_degrees(parent, default_value: float = 10.0) -> tuple[bool, fl
     spin.setFont(spin_font)
     if spin.lineEdit() is not None:
         spin.lineEdit().setFont(spin_font)
-    spin.setStyleSheet("QDoubleSpinBox#RotateDegreeInput {background:#fff9de; border:1px solid #b38621; border-radius:8px; color:#132238; font-size:12px; font-style:normal; font-weight:800; padding:3px 6px; selection-background-color:#43d3bd;}")
-    row.addWidget(spin)
+    spin.setStyleSheet(
+        "QDoubleSpinBox#RotateDegreeInput {background:transparent; border:none; color:#132238; font-size:12px; font-style:normal; font-weight:800; padding:1px 2px; selection-background-color:#43d3bd;}"
+    )
+    degree_layout.addWidget(spin)
 
     arrows = QWidget()
+    arrows.setFixedSize(26, 22)
     arrows_layout = QVBoxLayout(arrows)
     arrows_layout.setContentsMargins(0, 0, 0, 0)
-    arrows_layout.setSpacing(2)
+    arrows_layout.setSpacing(1)
     up_button = _arrow_button("up")
     down_button = _arrow_button("down")
     up_button.clicked.connect(spin.stepUp)
     down_button.clicked.connect(spin.stepDown)
     arrows_layout.addWidget(up_button)
     arrows_layout.addWidget(down_button)
-    row.addWidget(arrows)
+    degree_layout.addWidget(arrows)
+
+    row.addWidget(degree_box)
     row.addStretch(1)
     body_layout.addLayout(row)
 
