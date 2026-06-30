@@ -24,6 +24,7 @@ from .svg_cursor_assets_activation_patch import apply_svg_cursor_assets_activati
 from .text_toolbar_toggle_patch import apply_text_toolbar_toggle_patch
 from .ui_refinement_fixes import apply_ui_refinement_fixes
 from .unit_grid_properties_final_patch import apply_unit_grid_properties_final_patch
+from .view_textbar_menu_patch import apply_view_textbar_menu_patch
 from .window_resize_fixes import apply_window_resize_fixes
 from .windows_cursor_ruler_patch import apply_windows_cursor_ruler_patch
 from .workspace import EngineeringDesignWorkspace
@@ -51,4 +52,5 @@ def create_window(module: LauncherModule) -> ModuleWindow:
     apply_text_toolbar_toggle_patch()
     apply_file_properties_view_final_patch()
     apply_cursor_stability_final_patch()
+    apply_view_textbar_menu_patch()
     return EngineeringDesignWorkspace(module)
