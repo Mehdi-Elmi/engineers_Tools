@@ -29,6 +29,7 @@ def main() -> int:
     try:
         from .app.controller import AppController
         from .app.engineering_export_patch import apply_engineering_export_patch
+        from .app.engineering_fixed_page_rotation_patch import apply_engineering_fixed_page_rotation_patch
         from .app.engineering_print_setup_final_patch import apply_engineering_print_setup_final_patch
         from .app.engineering_print_setup_hotfix import apply_engineering_print_setup_hotfix
         from .app.engineering_properties_patch import apply_engineering_properties_patch
@@ -54,6 +55,7 @@ def main() -> int:
         apply_engineering_properties_patch()
         apply_engineering_ui_small_fixes_patch()
         apply_engineering_window_geometry_patch()
+        apply_engineering_fixed_page_rotation_patch()
 
         controller = AppController()
         controller.show_launcher()
