@@ -23,6 +23,7 @@ from .ruler_unit_origin_final_patch import apply_ruler_unit_origin_final_patch
 from .startbar_cursor_fixes import apply_startbar_cursor_fixes
 from .svg_cursor_assets_activation_patch import apply_svg_cursor_assets_activation_patch
 from .text_toolbar_toggle_patch import apply_text_toolbar_toggle_patch
+from .ui_design_phase1_final_patch import apply_ui_design_phase1_final_patch
 from .ui_refinement_fixes import apply_ui_refinement_fixes
 from .unit_grid_properties_final_patch import apply_unit_grid_properties_final_patch
 from .view_textbar_menu_patch import apply_view_textbar_menu_patch
@@ -55,4 +56,5 @@ def create_window(module: LauncherModule) -> ModuleWindow:
     apply_cursor_stability_final_patch()
     apply_view_textbar_menu_patch()
     apply_final_cursor_properties_textbar_patch()
+    apply_ui_design_phase1_final_patch()
     return EngineeringDesignWorkspace(module)
