@@ -20,6 +20,7 @@ ROOT_DIR = Path(__file__).resolve().parents[2]
 TRANSPARENT = "#ff00ff"
 TITLE_H = 42
 EDGE = 9
+MOVE_EDGE_GUARD = 18
 APP_USER_MODEL_ID = "MehdiElmi.EngineeringTools"
 
 COLORS = {
@@ -218,6 +219,15 @@ class BaseShell(tk.Tk):
     def _edge_at(self, x: float, y: float) -> str:
         return ""
 
+    def _is_move_zone(self, x: float, y: float) -> bool:
+        if self.is_maximized:
+            return False
+        if y < MOVE_EDGE_GUARD or y > TITLE_H - 4:
+            return False
+        if x < 54 or x > self.winfo_width() - 132:
+            return False
+        return not self._control_at(x, y)
+
     def _down(self, event: tk.Event) -> None:
         self.resize_start = None
         self.drag_active = False
@@ -227,7 +237,7 @@ class BaseShell(tk.Tk):
             return
         if self._content_click(event.x, event.y):
             return
-        if event.y <= TITLE_H and not self.is_maximized:
+        if self._is_move_zone(event.x, event.y):
             self.drag_offset = (event.x_root - self.winfo_x(), event.y_root - self.winfo_y())
             self.drag_active = True
             self.canvas.configure(cursor="fleur")
@@ -254,7 +264,7 @@ class BaseShell(tk.Tk):
         hovered = self._content_hover(event.x, event.y)
         if control or hovered:
             self.canvas.configure(cursor="hand2")
-        elif event.y <= TITLE_H and not self.is_maximized:
+        elif self._is_move_zone(event.x, event.y):
             self.canvas.configure(cursor="fleur")
         else:
             self.canvas.configure(cursor="")
