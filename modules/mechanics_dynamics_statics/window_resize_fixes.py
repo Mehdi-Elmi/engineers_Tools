@@ -8,12 +8,17 @@ window button.
 
 from __future__ import annotations
 
+import sys
+from ctypes import wintypes
+
 from PySide6.QtCore import QEvent, QObject, QPoint, Qt
 from PySide6.QtWidgets import QApplication, QAbstractButton, QAbstractSpinBox, QLineEdit, QWidget
 
-PATCH_VERSION = "engineering-window-move-only-2026-06-30-c"
+PATCH_VERSION = "engineering-window-move-only-2026-06-30-d"
 MOVE_BAND_HEIGHT = 46
 WORKSPACE_SIZE_MM = (400.0, 220.0)
+WM_NCHITTEST = 0x0084
+HTCLIENT = 1
 _FILTER: QObject | None = None
 
 _INTERACTIVE_NAMES = {
@@ -31,6 +36,8 @@ _INTERACTIVE_NAMES = {
     "IconChoice",
     "RadioChoice",
 }
+
+_CANVAS_NAMES = {"GridCanvas", "EngineeringCanvas"}
 
 
 def _window_edges(_window: QWidget, _pos: QPoint) -> frozenset[str]:
@@ -64,12 +71,30 @@ def _interactive_child(widget: QWidget, window: QWidget) -> bool:
     return False
 
 
+def _is_canvas_surface(widget: QWidget, window: QWidget) -> bool:
+    current: QWidget | None = widget
+    while current is not None and current is not window:
+        if current.objectName() in _CANVAS_NAMES:
+            return True
+        current = current.parentWidget()
+    return False
+
+
 def _is_move_surface(widget: QWidget, window: QWidget, window_pos: QPoint) -> bool:
     if getattr(window, "_is_manually_maximized", False) or window.isMaximized():
         return False
     if window_pos.y() > MOVE_BAND_HEIGHT:
         return False
     return not _interactive_child(widget, window)
+
+
+def _clear_shell_cursor(widget: QWidget, window: QWidget) -> None:
+    if _is_canvas_surface(widget, window):
+        return
+    _set_window_cursor(window, None)
+    window.unsetCursor()
+    if widget is not window and not _interactive_child(widget, window):
+        widget.unsetCursor()
 
 
 def _apply_window_move(window: QWidget, global_pos: QPoint) -> None:
@@ -108,7 +133,7 @@ class _WindowMoveFilter(QObject):
             return False
 
         if event_type == QEvent.Type.Leave:
-            _set_window_cursor(window, None)
+            _clear_shell_cursor(watched, window)
             return False
 
         try:
@@ -126,6 +151,8 @@ class _WindowMoveFilter(QObject):
                 window._drag_position = None
                 event.accept()
                 return True
+            window._engineering_move_active = False
+            _clear_shell_cursor(watched, window)
             return False
 
         if event_type == QEvent.Type.MouseMove:
@@ -133,6 +160,9 @@ class _WindowMoveFilter(QObject):
                 _apply_window_move(window, global_pos)
                 event.accept()
                 return True
+            if _is_move_surface(watched, window, window_pos):
+                return False
+            _clear_shell_cursor(watched, window)
             return False
 
         if event_type == QEvent.Type.MouseButtonRelease:
@@ -140,6 +170,7 @@ class _WindowMoveFilter(QObject):
                 window._engineering_move_active = False
                 event.accept()
                 return True
+            _clear_shell_cursor(watched, window)
 
         return False
 
@@ -152,12 +183,24 @@ def apply_window_resize_fixes() -> None:
         return
 
     original_resize_event = ModuleWindow.resizeEvent
+    original_native_event = ModuleWindow.nativeEvent
 
     def resize_event(self, event) -> None:
         original_resize_event(self, event)
         _sync_fixed_workspace_metadata(self)
 
+    def native_event(self, event_type, message):
+        if sys.platform == "win32":
+            try:
+                msg = wintypes.MSG.from_address(int(message))
+            except (AttributeError, TypeError, ValueError):
+                msg = None
+            if msg is not None and msg.message == WM_NCHITTEST:
+                return True, HTCLIENT
+        return original_native_event(self, event_type, message)
+
     ModuleWindow.resizeEvent = resize_event
+    ModuleWindow.nativeEvent = native_event
     ModuleWindow._engineering_window_resize_patch = PATCH_VERSION
 
     app = QApplication.instance()
