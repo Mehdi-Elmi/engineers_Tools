@@ -14,7 +14,7 @@ from ctypes import wintypes
 from PySide6.QtCore import QEvent, QObject, QPoint, Qt
 from PySide6.QtWidgets import QApplication, QAbstractButton, QAbstractSpinBox, QLineEdit, QWidget
 
-PATCH_VERSION = "engineering-window-move-only-2026-06-30-d"
+PATCH_VERSION = "engineering-window-move-only-2026-06-30-e"
 MOVE_BAND_HEIGHT = 46
 WORKSPACE_SIZE_MM = (400.0, 220.0)
 WM_NCHITTEST = 0x0084
@@ -38,6 +38,14 @@ _INTERACTIVE_NAMES = {
 }
 
 _CANVAS_NAMES = {"GridCanvas", "EngineeringCanvas"}
+_SHELL_ARROW_NAMES = {
+    "WindowRoot",
+    "WorkspaceArea",
+    "PageBar",
+    "PageStrip",
+    "StatusBar",
+    "StatusItem",
+}
 
 
 def _window_edges(_window: QWidget, _pos: QPoint) -> frozenset[str]:
@@ -88,13 +96,29 @@ def _is_move_surface(widget: QWidget, window: QWidget, window_pos: QPoint) -> bo
     return not _interactive_child(widget, window)
 
 
+def _force_arrow_cursor(widget: QWidget) -> None:
+    widget.setMouseTracking(True)
+    widget.setCursor(Qt.CursorShape.ArrowCursor)
+
+
+def _install_shell_cursor_policy(window: QWidget) -> None:
+    window.setMouseTracking(True)
+    window.setCursor(Qt.CursorShape.ArrowCursor)
+    for widget in window.findChildren(QWidget):
+        if _is_canvas_surface(widget, window):
+            continue
+        widget.setMouseTracking(True)
+        if widget.objectName() in _SHELL_ARROW_NAMES:
+            _force_arrow_cursor(widget)
+
+
 def _clear_shell_cursor(widget: QWidget, window: QWidget) -> None:
     if _is_canvas_surface(widget, window):
         return
     _set_window_cursor(window, None)
-    window.unsetCursor()
-    if widget is not window and not _interactive_child(widget, window):
-        widget.unsetCursor()
+    window.setCursor(Qt.CursorShape.ArrowCursor)
+    if widget.objectName() in _SHELL_ARROW_NAMES or not _interactive_child(widget, window):
+        widget.setCursor(Qt.CursorShape.ArrowCursor)
 
 
 def _apply_window_move(window: QWidget, global_pos: QPoint) -> None:
@@ -182,12 +206,20 @@ def apply_window_resize_fixes() -> None:
     if getattr(ModuleWindow, "_engineering_window_resize_patch", "") == PATCH_VERSION:
         return
 
+    original_init = ModuleWindow.__init__
     original_resize_event = ModuleWindow.resizeEvent
     original_native_event = ModuleWindow.nativeEvent
+
+    def init(self, *args, **kwargs) -> None:
+        original_init(self, *args, **kwargs)
+        self._engineering_move_active = False
+        self._drag_position = None
+        _install_shell_cursor_policy(self)
 
     def resize_event(self, event) -> None:
         original_resize_event(self, event)
         _sync_fixed_workspace_metadata(self)
+        _install_shell_cursor_policy(self)
 
     def native_event(self, event_type, message):
         if sys.platform == "win32":
@@ -199,6 +231,7 @@ def apply_window_resize_fixes() -> None:
                 return True, HTCLIENT
         return original_native_event(self, event_type, message)
 
+    ModuleWindow.__init__ = init
     ModuleWindow.resizeEvent = resize_event
     ModuleWindow.nativeEvent = native_event
     ModuleWindow._engineering_window_resize_patch = PATCH_VERSION
