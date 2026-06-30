@@ -16,6 +16,7 @@ from .page_setup_properties_hotfix import apply_page_setup_properties_hotfix
 from .ruler_precision_fixes import apply_ruler_precision_fixes
 from .startbar_cursor_fixes import apply_startbar_cursor_fixes
 from .ui_refinement_fixes import apply_ui_refinement_fixes
+from .unit_grid_properties_final_patch import apply_unit_grid_properties_final_patch
 from .window_resize_fixes import apply_window_resize_fixes
 from .workspace import EngineeringDesignWorkspace
 
@@ -33,4 +34,5 @@ def create_window(module: LauncherModule) -> ModuleWindow:
     apply_file_export_project_fixes()
     apply_final_ui_repair_fixes()
     apply_page_setup_properties_hotfix()
+    apply_unit_grid_properties_final_patch()
     return EngineeringDesignWorkspace(module)
