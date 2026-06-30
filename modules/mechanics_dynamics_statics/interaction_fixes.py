@@ -10,9 +10,9 @@ from __future__ import annotations
 import math
 
 from PySide6.QtCore import QPointF, QRectF, Qt
-from PySide6.QtGui import QColor, QCursor, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap, QPolygonF, QKeySequence, QShortcut
+from PySide6.QtGui import QColor, QCursor, QKeySequence, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap, QPolygonF, QShortcut
 
-PATCH_VERSION = "engineering-interaction-fixes-2026-06-30-a"
+PATCH_VERSION = "engineering-interaction-fixes-2026-06-30-b"
 
 
 def _cursor_arrow(painter: QPainter, tip: QPointF, tail: QPointF, size: float = 6.0) -> None:
@@ -26,6 +26,32 @@ def _cursor_arrow(painter: QPainter, tip: QPointF, tail: QPointF, size: float = 
     painter.drawPolygon(QPolygonF([tip, left, right]))
 
 
+def _paint_hand(painter: QPainter, closed: bool) -> None:
+    ink = QColor("#132238")
+    fill = QLinearGradient(7, 4, 25, 29)
+    fill.setColorAt(0.0, QColor("#ffffff"))
+    fill.setColorAt(0.54, QColor("#dff4ff"))
+    fill.setColorAt(1.0, QColor("#ffc35a" if closed else "#8dc1ff"))
+    path = QPainterPath()
+    if closed:
+        path.addRoundedRect(QRectF(8, 11, 17, 15), 6, 6)
+        path.addRoundedRect(QRectF(9, 7, 4, 9), 2, 2)
+        path.addRoundedRect(QRectF(13, 6, 4, 10), 2, 2)
+        path.addRoundedRect(QRectF(17, 7, 4, 9), 2, 2)
+        path.addRoundedRect(QRectF(21, 10, 4, 8), 2, 2)
+    else:
+        path.addRoundedRect(QRectF(8, 12, 15, 15), 6, 6)
+        path.addRoundedRect(QRectF(8, 5, 4, 13), 2, 2)
+        path.addRoundedRect(QRectF(12, 4, 4, 14), 2, 2)
+        path.addRoundedRect(QRectF(16, 5, 4, 13), 2, 2)
+        path.addRoundedRect(QRectF(20, 8, 4, 11), 2, 2)
+    painter.fillPath(path, fill)
+    painter.setPen(QPen(QColor("#ffffff"), 3.0, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+    painter.drawPath(path)
+    painter.setPen(QPen(ink, 1.35, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+    painter.drawPath(path)
+
+
 def project_cursor(kind: str) -> QCursor:
     """Return a project-styled cursor instead of Qt's default resize glyphs."""
     pixmap = QPixmap(32, 32)
@@ -33,7 +59,6 @@ def project_cursor(kind: str) -> QCursor:
     painter = QPainter(pixmap)
     painter.setRenderHint(QPainter.Antialiasing, True)
     ink = QColor("#132238")
-    accent = QColor("#ff8a35")
     painter.setPen(QPen(QColor("#ffffff"), 4.2, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
 
     def stroke_line(a: QPointF, b: QPointF) -> None:
@@ -59,13 +84,10 @@ def project_cursor(kind: str) -> QCursor:
             painter.drawLine(tail, tip)
             painter.setBrush(ink)
             _cursor_arrow(painter, tip, tail, 5.5)
-    elif kind in {"rotate", "hand_closed"}:
-        painter.setPen(QPen(ink, 2.2, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
-        painter.setBrush(Qt.BrushStyle.NoBrush)
-        painter.drawArc(QRectF(6, 6, 20, 20), 30 * 16, 280 * 16)
-        painter.setBrush(accent)
-        painter.setPen(QPen(accent, 1.0))
-        _cursor_arrow(painter, QPointF(24, 8), QPointF(18, 7), 6.3)
+    elif kind in {"rotate", "hand_open"}:
+        _paint_hand(painter, closed=False)
+    elif kind == "hand_closed":
+        _paint_hand(painter, closed=True)
     else:
         path = QPainterPath()
         path.moveTo(7, 5)
@@ -97,7 +119,7 @@ def _nearest_orthogonal(angle: float) -> float:
 
 def _paint_angle_badge(painter: QPainter, position: QPointF, angle: float) -> None:
     painter.save()
-    rect = QRectF(position.x(), position.y(), 68, 22)
+    rect = QRectF(position.x(), position.y(), 74, 22)
     path = QPainterPath()
     path.addRoundedRect(rect, 7, 7)
     painter.fillPath(path, QColor(16, 34, 56, 235))
@@ -108,7 +130,7 @@ def _paint_angle_badge(painter: QPainter, position: QPointF, angle: float) -> No
     font.setPointSize(8)
     font.setBold(True)
     painter.setFont(font)
-    painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, f"{angle % 360.0:.1f} deg")
+    painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, f"{angle % 360.0:.2f} deg")
     painter.restore()
 
 
@@ -134,6 +156,20 @@ def _install_start_bar_patch() -> None:
     def corner_init(self, start_bar, parent):
         original_corner_init(self, start_bar, parent)
         self.setCursor(project_cursor("origin"))
+
+    def guide_context_menu(self, event) -> None:
+        from src.engineers_tools.app.module_window import MenuItemSpec, ProjectMenuDialog
+
+        def delete_guide() -> None:
+            if self._start_bar is not None:
+                self._start_bar._unregister_ruler_guide(self)
+            self.deleteLater()
+
+        dialog = ProjectMenuDialog("Guide", (MenuItemSpec("Delete", delete_guide),), self)
+        dialog.adjustSize()
+        dialog.move(event.globalPos())
+        dialog.exec()
+        event.accept()
 
     def scene_axis_to_view(canvas, value: float, axis: str) -> float:
         zoom = max(0.01, float(getattr(canvas, "_zoom", 1.0)))
@@ -188,6 +224,7 @@ def _install_start_bar_patch() -> None:
             canvas.update()
 
     sb._GuideLine.__init__ = guide_init
+    sb._GuideLine.contextMenuEvent = guide_context_menu
     sb._RulerOverlay.__init__ = overlay_init
     sb._RulerCorner.__init__ = corner_init
     sb._RulerOverlay.paintEvent = overlay_paint
@@ -202,12 +239,13 @@ def _install_workspace_patch() -> None:
         return
 
     original_mouse_move = edw.EngineeringCanvas.mouseMoveEvent
+    original_key_press = edw.EngineeringCanvas.keyPressEvent
     original_frame = edw.EngineeringCanvas._paint_selection_frame
     original_group_frame = edw.EngineeringCanvas._paint_group_selection
     original_build_side_panel = edw.EngineeringDesignWorkspace._build_side_panel
     original_install_shortcuts = edw.EngineeringDesignWorkspace._install_engineering_shortcuts
 
-    def resize_kind(action: str | None) -> str | None:
+    def resize_kind(action: str | None, dragging: bool = False) -> str | None:
         if action in {"resize_n", "resize_s"}:
             return "resize_v"
         if action in {"resize_e", "resize_w"}:
@@ -219,7 +257,7 @@ def _install_workspace_patch() -> None:
         if action == "move":
             return "move"
         if action == "rotate":
-            return "rotate"
+            return "hand_closed" if dragging else "hand_open"
         return None
 
     def hit_test_group(self, point: QPointF) -> str | None:
@@ -299,15 +337,28 @@ def _install_workspace_patch() -> None:
 
     def mouse_move(self, event) -> None:
         original_mouse_move(self, event)
-        action = getattr(self, "_drag_action", None)
+        drag_action = getattr(self, "_drag_action", None)
+        action = drag_action
         if action is None:
             try:
                 _index, action = self._hit_test_object(self._to_canvas_point(event.position()))
             except Exception:
                 action = None
-        cursor_name = resize_kind(action)
+        cursor_name = resize_kind(action, dragging=drag_action is not None)
         if cursor_name is not None:
             self.setCursor(project_cursor(cursor_name))
+
+    def key_press(self, event) -> None:
+        if event.key() == Qt.Key_F8:
+            host = self.window()
+            snap = getattr(host, "_orthogonal_snap", None)
+            if callable(snap):
+                snap()
+            else:
+                self.snap_selection_to_orthogonal()
+            event.accept()
+            return
+        original_key_press(self, event)
 
     def paint_selection_frame(self, painter: QPainter, obj) -> None:
         original_frame(self, painter, obj)
@@ -363,15 +414,23 @@ def _install_workspace_patch() -> None:
             return
         self._f8_orthogonal_shortcut_installed = True
         shortcut = QShortcut(QKeySequence("F8"), self)
-        shortcut.setContext(Qt.ShortcutContext.WindowShortcut)
+        shortcut.setContext(Qt.WindowShortcut)
         shortcut.activated.connect(self._orthogonal_snap)
         shortcut.activatedAmbiguously.connect(self._orthogonal_snap)
         self._engineering_shortcuts.append(shortcut)
+        canvas = getattr(self, "_canvas", None)
+        if canvas is not None:
+            canvas_shortcut = QShortcut(QKeySequence("F8"), canvas)
+            canvas_shortcut.setContext(Qt.WidgetWithChildrenShortcut)
+            canvas_shortcut.activated.connect(self._orthogonal_snap)
+            canvas_shortcut.activatedAmbiguously.connect(self._orthogonal_snap)
+            self._engineering_shortcuts.append(canvas_shortcut)
 
     edw.EngineeringCanvas._hit_test_group_selection = hit_test_group
     edw.EngineeringCanvas._hit_test_single_object = hit_test_single
     edw.EngineeringCanvas._apply_single_resize = apply_single_resize
     edw.EngineeringCanvas.mouseMoveEvent = mouse_move
+    edw.EngineeringCanvas.keyPressEvent = key_press
     edw.EngineeringCanvas._paint_selection_frame = paint_selection_frame
     edw.EngineeringCanvas._paint_group_selection = paint_group_selection
     edw.EngineeringCanvas.snap_selection_to_orthogonal = snap_selection_to_orthogonal
