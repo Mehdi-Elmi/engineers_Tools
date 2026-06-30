@@ -1,51 +1,62 @@
-2026-06-29 22:47:30,101 | INFO | root | Runtime log started.
-2026-06-29 22:47:30,101 | INFO | root | Runtime log path: C:\Users\ATLAS\AppData\Local\EngineerTools\logs\runtime.log
-2026-06-29 22:47:30,102 | INFO | root | Engineer Tools startup requested.
-2026-06-29 22:47:30,102 | INFO | root | Python executable: C:\Users\ATLAS\AppData\Local\EngineerTools\.venv\Scripts\pythonw.exe
-2026-06-29 22:47:30,102 | INFO | root | Python argv: ['C:\\Users\\ATLAS\\AppData\\Local\\EngineerTools\\src\\engineers_tools\\main.py']
-2026-06-29 22:47:30,694 | INFO | root | interaction_ui_patch: shared icon and control patches installed
-2026-06-29 22:47:30,735 | INFO | root | interaction_ui_patch: engineering workspace patches installed
-2026-06-29 22:47:30,736 | INFO | root | engineering_export_patch: installed
-2026-06-29 22:47:30,736 | INFO | root | engineering_workspace_finalize_patch: installed
-2026-06-29 22:47:30,736 | INFO | root | engineering_zoom_print_patch: installed
-2026-06-29 22:47:30,736 | INFO | root | engineering_print_setup_hotfix: shared yellow arrow styles installed
-2026-06-29 22:47:30,736 | INFO | root | engineering_print_setup_hotfix: installed version=direct-print-14
-2026-06-29 22:47:30,736 | INFO | root | engineering_print_setup_final_patch: installed version=direct-print-final-2
-2026-06-29 22:47:31,580 | INFO | root | Launcher shown.
-2026-06-29 22:47:41,492 | INFO | root | engineering_print_setup_final_patch: controls built version=direct-print-final-2 pages=1 printers=3
-2026-06-29 22:55:58,202 | INFO | root | engineering_print_setup_hotfix: direct print version=direct-print-14 printer=EPSON L3250 Series copies=2 pages=1-1 all=False grid=False pdf= valid=True
-2026-06-29 22:55:58,488 | ERROR | root | engineering_print_setup_hotfix: print failed: 'PySide6.QtWidgets.QWidget.render' called with wrong argument types:
-  PySide6.QtWidgets.QWidget.render(QPainter)
-Supported signatures:
-  PySide6.QtWidgets.QWidget.render(target: PySide6.QtGui.QPaintDevice, /, targetOffset: PySide6.QtCore.QPoint = Default(QPoint), sourceRegion: PySide6.QtGui.QRegion | PySide6.QtGui.QBitmap | PySide6.QtGui.QPolygon | PySide6.QtCore.QRect = Default(QRegion), renderFlags: PySide6.QtWidgets.QWidget.RenderFlag = Instance(QWidget.RenderFlags(QWidget.RenderFlag.DrawWindowBackground | QWidget.RenderFlag.DrawChildren)))
-  PySide6.QtWidgets.QWidget.render(painter: PySide6.QtGui.QPainter, targetOffset: PySide6.QtCore.QPoint, /, sourceRegion: PySide6.QtGui.QRegion | PySide6.QtGui.QBitmap | PySide6.QtGui.QPolygon | PySide6.QtCore.QRect = Default(QRegion), renderFlags: PySide6.QtWidgets.QWidget.RenderFlag = Instance(QWidget.RenderFlags(QWidget.RenderFlag.DrawWindowBackground | QWidget.RenderFlag.DrawChildren)))
+2026-06-30 19:20:41,584 | INFO | root | Runtime log started.
+2026-06-30 19:20:41,584 | INFO | root | Runtime log path: C:\Users\ATLAS\AppData\Local\EngineerTools\logs\runtime.log
+2026-06-30 19:20:41,584 | INFO | root | Engineer Tools startup requested.
+2026-06-30 19:20:41,584 | INFO | root | Python executable: C:\Users\ATLAS\AppData\Local\EngineerTools\.venv\Scripts\pythonw.exe
+2026-06-30 19:20:41,584 | INFO | root | Python argv: ['C:\\Users\\ATLAS\\AppData\\Local\\EngineerTools\\src\\engineers_tools\\main.py']
+2026-06-30 19:20:42,349 | INFO | root | interaction_ui_patch: shared icon and control patches installed
+2026-06-30 19:20:42,396 | INFO | root | interaction_ui_patch: engineering workspace patches installed
+2026-06-30 19:20:42,397 | INFO | root | engineering_export_patch: installed
+2026-06-30 19:20:42,397 | INFO | root | engineering_workspace_finalize_patch: installed
+2026-06-30 19:20:42,397 | INFO | root | engineering_zoom_print_patch: installed
+2026-06-30 19:20:42,398 | INFO | root | engineering_print_setup_hotfix: shared yellow arrow styles installed
+2026-06-30 19:20:42,398 | INFO | root | engineering_print_setup_hotfix: installed version=direct-print-14
+2026-06-30 19:20:42,398 | INFO | root | engineering_print_setup_final_patch: installed version=direct-print-final-2
+2026-06-30 19:20:42,398 | INFO | root | engineering_properties_patch: print setup Apply button disabled
+2026-06-30 19:20:42,398 | INFO | root | engineering_properties_patch: installed version=properties-settings-1
+2026-06-30 19:20:42,398 | INFO | root | engineering_ui_small_fixes_patch: unified grid/render pipeline installed version=ui-small-fixes-4
+2026-06-30 19:20:42,398 | INFO | root | engineering_ui_small_fixes_patch: compact cursor and startbar pointer installed version=ui-small-fixes-4
+2026-06-30 19:20:42,399 | INFO | root | engineering_ui_small_fixes_patch: layer icons installed version=ui-small-fixes-4
+2026-06-30 19:20:42,399 | INFO | root | engineering_ui_small_fixes_patch: empty right properties panel installed version=ui-small-fixes-4
+2026-06-30 19:20:42,399 | INFO | root | engineering_ui_small_fixes_patch: installed version=ui-small-fixes-4
+2026-06-30 19:20:42,399 | INFO | root | engineering_window_geometry_patch: installed version=window-geometry-2
+2026-06-30 19:20:42,399 | INFO | root | engineering_fixed_page_rotation_patch: installed version=fixed-page-resize-rotation-2
+2026-06-30 19:20:42,399 | INFO | root | engineering_fixed_viewport_patch: installed version=fixed-viewport-v5
+2026-06-30 19:20:43,592 | INFO | root | Launcher shown.
+2026-06-30 19:22:04,938 | INFO | root | engineering_properties_patch: shortcuts installed count=17
+2026-06-30 19:22:04,951 | INFO | root | engineering_properties_patch: shortcuts installed count=17
+2026-06-30 19:22:04,952 | INFO | root | engineering_properties_patch: startup settings loaded path=C:\Users\ATLAS\AppData\Local\EngineerTools\settings\engineer_tools_properties.etprops
+2026-06-30 19:22:13,043 | CRITICAL | root | Uncaught exception
 Traceback (most recent call last):
-  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\engineering_print_setup_hotfix.py", line 289, in _send_print_job
-    _render_engineering_export(workspace, painter, target, False)
-  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\engineering_print_setup_hotfix.py", line 153, in _fallback_render_engineering_export
-    canvas.render(painter)
-TypeError: 'PySide6.QtWidgets.QWidget.render' called with wrong argument types:
-  PySide6.QtWidgets.QWidget.render(QPainter)
-Supported signatures:
-  PySide6.QtWidgets.QWidget.render(target: PySide6.QtGui.QPaintDevice, /, targetOffset: PySide6.QtCore.QPoint = Default(QPoint), sourceRegion: PySide6.QtGui.QRegion | PySide6.QtGui.QBitmap | PySide6.QtGui.QPolygon | PySide6.QtCore.QRect = Default(QRegion), renderFlags: PySide6.QtWidgets.QWidget.RenderFlag = Instance(QWidget.RenderFlags(QWidget.RenderFlag.DrawWindowBackground | QWidget.RenderFlag.DrawChildren)))
-  PySide6.QtWidgets.QWidget.render(painter: PySide6.QtGui.QPainter, targetOffset: PySide6.QtCore.QPoint, /, sourceRegion: PySide6.QtGui.QRegion | PySide6.QtGui.QBitmap | PySide6.QtGui.QPolygon | PySide6.QtCore.QRect = Default(QRegion), renderFlags: PySide6.QtWidgets.QWidget.RenderFlag = Instance(QWidget.RenderFlags(QWidget.RenderFlag.DrawWindowBackground | QWidget.RenderFlag.DrawChildren)))
-2026-06-29 22:56:15,805 | INFO | root | engineering_print_setup_final_patch: controls built version=direct-print-final-2 pages=1 printers=3
-2026-06-29 22:56:20,830 | INFO | root | engineering_print_setup_final_patch: controls built version=direct-print-final-2 pages=1 printers=3
-2026-06-29 22:56:27,398 | INFO | root | engineering_print_setup_hotfix: direct print version=direct-print-14 printer=EPSON L3250 Series copies=4 pages=1-1 all=False grid=False pdf= valid=True
-2026-06-29 22:56:27,572 | ERROR | root | engineering_print_setup_hotfix: print failed: 'PySide6.QtWidgets.QWidget.render' called with wrong argument types:
-  PySide6.QtWidgets.QWidget.render(QPainter)
-Supported signatures:
-  PySide6.QtWidgets.QWidget.render(target: PySide6.QtGui.QPaintDevice, /, targetOffset: PySide6.QtCore.QPoint = Default(QPoint), sourceRegion: PySide6.QtGui.QRegion | PySide6.QtGui.QBitmap | PySide6.QtGui.QPolygon | PySide6.QtCore.QRect = Default(QRegion), renderFlags: PySide6.QtWidgets.QWidget.RenderFlag = Instance(QWidget.RenderFlags(QWidget.RenderFlag.DrawWindowBackground | QWidget.RenderFlag.DrawChildren)))
-  PySide6.QtWidgets.QWidget.render(painter: PySide6.QtGui.QPainter, targetOffset: PySide6.QtCore.QPoint, /, sourceRegion: PySide6.QtGui.QRegion | PySide6.QtGui.QBitmap | PySide6.QtGui.QPolygon | PySide6.QtCore.QRect = Default(QRegion), renderFlags: PySide6.QtWidgets.QWidget.RenderFlag = Instance(QWidget.RenderFlags(QWidget.RenderFlag.DrawWindowBackground | QWidget.RenderFlag.DrawChildren)))
+  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\module_window.py", line 444, in run
+    handler()
+TypeError: 'dict' object is not callable
+2026-06-30 19:22:15,449 | CRITICAL | root | Uncaught exception
 Traceback (most recent call last):
-  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\engineering_print_setup_hotfix.py", line 289, in _send_print_job
-    _render_engineering_export(workspace, painter, target, False)
-  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\engineering_print_setup_hotfix.py", line 153, in _fallback_render_engineering_export
-    canvas.render(painter)
-TypeError: 'PySide6.QtWidgets.QWidget.render' called with wrong argument types:
-  PySide6.QtWidgets.QWidget.render(QPainter)
-Supported signatures:
-  PySide6.QtWidgets.QWidget.render(target: PySide6.QtGui.QPaintDevice, /, targetOffset: PySide6.QtCore.QPoint = Default(QPoint), sourceRegion: PySide6.QtGui.QRegion | PySide6.QtGui.QBitmap | PySide6.QtGui.QPolygon | PySide6.QtCore.QRect = Default(QRegion), renderFlags: PySide6.QtWidgets.QWidget.RenderFlag = Instance(QWidget.RenderFlags(QWidget.RenderFlag.DrawWindowBackground | QWidget.RenderFlag.DrawChildren)))
-  PySide6.QtWidgets.QWidget.render(painter: PySide6.QtGui.QPainter, targetOffset: PySide6.QtCore.QPoint, /, sourceRegion: PySide6.QtGui.QRegion | PySide6.QtGui.QBitmap | PySide6.QtGui.QPolygon | PySide6.QtCore.QRect = Default(QRegion), renderFlags: PySide6.QtWidgets.QWidget.RenderFlag = Instance(QWidget.RenderFlags(QWidget.RenderFlag.DrawWindowBackground | QWidget.RenderFlag.DrawChildren)))
-2026-06-29 23:03:00,221 | INFO | root | engineering_print_setup_final_patch: controls built version=direct-print-final-2 pages=1 printers=3
-2026-06-29 23:06:53,257 | INFO | root | engineering_print_setup_final_patch: controls built version=direct-print-final-2 pages=1 printers=3
+  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\module_window.py", line 444, in run
+    handler()
+TypeError: 'dict' object is not callable
+2026-06-30 19:22:20,795 | CRITICAL | root | Uncaught exception
+Traceback (most recent call last):
+  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\module_window.py", line 444, in run
+    handler()
+TypeError: 'dict' object is not callable
+2026-06-30 19:22:21,227 | CRITICAL | root | Uncaught exception
+Traceback (most recent call last):
+  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\module_window.py", line 444, in run
+    handler()
+TypeError: 'dict' object is not callable
+2026-06-30 19:22:21,426 | CRITICAL | root | Uncaught exception
+Traceback (most recent call last):
+  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\module_window.py", line 444, in run
+    handler()
+TypeError: 'dict' object is not callable
+2026-06-30 19:22:23,517 | CRITICAL | root | Uncaught exception
+Traceback (most recent call last):
+  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\module_window.py", line 444, in run
+    handler()
+TypeError: 'dict' object is not callable
+2026-06-30 19:23:03,172 | CRITICAL | root | Uncaught exception
+Traceback (most recent call last):
+  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\module_window.py", line 444, in run
+    handler()
+TypeError: 'dict' object is not callable
