@@ -1,0 +1,1 @@
+top textbar patch file added; module_entry connection is pending if this marker exists
