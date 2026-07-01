@@ -12,6 +12,7 @@ from .engineering_runtime_audit_final_patch import apply_engineering_runtime_aud
 from .file_export_project_fixes import apply_file_export_project_fixes
 from .file_properties_general_patch import apply_file_properties_general_patch
 from .file_properties_view_final_patch import apply_file_properties_view_final_patch
+from .final_focus_editing_icons_patch import apply_final_focus_editing_icons_patch
 from .final_interaction_policy_fixes import apply_final_interaction_policy_fixes
 from .final_ui_repair_fixes import apply_final_ui_repair_fixes
 from .fixed_workspace_dimension_fixes import apply_fixed_workspace_dimension_fixes
@@ -77,4 +78,5 @@ def create_window(module: LauncherModule) -> ModuleWindow:
     apply_text_toolbar_final_event_safety_patch()
     apply_text_runtime_performance_editing_patch()
     apply_text_lag_final_patch()
+    apply_final_focus_editing_icons_patch()
     return EngineeringDesignWorkspace(module)
