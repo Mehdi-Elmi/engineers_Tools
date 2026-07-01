@@ -12,11 +12,11 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QCursor
 from PySide6.QtWidgets import QApplication, QWidget
 
-PATCH_VERSION = "engineering-native-cursor-lock-2026-07-01-c"
+PATCH_VERSION = "engineering-native-cursor-lock-2026-07-01-d"
 
 _NATIVE_SHAPE_TO_KIND = {
     Qt.CursorShape.OpenHandCursor: "rotate",
-    Qt.CursorShape.ClosedHandCursor: "rotate_drag",
+    Qt.CursorShape.ClosedHandCursor: "move_drag",
     Qt.CursorShape.SizeAllCursor: "move_drag",
     Qt.CursorShape.SizeHorCursor: "resize_horizontal",
     Qt.CursorShape.SizeVerCursor: "resize_vertical",
@@ -26,16 +26,44 @@ _NATIVE_SHAPE_TO_KIND = {
     Qt.CursorShape.ArrowCursor: "default",
 }
 
+_ACTION_TO_KIND = {
+    "move": "move_drag",
+    "rotate": "rotate_drag",
+    "resize_n": "resize_n",
+    "resize_s": "resize_s",
+    "resize_e": "resize_e",
+    "resize_w": "resize_w",
+    "resize_ne": "resize_ne",
+    "resize_sw": "resize_sw",
+    "resize_nw": "resize_nw",
+    "resize_se": "resize_se",
+}
 
-def _native_kind(cursor) -> str | None:
-    shape = None
+
+def _shape(cursor):
     if isinstance(cursor, Qt.CursorShape):
-        shape = cursor
-    elif isinstance(cursor, QCursor):
+        return cursor
+    if isinstance(cursor, QCursor):
         try:
-            shape = cursor.shape()
+            return cursor.shape()
         except Exception:
-            shape = None
+            return None
+    return None
+
+
+def _native_kind(cursor, widget=None) -> str | None:
+    shape = _shape(cursor)
+    action = str(getattr(widget, "_drag_action", "") or "") if widget is not None else ""
+    if action in _ACTION_TO_KIND and shape in {
+        Qt.CursorShape.OpenHandCursor,
+        Qt.CursorShape.ClosedHandCursor,
+        Qt.CursorShape.SizeAllCursor,
+        Qt.CursorShape.SizeHorCursor,
+        Qt.CursorShape.SizeVerCursor,
+        Qt.CursorShape.SizeFDiagCursor,
+        Qt.CursorShape.SizeBDiagCursor,
+    }:
+        return _ACTION_TO_KIND[action]
     return _NATIVE_SHAPE_TO_KIND.get(shape)
 
 
@@ -53,7 +81,7 @@ def _install_for_widget_class(widget_cls, svg) -> None:
     original_unset_cursor = widget_cls.unsetCursor
 
     def set_cursor(self, cursor) -> None:
-        kind = _native_kind(cursor)
+        kind = _native_kind(cursor, self)
         if kind is not None:
             original_set_cursor(self, _project_cursor(svg, kind))
             self._svg_cursor_kind = kind
@@ -98,9 +126,9 @@ def apply_native_cursor_lock_patch() -> None:
         "default": ("mouse_cursor.svg", 3, 3, 24),
         "select": ("mouse_cursor.svg", 3, 3, 24),
         "pointer": ("mouse_cursor.svg", 3, 3, 24),
-        "hand_open": ("rotate.svg", 14, 14, 28),
-        "hand_closed": ("rotate.svg", 14, 14, 28),
-        "pan_open": ("move_cursor.svg", 14, 14, 28),
+        "hand_open": ("mouse_cursor.svg", 3, 3, 24),
+        "hand_closed": ("move_cursor.svg", 14, 14, 28),
+        "pan_open": ("mouse_cursor.svg", 3, 3, 24),
         "pan_closed": ("move_cursor.svg", 14, 14, 28),
         "move": ("move_cursor.svg", 14, 14, 28),
         "move_drag": ("move_cursor.svg", 14, 14, 28),
@@ -125,8 +153,8 @@ def apply_native_cursor_lock_patch() -> None:
     svg._CURSOR_CACHE.clear()
     fcp._CURSOR_ASSET_OVERRIDES.update(cursor_map)
     hand_redirects = {
-        "hand_open.svg": "rotate.svg",
-        "hand_closed.svg": "rotate.svg",
+        "hand_open.svg": "mouse_cursor.svg",
+        "hand_closed.svg": "move_cursor.svg",
         "hand_pointer.svg": "mouse_cursor.svg",
         "rotate_cursor.svg": "rotate.svg",
     }
