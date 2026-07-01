@@ -24,12 +24,22 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-PATCH_VERSION = "engineering-text-color-inline-palette-2026-07-01-c"
-PALETTE = ["#132238", "#2f7df6", "#0f2a44", "#f18a2a", "#c9342b", "#168a50", "#6e4ad6", "#536271"]
+PATCH_VERSION = "engineering-text-color-inline-palette-2026-07-02-a"
+PALETTE = ["#132238", "#2f7df6", "#36a9e1", "#f18a2a", "#ffbf36", "#c9342b", "#168a50", "#6e4ad6"]
+COLOR_NAMES = {
+    "#132238": "Navy",
+    "#2f7df6": "Blue",
+    "#36a9e1": "Sky blue",
+    "#f18a2a": "Orange",
+    "#ffbf36": "Yellow",
+    "#c9342b": "Red",
+    "#168a50": "Green",
+    "#6e4ad6": "Purple",
+}
 _SWATCH_SIZE = 18
 _SWATCH_GAP = 2
-_ADD_WIDTH = 16
-_ADD_GAP = 7
+_ADD_WIDTH = 18
+_ADD_GAP = 2
 
 
 def _font(widget: QWidget, size: int = 10) -> None:
@@ -88,6 +98,7 @@ def _style_combo(combo: QComboBox) -> None:
 
 def _set_swatch_style(button: QPushButton, value: str) -> None:
     button._swatch_color = value
+    button.setToolTip(COLOR_NAMES.get(value.lower(), value))
     button.setStyleSheet(
         f"QPushButton{{background:{value};border:1px solid #243d58;border-radius:2px;padding:0;margin:0;outline:0;}}"
         "QPushButton:hover{border:2px solid #ff8a35;}"
@@ -153,16 +164,17 @@ def _rebuild_color_grid(holder: QWidget, colors: list[str], choose) -> None:
     grid.setVerticalSpacing(_SWATCH_GAP)
     for index, color in enumerate(colors):
         grid.addWidget(_make_swatch(color, choose), index % 2, index // 2)
-    add = QPushButton("+", holder)
+    add = QPushButton("＋", holder)
     add.setFixedSize(_ADD_WIDTH, palette_height)
     add.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+    add.setToolTip("Add custom color")
     add.setStyleSheet(_button_style("QPushButton"))
 
     def add_color() -> None:
         picked = QColorDialog.getColor(QColor("#132238"), holder, "Add Custom Color")
         if picked.isValid():
             value = picked.name()
-            if value not in colors:
+            if value not in colors and len(colors) < 28:
                 colors.append(value)
             choose(value)
             _rebuild_color_grid(holder, colors, choose)
@@ -181,6 +193,7 @@ def _open_settings(root, mode: str) -> None:
     dialog.setWindowTitle(title)
     dialog.setModal(True)
     dialog.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint)
+    dialog.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
     dialog.setMinimumSize(470, 360)
     dialog.setStyleSheet(
         "QDialog{background:#eaf4ff;border-radius:16px;}"
@@ -214,6 +227,7 @@ def _open_settings(root, mode: str) -> None:
 
     def choose(value: str) -> None:
         selected["color"] = value
+        color_preview.setToolTip(COLOR_NAMES.get(value.lower(), value))
         color_preview.setStyleSheet(f"color:{value};font-size:18px;font-weight:900;")
 
     choose(selected["color"])
