@@ -1,18 +1,18 @@
 """Lock native Qt cursors to the Engineering Tools cursor system.
 
-Several older patches and base handlers still call ``setCursor`` or
-``unsetCursor`` with native Qt cursor shapes such as OpenHandCursor,
-ClosedHandCursor, and Size*Cursor. This patch runs last and intercepts those
-calls on both engineering canvases so drag, resize, rotate, and move never fall
-back to Windows cursors.
+Several older patches and base handlers still call ``setCursor``,
+``unsetCursor`` or ``QApplication.setOverrideCursor`` with native Qt cursor
+shapes such as OpenHandCursor, ClosedHandCursor, and Size*Cursor. This patch
+runs last and maps those native cursors to the project's SVG cursor language.
 """
 
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QCursor
+from PySide6.QtWidgets import QApplication, QWidget
 
-PATCH_VERSION = "engineering-native-cursor-lock-2026-07-01-b"
+PATCH_VERSION = "engineering-native-cursor-lock-2026-07-01-c"
 
 _NATIVE_SHAPE_TO_KIND = {
     Qt.CursorShape.OpenHandCursor: "rotate",
@@ -39,34 +39,50 @@ def _native_kind(cursor) -> str | None:
     return _NATIVE_SHAPE_TO_KIND.get(shape)
 
 
-def _install_for_canvas_class(canvas_cls, svg) -> None:
-    if getattr(canvas_cls, "_native_cursor_lock_class_patch", "") == PATCH_VERSION:
+def _project_cursor(svg, kind: str):
+    try:
+        return svg.project_cursor(kind)
+    except Exception:
+        return QCursor(Qt.CursorShape.ArrowCursor)
+
+
+def _install_for_widget_class(widget_cls, svg) -> None:
+    if getattr(widget_cls, "_native_cursor_lock_class_patch", "") == PATCH_VERSION:
         return
-    original_set_cursor = canvas_cls.setCursor
-    original_unset_cursor = canvas_cls.unsetCursor
+    original_set_cursor = widget_cls.setCursor
+    original_unset_cursor = widget_cls.unsetCursor
 
     def set_cursor(self, cursor) -> None:
         kind = _native_kind(cursor)
         if kind is not None:
-            try:
-                original_set_cursor(self, svg.project_cursor(kind))
-                self._svg_cursor_kind = kind
-                return
-            except Exception:
-                pass
+            original_set_cursor(self, _project_cursor(svg, kind))
+            self._svg_cursor_kind = kind
+            return
         original_set_cursor(self, cursor)
 
     def unset_cursor(self) -> None:
-        try:
-            original_set_cursor(self, svg.project_cursor("default"))
-            self._svg_cursor_kind = "default"
-            return
-        except Exception:
-            original_unset_cursor(self)
+        original_set_cursor(self, _project_cursor(svg, "default"))
+        self._svg_cursor_kind = "default"
 
-    canvas_cls.setCursor = set_cursor
-    canvas_cls.unsetCursor = unset_cursor
-    canvas_cls._native_cursor_lock_class_patch = PATCH_VERSION
+    widget_cls.setCursor = set_cursor
+    widget_cls.unsetCursor = unset_cursor
+    widget_cls._native_cursor_lock_class_patch = PATCH_VERSION
+
+
+def _install_override_cursor_lock(svg) -> None:
+    if getattr(QApplication, "_engineering_override_cursor_lock_patch", "") == PATCH_VERSION:
+        return
+    original_set_override = QApplication.setOverrideCursor
+
+    def set_override_cursor(cursor) -> None:
+        kind = _native_kind(cursor)
+        if kind is not None:
+            original_set_override(_project_cursor(svg, kind))
+            return
+        original_set_override(cursor)
+
+    QApplication.setOverrideCursor = staticmethod(set_override_cursor)
+    QApplication._engineering_override_cursor_lock_patch = PATCH_VERSION
 
 
 def apply_native_cursor_lock_patch() -> None:
@@ -80,6 +96,12 @@ def apply_native_cursor_lock_patch() -> None:
 
     cursor_map = {
         "default": ("mouse_cursor.svg", 3, 3, 24),
+        "select": ("mouse_cursor.svg", 3, 3, 24),
+        "pointer": ("mouse_cursor.svg", 3, 3, 24),
+        "hand_open": ("rotate.svg", 14, 14, 28),
+        "hand_closed": ("rotate.svg", 14, 14, 28),
+        "pan_open": ("move_cursor.svg", 14, 14, 28),
+        "pan_closed": ("move_cursor.svg", 14, 14, 28),
         "move": ("move_cursor.svg", 14, 14, 28),
         "move_drag": ("move_cursor.svg", 14, 14, 28),
         "rotate": ("rotate.svg", 14, 14, 28),
@@ -102,14 +124,19 @@ def apply_native_cursor_lock_patch() -> None:
     svg._CURSOR_ASSET_MAP.update(cursor_map)
     svg._CURSOR_CACHE.clear()
     fcp._CURSOR_ASSET_OVERRIDES.update(cursor_map)
+    hand_redirects = {
+        "hand_open.svg": "rotate.svg",
+        "hand_closed.svg": "rotate.svg",
+        "hand_pointer.svg": "mouse_cursor.svg",
+        "rotate_cursor.svg": "rotate.svg",
+    }
     if hasattr(svg, "_HAND_FILE_REDIRECTS"):
-        svg._HAND_FILE_REDIRECTS.update({
-            "hand_open.svg": "mouse_cursor.svg",
-            "hand_closed.svg": "move_cursor.svg",
-            "hand_pointer.svg": "mouse_cursor.svg",
-            "rotate_cursor.svg": "rotate.svg",
-        })
+        svg._HAND_FILE_REDIRECTS.update(hand_redirects)
+    if hasattr(fcp, "_HAND_FILE_REDIRECTS"):
+        fcp._HAND_FILE_REDIRECTS.update(hand_redirects)
 
-    _install_for_canvas_class(mw.GridCanvas, svg)
-    _install_for_canvas_class(edw.EngineeringCanvas, svg)
+    _install_for_widget_class(QWidget, svg)
+    _install_for_widget_class(mw.GridCanvas, svg)
+    _install_for_widget_class(edw.EngineeringCanvas, svg)
+    _install_override_cursor_lock(svg)
     edw.EngineeringCanvas._engineering_native_cursor_lock_patch = PATCH_VERSION
