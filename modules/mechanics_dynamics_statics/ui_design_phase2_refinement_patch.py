@@ -21,27 +21,27 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-PATCH_VERSION = "engineering-ui-design-phase2-refinement-2026-07-01-a"
+PATCH_VERSION = "engineering-ui-design-phase2-refinement-2026-07-01-b"
 FONT_CHOICES = ("Times New Roman",)
 UNITS = ("mm", "cm", "m", "px", "pt", "in")
 VIEW_KEYS = (("undo", "Undo"), ("redo", "Redo"), ("select", "Select"), ("line", "Line"), ("vector", "Vector"), ("angle", "Angle"), ("text", "Text"), ("grid", "Grid"), ("snap", "Snap"), ("unit", "Unit"), ("ruler", "Ruler"), ("zoom", "Zoom"))
 CURSOR_OVERRIDES = {
-    "rotate": ("rotate.svg", 18, 18, 48),
-    "rotate_drag": ("rotate.svg", 18, 18, 48),
-    "resize_n": ("resize_vertical.svg", 20, 20, 40),
-    "resize_s": ("resize_vertical.svg", 20, 20, 40),
-    "resize_e": ("resize_horizontal.svg", 20, 20, 40),
-    "resize_w": ("resize_horizontal.svg", 20, 20, 40),
-    "resize_ne": ("corner_resize_b.svg", 20, 20, 40),
-    "resize_sw": ("corner_resize_b.svg", 20, 20, 40),
-    "resize_nw": ("corner_resize_a.svg", 20, 20, 40),
-    "resize_se": ("corner_resize_a.svg", 20, 20, 40),
-    "resize_horizontal": ("resize_horizontal.svg", 20, 20, 40),
-    "resize_vertical": ("resize_vertical.svg", 20, 20, 40),
-    "resize_diag_f": ("corner_resize_a.svg", 20, 20, 40),
-    "resize_diag_b": ("corner_resize_b.svg", 20, 20, 40),
-    "resize_fdiag": ("corner_resize_a.svg", 20, 20, 40),
-    "resize_bdiag": ("corner_resize_b.svg", 20, 20, 40),
+    "rotate": ("rotate.svg", 24, 24, 54),
+    "rotate_drag": ("rotate.svg", 24, 24, 54),
+    "resize_n": ("resize_vertical.svg", 28, 28, 56),
+    "resize_s": ("resize_vertical.svg", 28, 28, 56),
+    "resize_e": ("resize_horizontal.svg", 28, 28, 56),
+    "resize_w": ("resize_horizontal.svg", 28, 28, 56),
+    "resize_ne": ("corner_resize_b.svg", 28, 28, 56),
+    "resize_sw": ("corner_resize_b.svg", 28, 28, 56),
+    "resize_nw": ("corner_resize_a.svg", 28, 28, 56),
+    "resize_se": ("corner_resize_a.svg", 28, 28, 56),
+    "resize_horizontal": ("resize_horizontal.svg", 28, 28, 56),
+    "resize_vertical": ("resize_vertical.svg", 28, 28, 56),
+    "resize_diag_f": ("corner_resize_a.svg", 28, 28, 56),
+    "resize_diag_b": ("corner_resize_b.svg", 28, 28, 56),
+    "resize_fdiag": ("corner_resize_a.svg", 28, 28, 56),
+    "resize_bdiag": ("corner_resize_b.svg", 28, 28, 56),
 }
 
 
@@ -154,27 +154,29 @@ def _install_textbar(sb, svg) -> None:
             return None
         existing = command_bar.findChild(QFrame, "InlineTextBar")
         if existing is not None:
-            existing.setFixedHeight(34)
-            existing.setMinimumWidth(620)
-            existing.setMaximumWidth(820)
+            existing.setFixedHeight(36)
+            existing.setMinimumWidth(660)
+            existing.setMaximumWidth(880)
             existing.show()
+            _remove_legacy_text_subbars(window)
             return existing
         bar = QFrame(command_bar)
         bar.setObjectName("InlineTextBar")
-        bar.setFixedHeight(34)
-        bar.setMinimumWidth(620)
-        bar.setMaximumWidth(820)
+        bar.setFixedHeight(36)
+        bar.setMinimumWidth(660)
+        bar.setMaximumWidth(880)
         bar.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         bar.setStyleSheet("QFrame#InlineTextBar{background:qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #fff,stop:.52 #eef8ff,stop:1 #fff1c8);border:1px solid #8fa2bb;border-radius:12px;}")
         row = QHBoxLayout(bar)
-        row.setContentsMargins(8, 4, 8, 4)
-        row.setSpacing(5)
-        combo = QComboBox(); combo.addItems(list(FONT_CHOICES)); combo.setCurrentText("Times New Roman"); combo.setFixedSize(166, 26); _style_combo(svg, combo); row.addWidget(combo)
-        size = QSpinBox(); size.setRange(1, 300); size.setValue(12); size.setSuffix(" pt"); size.setFixedSize(82, 26); _style_spin(svg, size); row.addWidget(size)
-        for text, width in (("B", 30), ("I", 30), ("•", 30), ("1.", 34), ("L", 30), ("C", 30), ("R", 30), ("J", 30), ("LS", 40), ("LTR", 46), ("RTL", 46), ("Σ", 32)):
-            b = QPushButton(text); b.setFixedSize(width, 26); _font(b, 10); b.setStyleSheet("QPushButton{background:#fff;border:1px solid #9fb0c5;border-radius:8px;color:#132238;padding:0;}QPushButton:hover{background:#fff4cf;border-color:#ff8a35;}"); row.addWidget(b)
+        row.setContentsMargins(9, 4, 9, 4)
+        row.setSpacing(6)
+        combo = QComboBox(); combo.addItems(list(FONT_CHOICES)); combo.setCurrentText("Times New Roman"); combo.setFixedSize(176, 28); _style_combo(svg, combo); row.addWidget(combo)
+        size = QSpinBox(); size.setRange(1, 300); size.setValue(12); size.setSuffix(" pt"); size.setFixedSize(90, 28); _style_spin(svg, size); row.addWidget(size)
+        for text, width in (("B", 32), ("I", 32), ("•", 32), ("1.", 36), ("L", 32), ("C", 32), ("R", 32), ("J", 32), ("LS", 42), ("LTR", 48), ("RTL", 48), ("Σ", 34)):
+            b = QPushButton(text); b.setFixedSize(width, 28); _font(b, 10); b.setStyleSheet("QPushButton{background:#fff;border:1px solid #9fb0c5;border-radius:8px;color:#132238;padding:0;}QPushButton:hover{background:#fff4cf;border-color:#ff8a35;}"); row.addWidget(b)
         command_bar.layout().insertWidget(max(0, command_bar.layout().count() - 1), bar, 0, Qt.AlignmentFlag.AlignVCenter)
         bar.show()
+        _remove_legacy_text_subbars(window)
         return bar
 
     def set_visible(self, visible: bool = True, emit: bool = True) -> None:
@@ -184,23 +186,34 @@ def _install_textbar(sb, svg) -> None:
         popup = getattr(self, "_popup", None)
         if popup is not None:
             popup.close()
+        _remove_legacy_text_subbars(self.window())
         self._text_toolbar_enabled = True
         if emit:
             self.tool_requested.emit("text_on")
             self._set_host_status("Text bar ready")
 
     old_handle = sb.StartBar._handle_tool_click
+    old_show_event = sb.StartBar.showEvent
 
     def handle(self, key: str) -> None:
         if key == "text":
             set_visible(self, True, True)
             return
         old_handle(self, key)
+        _remove_legacy_text_subbars(self.window())
+
+    def show_event(self, event) -> None:
+        old_show_event(self, event)
+        QTimer.singleShot(0, lambda s=self: _remove_legacy_text_subbars(s.window()))
+        QTimer.singleShot(0, lambda s=self: s._set_text_toolbar_visible(True, emit=False))
 
     sb.StartBar._ensure_text_toolbar = make_textbar
     sb.StartBar._set_text_toolbar_visible = set_visible
     sb.StartBar._show_text_toolbar = lambda self, key: set_visible(self, True, True)
     sb.StartBar._handle_tool_click = handle
+    if not getattr(sb.StartBar, "_phase2_textbar_show_wrapped", False):
+        sb.StartBar.showEvent = show_event
+        sb.StartBar._phase2_textbar_show_wrapped = True
 
 
 def _install_properties(epp, svg) -> None:
@@ -220,22 +233,22 @@ def _install_properties(epp, svg) -> None:
             for k, b in unit_buttons.items(): b.setChecked(k == unit); b.setText(("● " if k == unit else "○ ") + k)
             self.grid_spacing.setSuffix(f" {unit}")
         for i, unit in enumerate(UNITS):
-            b = _button(unit, self.unit_combo.currentText() == unit, 64); b.clicked.connect(lambda checked=False, u=unit: select_unit(u)); unit_buttons[unit] = b; unit_grid.addWidget(b, i // 3, i % 3)
+            b = _button(unit, self.unit_combo.currentText() == unit, 58); b.clicked.connect(lambda checked=False, u=unit: select_unit(u)); unit_buttons[unit] = b; unit_grid.addWidget(b, i // 3, i % 3)
         unit_layout.addLayout(unit_grid); layout.addWidget(unit_frame)
 
         grid_frame, grid_layout = _section("Grid", 92)
         self.grid_spacing = QDoubleSpinBox(); self.grid_spacing.setRange(0.000001, 1000000.0); self.grid_spacing.setDecimals(6); self.grid_spacing.setSingleStep(0.5); self.grid_spacing.setValue(float(general.get("grid_spacing", 1.0) or 1.0)); self.grid_spacing.setSuffix(f" {self.unit_combo.currentText()}"); _style_spin(svg, self.grid_spacing)
-        grid_button = _button("Grid On" if self.grid_check.isChecked() else "Grid Off", self.grid_check.isChecked(), 108)
+        grid_button = _button("Grid On" if self.grid_check.isChecked() else "Grid Off", self.grid_check.isChecked(), 102)
         def toggle_grid() -> None:
             active = not self.grid_check.isChecked(); self.grid_check.setChecked(active); grid_button.setChecked(active); grid_button.setText("● Grid On" if active else "○ Grid Off")
-        grid_button.clicked.connect(toggle_grid); grid_layout.addWidget(grid_button); grid_layout.addWidget(_row("Spacing", self.grid_spacing)); layout.addWidget(grid_frame)
+        grid_button.clicked.connect(toggle_grid); grid_layout.addWidget(grid_button); grid_layout.addWidget(_row("Spacing", self.grid_spacing, 76)); layout.addWidget(grid_frame)
 
         text_frame, text_layout = _section("Text", 92)
         self.text_font = QComboBox(); self.text_font.addItems(list(FONT_CHOICES)); self.text_font.setCurrentText("Times New Roman"); _style_combo(svg, self.text_font)
         self.text_size = QSpinBox(); self.text_size.setRange(1, 300); self.text_size.setValue(int(general.get("text_size", 12) or 12)); self.text_size.setSuffix(" pt"); _style_spin(svg, self.text_size)
-        text_layout.addWidget(_row("Font", self.text_font)); text_layout.addWidget(_row("Size", self.text_size)); layout.addWidget(text_frame)
+        text_layout.addWidget(_row("Font", self.text_font, 76)); text_layout.addWidget(_row("Size", self.text_size, 76)); layout.addWidget(text_frame)
 
-        snap_frame, snap_layout = _section("Snap", 64); snap_button = _button("Snap On" if self.snap_check.isChecked() else "Snap Off", self.snap_check.isChecked(), 108)
+        snap_frame, snap_layout = _section("Snap", 64); snap_button = _button("Snap On" if self.snap_check.isChecked() else "Snap Off", self.snap_check.isChecked(), 102)
         def toggle_snap() -> None:
             active = not self.snap_check.isChecked(); self.snap_check.setChecked(active); snap_button.setChecked(active); snap_button.setText("● Snap On" if active else "○ Snap Off")
         snap_button.clicked.connect(toggle_snap); snap_layout.addWidget(snap_button); layout.addWidget(snap_frame)
@@ -243,7 +256,7 @@ def _install_properties(epp, svg) -> None:
         view_frame, view_layout = _section("View", 154); view_grid = QGridLayout(); view_grid.setContentsMargins(0, 0, 0, 0); view_grid.setHorizontalSpacing(7); view_grid.setVerticalSpacing(5)
         self._view_buttons = {}; startbar_state = self._settings.get("view", {}).get("startbar", {}) if isinstance(self._settings.get("view", {}), dict) else {}
         for i, (key, label) in enumerate(VIEW_KEYS):
-            b = _button(label, bool(startbar_state.get(key, True)), 88); self._view_buttons[key] = b; view_grid.addWidget(b, i // 3, i % 3)
+            b = _button(label, bool(startbar_state.get(key, True)), 78); self._view_buttons[key] = b; view_grid.addWidget(b, i // 3, i % 3)
         view_layout.addLayout(view_grid); layout.addWidget(view_frame); layout.addStretch(1); _font_tree(page); return page
 
     def shortcut_page(self) -> QWidget:
@@ -260,7 +273,7 @@ def _install_properties(epp, svg) -> None:
 
     old_init = epp.PropertiesDialog.__init__
     def dialog_init(self, workspace: QWidget) -> None:
-        old_init(self, workspace); self.resize(640, 540); self.setMinimumSize(610, 500); _font_tree(self)
+        old_init(self, workspace); self.resize(600, 540); self.setMinimumSize(580, 500); _font_tree(self)
         for c in self.findChildren(QComboBox): _style_combo(svg, c)
         for s in [*self.findChildren(QSpinBox), *self.findChildren(QDoubleSpinBox)]: _style_spin(svg, s)
 
@@ -298,6 +311,7 @@ def apply_ui_design_phase2_refinement_patch() -> None:
         if start_bar is not None:
             QTimer.singleShot(0, lambda sb=start_bar: sb._set_text_toolbar_visible(True, emit=False))
             QTimer.singleShot(0, lambda root=self: _remove_legacy_text_subbars(root))
+            QTimer.singleShot(120, lambda root=self: _remove_legacy_text_subbars(root))
 
     edw.EngineeringDesignWorkspace.__init__ = workspace_init
     edw.EngineeringDesignWorkspace._engineering_ui_design_phase2_refinement_patch = PATCH_VERSION
