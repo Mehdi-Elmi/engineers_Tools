@@ -14,9 +14,11 @@ from PySide6.QtCore import QPointF, QRect, QRectF, QSize, QTimer, Qt
 from PySide6.QtGui import QColor, QFont, QPainter, QPen, QTextDocument
 from PySide6.QtWidgets import (
     QCheckBox,
+    QColorDialog,
     QComboBox,
     QDoubleSpinBox,
     QFrame,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QMenu,
@@ -27,10 +29,18 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-PATCH_VERSION = "engineering-ui-text-runtime-fix-2026-07-01-b"
+PATCH_VERSION = "engineering-ui-text-runtime-fix-2026-07-01-c"
 
 FONT_CHOICES = (
     "Times New Roman",
+    "B Zar",
+    "Zar",
+    "B Nazanin",
+    "Nazanin",
+    "B Mitra",
+    "B Lotus",
+    "IranNastaliq",
+    "Vazirmatn",
     "Arial",
     "Calibri",
     "Cambria",
@@ -83,6 +93,32 @@ _ACTION_TO_CURSOR = {
     "resize_nw": "resize_nw",
     "resize_se": "resize_se",
 }
+
+_TEXT_COLOR_PALETTE = (
+    "#132238",
+    "#2f7df6",
+    "#0f2a44",
+    "#f18a2a",
+    "#c9342b",
+    "#168a50",
+    "#6e4ad6",
+    "#536271",
+)
+_TEXT_COLOR_CONTROL_NAMES = {
+    "textcolorbutton",
+    "inlinecolorpalette",
+    "inlinecolorpaletteholder",
+    "runtimeauditcolorpalette",
+    "runtimeauditcolorpaletteholder",
+    "runtimeauditaddcolorbutton",
+    "textcolorpalette",
+    "textinlinepalette",
+    "textcolorswatchpalette",
+}
+_TEXT_SWATCH_SIZE = 15
+_TEXT_SWATCH_GAP = 1
+_TEXT_ADD_BUTTON_WIDTH = 14
+_TEXT_ADD_BUTTON_GAP = 6
 
 _TOOLBAR_STYLE = (
     "QFrame#InlineTextBar{"
@@ -235,6 +271,121 @@ def _menu_action(menu: QMenu, text: str, callback) -> None:
     action.triggered.connect(callback)
 
 
+def _text_custom_colors(root: QWidget | None) -> list[str]:
+    if root is None:
+        return []
+    values = getattr(root, "_runtime_text_custom_colors", None)
+    if not isinstance(values, list):
+        values = []
+        setattr(root, "_runtime_text_custom_colors", values)
+    return values
+
+
+def _text_swatch_style(color: str) -> str:
+    return (
+        "QPushButton{background:" + color + ";border:1px solid #7f95b2;border-radius:2px;"
+        "padding:0;margin:0;}"
+        "QPushButton:hover{border:2px solid #ff8a35;}"
+        "QPushButton:pressed{border:2px solid #132238;}"
+    )
+
+
+def _remove_text_color_controls(bar: QWidget) -> None:
+    for child in list(bar.findChildren(QWidget)):
+        name = (child.objectName() or "").lower()
+        if name in _TEXT_COLOR_CONTROL_NAMES or child.property("runtimeTextColorControl"):
+            _delete(child)
+
+
+def _choose_text_swatch_color(button: QPushButton, root: QWidget | None) -> None:
+    current = QColor(str(button.property("colorValue") or "#132238"))
+    color = QColorDialog.getColor(current, button, "Custom Color")
+    if not color.isValid():
+        return
+    value = color.name()
+    button.setProperty("colorValue", value)
+    button.setStyleSheet(_text_swatch_style(value))
+    _apply_text_action(root, "text_color", value)
+
+
+def _make_text_color_swatch(parent: QWidget, root: QWidget | None, color: str) -> QPushButton:
+    button = QPushButton(parent)
+    button.setObjectName("RuntimeTextColorSwatch")
+    button.setProperty("runtimeTextColorControl", True)
+    button.setFixedSize(_TEXT_SWATCH_SIZE, _TEXT_SWATCH_SIZE)
+    button.setProperty("colorValue", color)
+    button.setToolTip("Color")
+    button.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+    button.clicked.connect(lambda checked=False, b=button, w=root: _apply_text_action(w, "text_color", str(b.property("colorValue") or color)))
+    button.customContextMenuRequested.connect(lambda _pos, b=button, w=root: _choose_text_swatch_color(b, w))
+    button.setStyleSheet(_text_swatch_style(color))
+    return button
+
+
+def _rebuild_text_color_palette(bar: QWidget, root: QWidget | None) -> None:
+    _remove_text_color_controls(bar)
+    _install_text_color_palette(bar, root)
+
+
+def _add_text_custom_color(bar: QWidget, root: QWidget | None) -> None:
+    color = QColorDialog.getColor(QColor("#2f7df6"), bar, "Add Custom Color")
+    if not color.isValid():
+        return
+    value = color.name()
+    colors = _text_custom_colors(root)
+    if value not in colors:
+        colors.append(value)
+    _apply_text_action(root, "text_color", value)
+    _rebuild_text_color_palette(bar, root)
+
+
+def _install_text_color_palette(bar: QWidget, root: QWidget | None) -> None:
+    _remove_text_color_controls(bar)
+    colors = list(_TEXT_COLOR_PALETTE) + _text_custom_colors(root)
+    columns = max(4, (len(colors) + 1) // 2)
+    palette_width = columns * _TEXT_SWATCH_SIZE + max(0, columns - 1) * _TEXT_SWATCH_GAP
+    palette_height = 2 * _TEXT_SWATCH_SIZE + _TEXT_SWATCH_GAP
+
+    palette = QWidget(bar)
+    palette.setObjectName("RuntimeTextColorPalette")
+    palette.setProperty("runtimeTextColorControl", True)
+    palette.setFixedSize(palette_width, palette_height)
+    palette.setToolTip("Text color")
+    grid = QGridLayout(palette)
+    grid.setContentsMargins(0, 0, 0, 0)
+    grid.setHorizontalSpacing(_TEXT_SWATCH_GAP)
+    grid.setVerticalSpacing(_TEXT_SWATCH_GAP)
+    for index, color in enumerate(colors):
+        grid.addWidget(_make_text_color_swatch(palette, root, color), index % 2, index // 2)
+
+    add = QPushButton("+", bar)
+    add.setObjectName("RuntimeTextAddColorButton")
+    add.setProperty("runtimeTextColorControl", True)
+    add.setFixedSize(_TEXT_ADD_BUTTON_WIDTH, palette_height)
+    add.setToolTip("Add custom color")
+    add.setStyleSheet(
+        "QPushButton#RuntimeTextAddColorButton{background:#fff2be;border:1px solid #b98920;"
+        "border-radius:4px;color:#132238;font-family:'Times New Roman';font-size:10px;font-weight:800;"
+        "padding:0;margin:0;}"
+        "QPushButton#RuntimeTextAddColorButton:hover{background:#ffd36d;border-color:#ff8a35;}"
+        "QPushButton#RuntimeTextAddColorButton:pressed{background:#f18a2a;color:#ffffff;}"
+    )
+    add.clicked.connect(lambda checked=False, b=bar, w=root: _add_text_custom_color(b, w))
+
+    holder = QWidget(bar)
+    holder.setObjectName("RuntimeTextColorPaletteHolder")
+    holder.setProperty("runtimeTextColorControl", True)
+    holder.setFixedSize(palette_width + _TEXT_ADD_BUTTON_GAP + _TEXT_ADD_BUTTON_WIDTH, palette_height)
+    holder_layout = QHBoxLayout(holder)
+    holder_layout.setContentsMargins(0, 0, 0, 0)
+    holder_layout.setSpacing(_TEXT_ADD_BUTTON_GAP)
+    holder_layout.addWidget(palette)
+    holder_layout.addWidget(add)
+    layout = bar.layout()
+    if isinstance(layout, QHBoxLayout):
+        layout.addWidget(holder)
+
+
 def _attach_button_menus(bar: QWidget) -> None:
     window = bar.window()
     for button in bar.findChildren(QPushButton):
@@ -297,28 +448,7 @@ def _attach_button_menus(bar: QWidget) -> None:
             _menu_action(menu, "Line and paragraph settings...", lambda: None)
             button.setMenu(menu)
 
-    if bar.findChild(QPushButton, "TextColorButton") is None:
-        color = QPushButton("A")
-        color.setObjectName("TextColorButton")
-        color.setToolTip("Text and bullet color")
-        color.setFixedSize(38, 32)
-        _font(color, 11)
-        color.setStyleSheet("QPushButton#TextColorButton{background:#ffffff;border:1px solid #9fb0c5;border-radius:9px;color:#132238;font-family:'Times New Roman';font-size:12px;font-weight:800;} QPushButton#TextColorButton:hover{background:#fff4cf;border-color:#ff8a35;}")
-        menu = QMenu(color)
-        palette = (
-            ("Black", "#132238"), ("Blue", "#2f7df6"), ("Navy", "#0f2a44"), ("Orange", "#f18a2a"),
-            ("Red", "#c9342b"), ("Green", "#168a50"), ("Purple", "#6e4ad6"), ("Gray", "#536271"),
-        )
-        for label, value in palette:
-            _menu_action(menu, f"■ {label}", lambda checked=False, w=window, v=value: _apply_text_action(w, "text_color", v))
-        menu.addSeparator()
-        _menu_action(menu, "Bullet color follows text ✓", lambda: None)
-        _menu_action(menu, "Bullet custom color...", lambda: None)
-        _menu_action(menu, "Number custom color...", lambda: None)
-        color.setMenu(menu)
-        layout = bar.layout()
-        if isinstance(layout, QHBoxLayout):
-            layout.addWidget(color)
+    _install_text_color_palette(bar, window)
 
 
 def _style_inline_text_bar(bar: QWidget | None) -> None:
@@ -327,8 +457,8 @@ def _style_inline_text_bar(bar: QWidget | None) -> None:
     bar.setObjectName("InlineTextBar")
     bar.setProperty("runtimeFix", PATCH_VERSION)
     bar.setFixedHeight(46)
-    bar.setMinimumWidth(860)
-    bar.setMaximumWidth(1120)
+    bar.setMinimumWidth(900)
+    bar.setMaximumWidth(1180)
     bar.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
     bar.setStyleSheet(_TOOLBAR_STYLE)
     layout = bar.layout()
@@ -354,6 +484,8 @@ def _style_inline_text_bar(bar: QWidget | None) -> None:
         spin.setToolTip("Font size")
         _font(spin, 12)
     for button in bar.findChildren(QPushButton):
+        if button.property("runtimeTextColorControl"):
+            continue
         if button.toolTip():
             button.setStatusTip(button.toolTip())
             button.setToolTipDuration(5000)
