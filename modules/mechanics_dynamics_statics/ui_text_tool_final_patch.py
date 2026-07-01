@@ -13,7 +13,7 @@ from PySide6.QtCore import QPointF, QRectF, QTimer, Qt
 from PySide6.QtGui import QColor, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QComboBox, QDoubleSpinBox, QFrame, QHBoxLayout, QPushButton, QSizePolicy, QSpinBox, QWidget
 
-PATCH_VERSION = "engineering-ui-text-tool-final-2026-07-01-a"
+PATCH_VERSION = "engineering-ui-text-tool-final-2026-07-01-b"
 FONT_CHOICES = ("Times New Roman",)
 CURSOR_OVERRIDES = {
     "rotate": ("rotate.svg", 20, 20, 44),
@@ -127,6 +127,14 @@ def _text_button(label: str, tooltip: str, width: int) -> QPushButton:
     return button
 
 
+def _prepare_command_bar(command_bar: QWidget) -> None:
+    command_bar.setFixedHeight(48)
+    layout = command_bar.layout()
+    if layout is not None:
+        layout.setContentsMargins(12, 5, 12, 5)
+        layout.setSpacing(9)
+
+
 def _install_textbar(sb, svg) -> None:
     def make_textbar(self):
         window = self.window()
@@ -136,6 +144,7 @@ def _install_textbar(sb, svg) -> None:
         command_bar = window.findChild(QWidget, "CommandBar")
         if command_bar is None or command_bar.layout() is None:
             return None
+        _prepare_command_bar(command_bar)
         existing = command_bar.findChild(QFrame, "InlineTextBar")
         if existing is not None and existing.property("phase") != PATCH_VERSION:
             existing.hide()
