@@ -14,7 +14,7 @@ from PySide6.QtCore import QTimer, Qt
 from PySide6.QtGui import QKeySequence, QTextBlockFormat
 from PySide6.QtWidgets import QButtonGroup, QTextEdit, QWidget
 
-PATCH_VERSION = "engineering-text-toolbar-final-event-safety-2026-07-02-a"
+PATCH_VERSION = "engineering-text-toolbar-final-event-safety-2026-07-02-b"
 
 
 def _stable_build_exclusive_group(bar: QWidget, root: QWidget | None, names: tuple[str, ...], attr: str, default: str, callback) -> None:
@@ -73,11 +73,14 @@ def _patch_canvas_key_handler(edw) -> None:
     def key_press(self, event) -> None:
         editor = getattr(self, "_active_text_editor", None)
         if isinstance(editor, QTextEdit) and editor.hasFocus():
+            from . import text_toolbar_word_behavior_patch as word
             if event.matches(QKeySequence.StandardKey.SelectAll):
                 editor.selectAll()
                 event.accept()
                 return
-            event.ignore()
+            editor.keyPressEvent(event)
+            word._move_cursor_to_end(editor)
+            word._save_active_editor(self)
             return
         old_key(self, event)
 
