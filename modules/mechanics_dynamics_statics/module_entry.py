@@ -11,7 +11,6 @@ from .cursor_unification_fixes import apply_cursor_unification_fixes
 from .file_export_project_fixes import apply_file_export_project_fixes
 from .file_properties_general_patch import apply_file_properties_general_patch
 from .file_properties_view_final_patch import apply_file_properties_view_final_patch
-from .final_cursor_properties_textbar_patch import apply_final_cursor_properties_textbar_patch
 from .final_interaction_policy_fixes import apply_final_interaction_policy_fixes
 from .final_ui_repair_fixes import apply_final_ui_repair_fixes
 from .fixed_workspace_dimension_fixes import apply_fixed_workspace_dimension_fixes
@@ -22,13 +21,9 @@ from .ruler_precision_fixes import apply_ruler_precision_fixes
 from .ruler_unit_origin_final_patch import apply_ruler_unit_origin_final_patch
 from .startbar_cursor_fixes import apply_startbar_cursor_fixes
 from .svg_cursor_assets_activation_patch import apply_svg_cursor_assets_activation_patch
-from .text_toolbar_toggle_patch import apply_text_toolbar_toggle_patch
-from .ui_design_phase1_final_patch import apply_ui_design_phase1_final_patch
-from .ui_design_phase2_refinement_patch import apply_ui_design_phase2_refinement_patch
 from .ui_refinement_fixes import apply_ui_refinement_fixes
 from .ui_text_tool_final_patch import apply_ui_text_tool_final_patch
 from .unit_grid_properties_final_patch import apply_unit_grid_properties_final_patch
-from .view_textbar_menu_patch import apply_view_textbar_menu_patch
 from .window_resize_fixes import apply_window_resize_fixes
 from .windows_cursor_ruler_patch import apply_windows_cursor_ruler_patch
 from .workspace import EngineeringDesignWorkspace
@@ -53,12 +48,7 @@ def create_window(module: LauncherModule) -> ModuleWindow:
     apply_windows_cursor_ruler_patch()
     apply_ruler_unit_origin_final_patch()
     apply_svg_cursor_assets_activation_patch()
-    apply_text_toolbar_toggle_patch()
     apply_file_properties_view_final_patch()
     apply_cursor_stability_final_patch()
-    apply_view_textbar_menu_patch()
-    apply_final_cursor_properties_textbar_patch()
-    apply_ui_design_phase1_final_patch()
-    apply_ui_design_phase2_refinement_patch()
     apply_ui_text_tool_final_patch()
     return EngineeringDesignWorkspace(module)
