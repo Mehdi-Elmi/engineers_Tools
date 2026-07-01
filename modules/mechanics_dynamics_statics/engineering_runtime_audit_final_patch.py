@@ -13,6 +13,7 @@ from PySide6.QtCore import QSize, QTimer, Qt
 from PySide6.QtGui import QColor, QIcon, QPainter, QPixmap
 from PySide6.QtWidgets import (
     QColorDialog,
+    QFrame,
     QGridLayout,
     QHBoxLayout,
     QPushButton,
@@ -20,7 +21,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-PATCH_VERSION = "engineering-runtime-audit-final-2026-07-01-a"
+PATCH_VERSION = "engineering-runtime-audit-final-2026-07-01-b"
 
 _CURSOR_SIZE = 28
 _CURSOR_MAP = {
@@ -71,6 +72,22 @@ _PALETTE = (
     "#6e4ad6",
     "#536271",
 )
+_KNOWN_LOWER_TEXT_BARS = {
+    "textsubbar",
+    "texttoolbar",
+    "texttoolbox",
+    "floatingtextbar",
+    "lowertextbar",
+}
+
+
+def _is_inside(widget: QWidget, parent: QWidget | None) -> bool:
+    current = widget.parentWidget()
+    while current is not None:
+        if current is parent:
+            return True
+        current = current.parentWidget()
+    return False
 
 
 def _apply_cursor_maps(svg, fcp=None) -> None:
@@ -223,7 +240,7 @@ def _make_swatch(parent: QWidget, root: QWidget | None, color: str) -> QPushButt
     button.setProperty("colorValue", color)
     button.setToolTip("Color")
     button.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-    button.clicked.connect(lambda checked=False, w=root, v=color: _apply_color(w, v))
+    button.clicked.connect(lambda checked=False, b=button, w=root: _apply_color(w, str(b.property("colorValue") or color)))
     button.customContextMenuRequested.connect(lambda _pos, b=button, w=root: _choose_color(b, w))
     button.setStyleSheet(_swatch_style(color))
     return button
@@ -240,12 +257,12 @@ def _install_inline_palette(root: QWidget | None) -> None:
         old.hide()
         old.setParent(None)
         old.deleteLater()
-    existing = bar.findChild(QWidget, "InlineColorPalette")
+    existing = bar.findChild(QWidget, "InlineColorPaletteHolder")
     if existing is not None:
         return
     palette = QWidget(bar)
     palette.setObjectName("InlineColorPalette")
-    palette.setFixedSize(76, 38)
+    palette.setFixedSize(66, 34)
     palette.setToolTip("Text color")
     grid = QGridLayout(palette)
     grid.setContentsMargins(0, 0, 0, 0)
@@ -266,7 +283,7 @@ def _install_inline_palette(root: QWidget | None) -> None:
 
     holder = QWidget(bar)
     holder.setObjectName("InlineColorPaletteHolder")
-    holder.setFixedSize(96, 38)
+    holder.setFixedSize(88, 34)
     layout = QHBoxLayout(holder)
     layout.setContentsMargins(0, 0, 0, 0)
     layout.setSpacing(2)
@@ -303,18 +320,17 @@ def _cleanup_lower_text_bars(root: QWidget | None) -> None:
     command_bar = root.findChild(QWidget, "CommandBar")
     for widget in root.findChildren(QWidget):
         name = (widget.objectName() or "").lower()
-        if name in {"canvastexteditor", "inlinetextbar"}:
+        if name == "canvastexteditor":
             continue
-        if "text" in name and command_bar is not None:
-            current = widget.parentWidget()
-            inside = False
-            while current is not None:
-                if current is command_bar:
-                    inside = True
-                    break
-                current = current.parentWidget()
-            if not inside:
+        if name == "inlinetextbar":
+            if command_bar is not None and not _is_inside(widget, command_bar):
                 widget.hide()
+            continue
+        if name in _KNOWN_LOWER_TEXT_BARS:
+            widget.hide()
+            continue
+        if isinstance(widget, QFrame) and name.startswith("text") and command_bar is not None and not _is_inside(widget, command_bar):
+            widget.hide()
 
 
 def _reapply_visible_runtime(root: QWidget | None) -> None:
