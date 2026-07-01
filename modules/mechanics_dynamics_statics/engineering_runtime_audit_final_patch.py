@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-PATCH_VERSION = "engineering-runtime-audit-final-2026-07-01-c"
+PATCH_VERSION = "engineering-runtime-audit-final-2026-07-01-d"
 
 _CURSOR_SIZE = 28
 _CURSOR_MAP = {
@@ -83,10 +83,18 @@ _COLOR_CONTROL_NAMES = {
     "textcolorbutton",
     "inlinecolorpalette",
     "inlinecolorpaletteholder",
+    "inlineaddcolorbutton",
+    "runtimeauditcolorpalette",
+    "runtimeauditcolorpaletteholder",
+    "runtimeauditaddcolorbutton",
     "textcolorpalette",
     "textinlinepalette",
     "textcolorswatchpalette",
 }
+_SWATCH_SIZE = 15
+_SWATCH_GAP = 1
+_ADD_BUTTON_WIDTH = 14
+_ADD_BUTTON_GAP = 6
 
 
 def _is_inside(widget: QWidget, parent: QWidget | None) -> bool:
@@ -215,13 +223,13 @@ def _apply_color(root: QWidget | None, color: str) -> None:
 
 
 def _icon_for_color(color: str) -> QIcon:
-    pixmap = QPixmap(14, 14)
+    pixmap = QPixmap(13, 13)
     pixmap.fill(Qt.GlobalColor.transparent)
     painter = QPainter(pixmap)
     painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
     painter.setPen(QColor("#7f95b2"))
     painter.setBrush(QColor(color))
-    painter.drawRoundedRect(1, 1, 12, 12, 2, 2)
+    painter.drawRoundedRect(1, 1, 11, 11, 2, 2)
     painter.end()
     return QIcon(pixmap)
 
@@ -238,6 +246,41 @@ def _choose_color(button: QPushButton, root: QWidget | None) -> None:
     _apply_color(root, value)
 
 
+def _custom_colors(root: QWidget | None) -> list[str]:
+    if root is None:
+        return []
+    values = getattr(root, "_runtime_text_custom_colors", None)
+    if not isinstance(values, list):
+        values = []
+        setattr(root, "_runtime_text_custom_colors", values)
+    return values
+
+
+def _rebuild_palette(root: QWidget | None) -> None:
+    if root is None:
+        return
+    bar = root.findChild(QWidget, "InlineTextBar")
+    if bar is None:
+        return
+    for holder_name in ("RuntimeAuditColorPaletteHolder", "InlineColorPaletteHolder"):
+        _remove_widget(bar.findChild(QWidget, holder_name))
+    _install_inline_palette(root)
+
+
+def _add_custom_color(root: QWidget | None) -> None:
+    if root is None:
+        return
+    color = QColorDialog.getColor(QColor("#2f7df6"), root, "Add Custom Color")
+    if not color.isValid():
+        return
+    value = color.name()
+    colors = _custom_colors(root)
+    if value not in colors:
+        colors.append(value)
+    _apply_color(root, value)
+    _rebuild_palette(root)
+
+
 def _swatch_style(color: str) -> str:
     return (
         "QPushButton{background:" + color + ";border:1px solid #7f95b2;border-radius:2px;"
@@ -250,8 +293,8 @@ def _swatch_style(color: str) -> str:
 def _make_swatch(parent: QWidget, root: QWidget | None, color: str) -> QPushButton:
     button = QPushButton(parent)
     button.setObjectName("InlineColorSwatch")
-    button.setFixedSize(16, 16)
-    button.setIconSize(QSize(12, 12))
+    button.setFixedSize(_SWATCH_SIZE, _SWATCH_SIZE)
+    button.setIconSize(QSize(11, 11))
     button.setIcon(_icon_for_color(color))
     button.setProperty("colorValue", color)
     button.setToolTip("Color")
@@ -287,36 +330,44 @@ def _install_inline_palette(root: QWidget | None) -> None:
 
     _clear_color_controls(bar)
 
+    colors = list(_PALETTE) + _custom_colors(root)
+    columns = max(4, (len(colors) + 1) // 2)
+    palette_width = columns * _SWATCH_SIZE + max(0, columns - 1) * _SWATCH_GAP
+    palette_height = 2 * _SWATCH_SIZE + _SWATCH_GAP
+
     palette = QWidget(bar)
     palette.setObjectName("RuntimeAuditColorPalette")
     palette.setProperty("runtimeTextColorControl", True)
-    palette.setFixedSize(66, 34)
+    palette.setFixedSize(palette_width, palette_height)
     palette.setToolTip("Text color")
     grid = QGridLayout(palette)
     grid.setContentsMargins(0, 0, 0, 0)
-    grid.setHorizontalSpacing(0)
-    grid.setVerticalSpacing(0)
-    for index, color in enumerate(_PALETTE):
-        grid.addWidget(_make_swatch(palette, root, color), index // 4, index % 4)
-    add = QPushButton("+", palette)
+    grid.setHorizontalSpacing(_SWATCH_GAP)
+    grid.setVerticalSpacing(_SWATCH_GAP)
+    for index, color in enumerate(colors):
+        grid.addWidget(_make_swatch(palette, root, color), index % 2, index // 2)
+
+    add = QPushButton("+", bar)
     add.setObjectName("RuntimeAuditAddColorButton")
     add.setProperty("runtimeTextColorControl", True)
-    add.setFixedSize(18, 34)
+    add.setFixedSize(_ADD_BUTTON_WIDTH, palette_height)
     add.setToolTip("Add custom color")
     add.setStyleSheet(
         "QPushButton#RuntimeAuditAddColorButton{background:#fff2be;border:1px solid #b98920;"
-        "border-radius:4px;color:#132238;font-family:'Times New Roman';font-weight:800;}"
+        "border-radius:4px;color:#132238;font-family:'Times New Roman';font-size:10px;font-weight:800;"
+        "padding:0;margin:0;}"
         "QPushButton#RuntimeAuditAddColorButton:hover{background:#ffd36d;border-color:#ff8a35;}"
+        "QPushButton#RuntimeAuditAddColorButton:pressed{background:#f18a2a;color:#ffffff;}"
     )
-    add.clicked.connect(lambda checked=False, b=add, w=root: _choose_color(b, w))
+    add.clicked.connect(lambda checked=False, w=root: _add_custom_color(w))
 
     holder = QWidget(bar)
     holder.setObjectName("RuntimeAuditColorPaletteHolder")
     holder.setProperty("runtimeTextColorControl", True)
-    holder.setFixedSize(88, 34)
+    holder.setFixedSize(palette_width + _ADD_BUTTON_GAP + _ADD_BUTTON_WIDTH, palette_height)
     layout = QHBoxLayout(holder)
     layout.setContentsMargins(0, 0, 0, 0)
-    layout.setSpacing(2)
+    layout.setSpacing(_ADD_BUTTON_GAP)
     layout.addWidget(palette)
     layout.addWidget(add)
     bar_layout = bar.layout()
@@ -330,7 +381,7 @@ def _style_text_bar(root: QWidget | None) -> None:
     bar = root.findChild(QWidget, "InlineTextBar")
     if bar is None:
         return
-    bar.setMinimumWidth(max(bar.minimumWidth(), 940))
+    bar.setMinimumWidth(max(bar.minimumWidth(), 960))
     bar.setFixedHeight(max(bar.height(), 52))
     layout = bar.layout()
     if isinstance(layout, QHBoxLayout):
