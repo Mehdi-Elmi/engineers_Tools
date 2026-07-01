@@ -1,4 +1,10 @@
-"""Inline compact color palette for the Text toolbar and list settings dialogs."""
+"""List settings dialog styling for Text toolbar colors.
+
+The top Text toolbar color palette is now owned by
+ui_text_tool_runtime_fix_patch.py. This legacy patch no longer adds a second
+InlineColorPalette to the toolbar; it only keeps the custom bullet/numbering
+settings dialog hooks.
+"""
 
 from __future__ import annotations
 
@@ -19,7 +25,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-PATCH_VERSION = "engineering-text-color-inline-palette-2026-07-01-a"
+PATCH_VERSION = "engineering-text-color-inline-palette-2026-07-01-b"
 PALETTE = ["#132238", "#2f7df6", "#36a9e1", "#f18a2a", "#ffbf36", "#c9342b", "#168a50", "#6e4ad6"]
 
 
@@ -61,35 +67,6 @@ def _make_swatch(value: str, callback, *, size: int = 17) -> QPushButton:
     button.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
     button.customContextMenuRequested.connect(lambda _pos: choose_custom())
     return button
-
-
-def _install_inline_palette(bar: QWidget) -> None:
-    window = bar.window()
-    old = bar.findChild(QPushButton, "TextColorButton")
-    if old is not None:
-        old.hide()
-        old.setParent(None)
-        old.deleteLater()
-    if bar.findChild(QWidget, "InlineColorPalette") is not None:
-        return
-    palette = QWidget(bar)
-    palette.setObjectName("InlineColorPalette")
-    palette.setFixedSize(84, 39)
-    grid = QGridLayout(palette)
-    grid.setContentsMargins(0, 0, 0, 0)
-    grid.setHorizontalSpacing(0)
-    grid.setVerticalSpacing(0)
-    for index, color in enumerate(PALETTE):
-        grid.addWidget(_make_swatch(color, lambda value, w=window: _apply_text_color(w, value), size=18), index // 4, index % 4)
-    add = QPushButton("+")
-    add.setObjectName("AddInlineColor")
-    add.setFixedSize(18, 36)
-    add.setStyleSheet("QPushButton#AddInlineColor{background:#ffffff;border:1px solid #7fa6ca;border-radius:3px;color:#f18a2a;font-weight:900;padding:0;margin:0;} QPushButton#AddInlineColor:hover{background:#fff4cf;border-color:#ff8a35;}")
-    add.clicked.connect(lambda checked=False, w=window: _pick_new_color(w))
-    grid.addWidget(add, 0, 4, 2, 1)
-    layout = bar.layout()
-    if isinstance(layout, QHBoxLayout):
-        layout.addWidget(palette)
 
 
 def _pick_new_color(root) -> None:
@@ -205,18 +182,11 @@ def _pick_dialog_color(dialog: QDialog, callback) -> None:
 def apply_text_color_inline_palette_patch() -> None:
     from . import text_color_swatch_patch as swatch
     from . import text_list_settings_final_patch as list_final
-    from . import ui_text_tool_runtime_fix_patch as runtime
     from . import workspace as edw
 
     if getattr(edw.EngineeringDesignWorkspace, "_engineering_text_color_inline_palette_patch", "") == PATCH_VERSION:
         return
-    old_attach = runtime._attach_button_menus
 
-    def attach(bar: QWidget) -> None:
-        old_attach(bar)
-        _install_inline_palette(bar)
-
-    runtime._attach_button_menus = attach
     swatch._open_settings = _open_settings
     list_final._open_settings = _open_settings
     edw.EngineeringDesignWorkspace._engineering_text_color_inline_palette_patch = PATCH_VERSION
