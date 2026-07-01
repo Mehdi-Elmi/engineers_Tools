@@ -2,7 +2,8 @@
 
 This patch does not create a new toolbar. It normalizes the already-created
 InlineTextBar so focus rectangles disappear, Bold/Italic are off by default,
-alignment and direction are exclusive, and the color palette uses one owner.
+alignment and direction are exclusive, and each opened Text editor inherits the
+current toolbar direction/alignment state.
 """
 
 from __future__ import annotations
@@ -10,9 +11,10 @@ from __future__ import annotations
 import logging
 
 from PySide6.QtCore import QTimer, Qt
+from PySide6.QtGui import QFont, QTextCursor
 from PySide6.QtWidgets import QButtonGroup, QHBoxLayout, QPushButton, QTextEdit, QWidget
 
-PATCH_VERSION = "engineering-text-toolbar-word-behavior-2026-07-01-a"
+PATCH_VERSION = "engineering-text-toolbar-word-behavior-2026-07-01-b"
 
 _ALIGN_TOOLTIPS = ("Align left", "Align center", "Align right", "Justify")
 _DIRECTION_TOOLTIPS = ("Left to right", "Right to left")
@@ -56,9 +58,32 @@ def _set_no_focus(button: QPushButton) -> None:
         button.setStyleSheet(
             style
             + "\nQPushButton{outline:0;}"
-            + "\nQPushButton:focus{border:1px solid #9fb0c5;}"
-            + "\nQPushButton:checked:focus{border:1px solid #7e5b10;}"
+            + "\nQPushButton:focus{outline:0;border:1px solid #9fb0c5;}"
+            + "\nQPushButton:checked:focus{outline:0;border:1px solid #7e5b10;}"
         )
+
+
+def _move_cursor_to_end(editor: QTextEdit) -> None:
+    cursor = editor.textCursor()
+    cursor.movePosition(QTextCursor.MoveOperation.End)
+    editor.setTextCursor(cursor)
+
+
+def _selected_align(root: QWidget | None) -> str:
+    buttons = _buttons(root)
+    if buttons.get("Align center") is not None and buttons["Align center"].isChecked():
+        return "center"
+    if buttons.get("Align right") is not None and buttons["Align right"].isChecked():
+        return "right"
+    if buttons.get("Justify") is not None and buttons["Justify"].isChecked():
+        return "justify"
+    return "left"
+
+
+def _selected_direction(root: QWidget | None) -> str:
+    buttons = _buttons(root)
+    rtl = buttons.get("Right to left")
+    return "rtl" if rtl is not None and rtl.isChecked() else "ltr"
 
 
 def _set_editor_bold(root: QWidget | None, active: bool) -> None:
@@ -90,6 +115,7 @@ def _apply_align(root: QWidget | None, value: str) -> None:
         "justify": Qt.AlignmentFlag.AlignJustify,
     }
     editor.setAlignment(mapping.get(value, Qt.AlignmentFlag.AlignLeft))
+    _move_cursor_to_end(editor)
 
 
 def _apply_direction(root: QWidget | None, value: str) -> None:
@@ -102,11 +128,39 @@ def _apply_direction(root: QWidget | None, value: str) -> None:
         editor.viewport().setLayoutDirection(direction)
         align = Qt.AlignmentFlag.AlignRight if rtl else Qt.AlignmentFlag.AlignLeft
         editor.setAlignment(align)
+        _move_cursor_to_end(editor)
     target = "Align right" if rtl else "Align left"
     for name in _ALIGN_TOOLTIPS:
         button = buttons.get(name)
         if button is not None:
             button.setChecked(name == target)
+
+
+def _normalize_editor(root: QWidget | None) -> None:
+    editor = _active_editor(root)
+    if editor is None:
+        return
+    buttons = _buttons(root)
+    font = editor.currentFont() if editor.currentFont() is not None else QFont("Times New Roman", 12)
+    font.setBold(bool(buttons.get("Bold").isChecked()) if buttons.get("Bold") is not None else False)
+    font.setItalic(bool(buttons.get("Italic").isChecked()) if buttons.get("Italic") is not None else False)
+    editor.setCurrentFont(font)
+    direction = _selected_direction(root)
+    rtl = direction == "rtl"
+    layout_direction = Qt.LayoutDirection.RightToLeft if rtl else Qt.LayoutDirection.LeftToRight
+    editor.setLayoutDirection(layout_direction)
+    editor.viewport().setLayoutDirection(layout_direction)
+    align = _selected_align(root)
+    if rtl and align == "left":
+        align = "right"
+    mapping = {
+        "left": Qt.AlignmentFlag.AlignLeft,
+        "center": Qt.AlignmentFlag.AlignCenter,
+        "right": Qt.AlignmentFlag.AlignRight,
+        "justify": Qt.AlignmentFlag.AlignJustify,
+    }
+    editor.setAlignment(mapping.get(align, Qt.AlignmentFlag.AlignLeft))
+    _move_cursor_to_end(editor)
 
 
 def _wire_toggle_button(root: QWidget | None, button: QPushButton, kind: str) -> None:
@@ -150,8 +204,8 @@ def _apply_word_toolbar(root: QWidget | None) -> None:
     if bar is None:
         return
     bar.setProperty("wordBehavior", PATCH_VERSION)
-    bar.setMinimumWidth(max(bar.minimumWidth(), 1040))
-    bar.setMaximumWidth(max(bar.maximumWidth(), 1280))
+    bar.setMinimumWidth(max(bar.minimumWidth(), 1060))
+    bar.setMaximumWidth(max(bar.maximumWidth(), 1300))
     bar.setFixedHeight(max(bar.height(), 54))
     layout = bar.layout()
     if isinstance(layout, QHBoxLayout):
@@ -164,11 +218,20 @@ def _apply_word_toolbar(root: QWidget | None) -> None:
             field.setFocusPolicy(Qt.FocusPolicy.NoFocus)
 
     buttons = _buttons(root)
+    for button in buttons.values():
+        if isinstance(button, QPushButton):
+            _set_no_focus(button)
+
     bold = buttons.get("Bold")
     italic = buttons.get("Italic")
     if bold is not None:
+        bold.setText("B")
         _wire_toggle_button(root, bold, "bold")
     if italic is not None:
+        italic.setText("I")
+        font = italic.font()
+        font.setItalic(True)
+        italic.setFont(font)
         _wire_toggle_button(root, italic, "italic")
 
     for name, label in _ALIGN_TEXT.items():
@@ -210,6 +273,7 @@ def _apply_word_toolbar(root: QWidget | None) -> None:
         "Left to right",
         lambda w, tooltip: _apply_direction(w, "rtl" if tooltip == "Right to left" else "ltr"),
     )
+    _normalize_editor(root)
 
 
 def _patch_runtime_constants() -> None:
@@ -223,6 +287,35 @@ def _patch_runtime_constants() -> None:
     runtime._TEXT_ADD_BUTTON_GAP = 8
 
 
+def _patch_editor_show_functions() -> None:
+    try:
+        from . import ui_text_tool_runtime_fix_patch as runtime
+        from . import ui_text_tool_final_patch as final_text
+    except Exception:
+        return
+    if getattr(runtime, "_word_behavior_editor_hooks", "") == PATCH_VERSION:
+        return
+
+    old_runtime_show = getattr(runtime, "_show_rich_text_editor", None)
+    if callable(old_runtime_show):
+        def show_rich_text_editor(canvas, index: int) -> None:
+            old_runtime_show(canvas, index)
+            root = canvas.window() if hasattr(canvas, "window") else None
+            _normalize_editor(root)
+        runtime._show_rich_text_editor = show_rich_text_editor
+        final_text._show_text_editor = show_rich_text_editor
+
+    old_final_show = getattr(final_text, "_show_text_editor", None)
+    if callable(old_final_show) and old_final_show is not getattr(runtime, "_show_rich_text_editor", None):
+        def show_text_editor(canvas, index: int) -> None:
+            old_final_show(canvas, index)
+            root = canvas.window() if hasattr(canvas, "window") else None
+            _normalize_editor(root)
+        final_text._show_text_editor = show_text_editor
+
+    runtime._word_behavior_editor_hooks = PATCH_VERSION
+
+
 def apply_text_toolbar_word_behavior_patch() -> None:
     from . import workspace as edw
 
@@ -230,11 +323,13 @@ def apply_text_toolbar_word_behavior_patch() -> None:
         return
 
     _patch_runtime_constants()
+    _patch_editor_show_functions()
     old_init = edw.EngineeringDesignWorkspace.__init__
 
     def workspace_init(self, module) -> None:
         old_init(self, module)
         _patch_runtime_constants()
+        _patch_editor_show_functions()
         _apply_word_toolbar(self)
         for delay in (0, 80, 250, 700, 1500):
             QTimer.singleShot(delay, lambda root=self: _apply_word_toolbar(root))
