@@ -28,6 +28,7 @@ from .text_color_inline_palette_patch import apply_text_color_inline_palette_pat
 from .text_color_swatch_patch import apply_text_color_swatch_patch
 from .text_list_settings_final_patch import apply_text_list_settings_final_patch
 from .text_list_settings_patch import apply_text_list_settings_patch
+from .text_toolbar_word_behavior_patch import apply_text_toolbar_word_behavior_patch
 from .ui_refinement_fixes import apply_ui_refinement_fixes
 from .ui_text_runtime_guard_patch import apply_ui_text_runtime_guard_patch
 from .ui_text_tool_final_patch import apply_ui_text_tool_final_patch
@@ -69,4 +70,5 @@ def create_window(module: LauncherModule) -> ModuleWindow:
     apply_native_cursor_lock_patch()
     apply_project_dialog_style_cursor_patch()
     apply_engineering_runtime_audit_final_patch()
+    apply_text_toolbar_word_behavior_patch()
     return EngineeringDesignWorkspace(module)
