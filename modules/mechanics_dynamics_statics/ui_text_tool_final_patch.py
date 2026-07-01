@@ -1,51 +1,51 @@
 """Final text tool and cursor sizing patch.
 
-This patch runs after the phase-2 UI refinements. It keeps the approved Move
-cursor unchanged, brings Rotate/Resize back to a moderate size, removes the old
-lower TextSubBar, and makes the top Text Bar the active text tool controller.
+This patch owns the text UI. It keeps the accepted Move cursor unchanged,
+shrinks Rotate/Resize cursors to a moderate size, prevents the legacy lower
+TextSubBar from existing, and creates editable Text Box objects on the canvas.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import QPointF, QRectF, QTimer, Qt
-from PySide6.QtGui import QColor, QPainter, QPen, QPixmap
-from PySide6.QtWidgets import QComboBox, QDoubleSpinBox, QFrame, QHBoxLayout, QPushButton, QSizePolicy, QSpinBox, QWidget
+from PySide6.QtCore import QPointF, QRect, QRectF, QTimer, Qt
+from PySide6.QtGui import QColor, QFont, QPainter, QPen, QPixmap
+from PySide6.QtWidgets import QComboBox, QDoubleSpinBox, QFrame, QHBoxLayout, QPushButton, QSizePolicy, QSpinBox, QTextEdit, QWidget
 
-PATCH_VERSION = "engineering-ui-text-tool-final-2026-07-01-b"
+PATCH_VERSION = "engineering-ui-text-tool-final-2026-07-01-c"
 FONT_CHOICES = ("Times New Roman",)
 CURSOR_OVERRIDES = {
-    "rotate": ("rotate.svg", 20, 20, 44),
-    "rotate_drag": ("rotate.svg", 20, 20, 44),
-    "resize_n": ("resize_vertical.svg", 22, 22, 44),
-    "resize_s": ("resize_vertical.svg", 22, 22, 44),
-    "resize_e": ("resize_horizontal.svg", 22, 22, 44),
-    "resize_w": ("resize_horizontal.svg", 22, 22, 44),
-    "resize_ne": ("corner_resize_b.svg", 22, 22, 44),
-    "resize_sw": ("corner_resize_b.svg", 22, 22, 44),
-    "resize_nw": ("corner_resize_a.svg", 22, 22, 44),
-    "resize_se": ("corner_resize_a.svg", 22, 22, 44),
-    "resize_horizontal": ("resize_horizontal.svg", 22, 22, 44),
-    "resize_vertical": ("resize_vertical.svg", 22, 22, 44),
-    "resize_diag_f": ("corner_resize_a.svg", 22, 22, 44),
-    "resize_diag_b": ("corner_resize_b.svg", 22, 22, 44),
-    "resize_fdiag": ("corner_resize_a.svg", 22, 22, 44),
-    "resize_bdiag": ("corner_resize_b.svg", 22, 22, 44),
+    "rotate": ("rotate.svg", 18, 18, 36),
+    "rotate_drag": ("rotate.svg", 18, 18, 36),
+    "resize_n": ("resize_vertical.svg", 18, 18, 36),
+    "resize_s": ("resize_vertical.svg", 18, 18, 36),
+    "resize_e": ("resize_horizontal.svg", 18, 18, 36),
+    "resize_w": ("resize_horizontal.svg", 18, 18, 36),
+    "resize_ne": ("corner_resize_b.svg", 18, 18, 36),
+    "resize_sw": ("corner_resize_b.svg", 18, 18, 36),
+    "resize_nw": ("corner_resize_a.svg", 18, 18, 36),
+    "resize_se": ("corner_resize_a.svg", 18, 18, 36),
+    "resize_horizontal": ("resize_horizontal.svg", 18, 18, 36),
+    "resize_vertical": ("resize_vertical.svg", 18, 18, 36),
+    "resize_diag_f": ("corner_resize_a.svg", 18, 18, 36),
+    "resize_diag_b": ("corner_resize_b.svg", 18, 18, 36),
+    "resize_fdiag": ("corner_resize_a.svg", 18, 18, 36),
+    "resize_bdiag": ("corner_resize_b.svg", 18, 18, 36),
 }
 TEXT_BUTTONS = (
-    ("B", "Bold", 34),
-    ("I", "Italic", 34),
-    ("•", "Bullet", 34),
-    ("1.", "Numbering", 38),
-    ("L", "Align left", 34),
-    ("C", "Align center", 34),
-    ("R", "Align right", 34),
-    ("J", "Justify", 34),
-    ("LS", "Line spacing", 44),
-    ("LTR", "Left to right", 50),
-    ("RTL", "Right to left", 50),
-    ("Σ", "Math symbols", 36),
+    ("B", "Bold", 34, True),
+    ("I", "Italic", 34, True),
+    ("•", "Bullet", 34, True),
+    ("1.", "Numbering", 38, True),
+    ("L", "Align left", 34, True),
+    ("C", "Align center", 34, True),
+    ("R", "Align right", 34, True),
+    ("J", "Justify", 34, True),
+    ("LS", "Line spacing", 44, False),
+    ("LTR", "Left to right", 50, True),
+    ("RTL", "Right to left", 50, True),
+    ("Σ", "Math symbols", 36, False),
 )
 
 
@@ -102,12 +102,78 @@ def _remove_legacy_text_subbars(root: QWidget | None) -> None:
             start_bar._text_toolbar_widget = None
 
 
+def _scene_rect_to_widget(canvas, rect: QRectF) -> QRect:
+    zoom = max(float(getattr(canvas, "_zoom", 1.0)), 0.01)
+    cx = canvas.width() / 2.0
+    cy = canvas.height() / 2.0
+    left = (rect.left() - cx) * zoom + cx
+    top = (rect.top() - cy) * zoom + cy
+    return QRect(round(left), round(top), max(42, round(rect.width() * zoom)), max(34, round(rect.height() * zoom)))
+
+
+def _current_text_settings(window: QWidget | None) -> dict[str, object]:
+    start_bar = getattr(window, "_start_bar_widget", None) if window is not None else None
+    controls = getattr(start_bar, "_text_controls", {}) if start_bar is not None else {}
+    font_combo = controls.get("font") if isinstance(controls, dict) else None
+    size_spin = controls.get("size") if isinstance(controls, dict) else None
+    buttons = controls.get("buttons", {}) if isinstance(controls, dict) else {}
+    font_name = font_combo.currentText() if isinstance(font_combo, QComboBox) else "Times New Roman"
+    font_size = size_spin.value() if isinstance(size_spin, QSpinBox) else 12
+    return {
+        "font": font_name or "Times New Roman",
+        "size": int(font_size),
+        "bold": bool(buttons.get("Bold").isChecked()) if buttons.get("Bold") is not None else False,
+        "italic": bool(buttons.get("Italic").isChecked()) if buttons.get("Italic") is not None else False,
+        "align": "left",
+        "rtl": bool(buttons.get("Right to left").isChecked()) if buttons.get("Right to left") is not None else False,
+    }
+
+
+def _show_text_editor(canvas, index: int) -> None:
+    if not (0 <= index < len(canvas.objects)):
+        return
+    obj = canvas.objects[index]
+    if not getattr(obj, "is_text_box", False):
+        return
+    old_editor = getattr(canvas, "_active_text_editor", None)
+    if old_editor is not None:
+        old_editor.hide()
+        old_editor.deleteLater()
+    editor = QTextEdit(canvas)
+    editor.setObjectName("CanvasTextEditor")
+    editor.setAcceptRichText(False)
+    editor.setPlainText(str(getattr(obj, "text", "")))
+    editor.setPlaceholderText("Type text...")
+    editor.setGeometry(_scene_rect_to_widget(canvas, obj.rect).adjusted(3, 3, -3, -3))
+    font = QFont(str(getattr(obj, "text_font", "Times New Roman")), int(getattr(obj, "text_size", 12)))
+    font.setBold(bool(getattr(obj, "text_bold", False)))
+    font.setItalic(bool(getattr(obj, "text_italic", False)))
+    editor.setFont(font)
+    editor.setStyleSheet("QTextEdit#CanvasTextEditor{background:rgba(255,255,255,230);border:1px solid #ff8a35;border-radius:6px;color:#132238;padding:4px;font-family:'Times New Roman';}")
+    editor.textChanged.connect(lambda e=editor, o=obj, c=canvas: (setattr(o, "text", e.toPlainText()), c.update()))
+    editor.show()
+    editor.raise_()
+    editor.setFocus()
+    canvas._active_text_editor = editor
+    canvas._active_text_editor_index = index
+
+
+def _hide_text_editor(canvas) -> None:
+    editor = getattr(canvas, "_active_text_editor", None)
+    if editor is not None:
+        editor.hide()
+        editor.deleteLater()
+    canvas._active_text_editor = None
+    canvas._active_text_editor_index = None
+
+
 def _activate_text_tool(window: QWidget | None) -> None:
     if window is None:
         return
     canvas = getattr(window, "_canvas", None)
     if canvas is None:
         return
+    _hide_text_editor(canvas)
     canvas._text_tool_active = True
     canvas._text_box_origin = None
     canvas._text_box_preview = None
@@ -117,13 +183,19 @@ def _activate_text_tool(window: QWidget | None) -> None:
         status("Text: click for 5x7 cm box, or drag to define box")
 
 
-def _text_button(label: str, tooltip: str, width: int) -> QPushButton:
+def _text_button(label: str, tooltip: str, width: int, checkable: bool) -> QPushButton:
     button = QPushButton(label)
     button.setToolTip(tooltip)
     button.setStatusTip(tooltip)
+    button.setCheckable(checkable)
     button.setFixedSize(width, 30)
     _font(button, 11)
-    button.setStyleSheet("QPushButton{background:#fff;border:1px solid #9fb0c5;border-radius:9px;color:#132238;padding:0;}QPushButton:hover{background:#fff4cf;border-color:#ff8a35;}QPushButton:pressed{background:#d9e9f7;padding-top:1px;}")
+    button.setStyleSheet(
+        "QPushButton{background:#fff;border:1px solid #9fb0c5;border-radius:9px;color:#132238;padding:0;}"
+        "QPushButton:hover{background:#fff4cf;border-color:#ff8a35;}"
+        "QPushButton:checked{background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #ffc35a,stop:1 #f18a2a);border-color:#7e5b10;color:#102238;padding-top:2px;}"
+        "QPushButton:pressed{background:#d9e9f7;padding-top:2px;}"
+    )
     return button
 
 
@@ -132,7 +204,7 @@ def _prepare_command_bar(command_bar: QWidget) -> None:
     layout = command_bar.layout()
     if layout is not None:
         layout.setContentsMargins(12, 5, 12, 5)
-        layout.setSpacing(9)
+        layout.setSpacing(8)
 
 
 def _install_textbar(sb, svg) -> None:
@@ -158,18 +230,18 @@ def _install_textbar(sb, svg) -> None:
         bar.setObjectName("InlineTextBar")
         bar.setProperty("phase", PATCH_VERSION)
         bar.setFixedHeight(38)
-        bar.setMinimumWidth(760)
-        bar.setMaximumWidth(1020)
+        bar.setMinimumWidth(640)
+        bar.setMaximumWidth(790)
         bar.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         bar.setStyleSheet("QFrame#InlineTextBar{background:qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #fff,stop:.52 #eef8ff,stop:1 #fff1c8);border:1px solid #8fa2bb;border-radius:13px;}")
         row = QHBoxLayout(bar)
-        row.setContentsMargins(10, 4, 10, 4)
-        row.setSpacing(6)
+        row.setContentsMargins(9, 4, 9, 4)
+        row.setSpacing(5)
         combo = QComboBox()
         combo.setToolTip("Font family")
         combo.addItems(list(FONT_CHOICES))
         combo.setCurrentText("Times New Roman")
-        combo.setFixedSize(198, 30)
+        combo.setFixedSize(176, 30)
         _style_text_combo(svg, combo)
         row.addWidget(combo)
         size = QSpinBox()
@@ -177,11 +249,15 @@ def _install_textbar(sb, svg) -> None:
         size.setRange(1, 300)
         size.setValue(12)
         size.setSuffix(" pt")
-        size.setFixedSize(116, 30)
+        size.setFixedSize(104, 30)
         _style_text_spin(svg, size)
         row.addWidget(size)
-        for label, tooltip, width in TEXT_BUTTONS:
-            row.addWidget(_text_button(label, tooltip, width))
+        buttons: dict[str, QPushButton] = {}
+        for label, tooltip, width, checkable in TEXT_BUTTONS:
+            button = _text_button(label, tooltip, width, checkable)
+            buttons[tooltip] = button
+            row.addWidget(button)
+        self._text_controls = {"font": combo, "size": size, "buttons": buttons}
         command_bar.layout().insertWidget(max(0, command_bar.layout().count() - 1), bar, 0, Qt.AlignmentFlag.AlignVCenter)
         bar.show()
         _remove_legacy_text_subbars(window)
@@ -235,7 +311,9 @@ def _install_canvas_text_tool(edw) -> None:
     old_press = edw.EngineeringCanvas.mousePressEvent
     old_move = edw.EngineeringCanvas.mouseMoveEvent
     old_release = edw.EngineeringCanvas.mouseReleaseEvent
+    old_double = edw.EngineeringCanvas.mouseDoubleClickEvent
     old_paint = edw.EngineeringCanvas.paintEvent
+    old_paint_object = edw.EngineeringCanvas._paint_object
 
     def create_text_box(self, rect: QRectF, origin: QPointF) -> None:
         box = QRectF(rect).normalized()
@@ -245,20 +323,53 @@ def _install_canvas_text_tool(edw) -> None:
             box.setWidth(35.0)
         if box.height() < 35:
             box.setHeight(35.0)
+        settings = _current_text_settings(self.window())
         self._push_undo()
         obj = edw.CanvasObject(path=Path("Text Box"), pixmap=QPixmap(), rect=box, name="Text Box")
+        obj.is_text_box = True
+        obj.text = ""
+        obj.text_font = settings["font"]
+        obj.text_size = settings["size"]
+        obj.text_bold = settings["bold"]
+        obj.text_italic = settings["italic"]
+        obj.text_rtl = settings["rtl"]
         self.objects.append(obj)
-        self._select_only(len(self.objects) - 1)
+        index = len(self.objects) - 1
+        self._select_only(index)
         self._last_action = "text"
         self._text_tool_active = False
         self._text_box_origin = None
         self._text_box_preview = None
         self._emit_object_changes()
         self.update()
+        _show_text_editor(self, index)
         window = self.window()
         status = getattr(window, "_set_status", None)
         if callable(status):
             status("Text box created")
+
+    def paint_object(self, painter: QPainter, obj) -> None:
+        if not getattr(obj, "is_text_box", False):
+            old_paint_object(self, painter, obj)
+            return
+        rect = obj.rect
+        painter.save()
+        painter.translate(rect.center())
+        painter.rotate(obj.rotation)
+        local = QRectF(-rect.width() / 2, -rect.height() / 2, rect.width(), rect.height())
+        painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, True)
+        painter.setPen(QPen(QColor("#2f7df6"), 1.1, Qt.PenStyle.DashLine))
+        painter.setBrush(QColor(255, 255, 255, 210))
+        painter.drawRoundedRect(local, 4, 4)
+        font = QFont(str(getattr(obj, "text_font", "Times New Roman")), int(getattr(obj, "text_size", 12)))
+        font.setBold(bool(getattr(obj, "text_bold", False)))
+        font.setItalic(bool(getattr(obj, "text_italic", False)))
+        painter.setFont(font)
+        painter.setPen(QPen(QColor("#132238"), 1.0))
+        flags = Qt.AlignmentFlag.AlignRight if bool(getattr(obj, "text_rtl", False)) else Qt.AlignmentFlag.AlignLeft
+        text = str(getattr(obj, "text", "")) or "Text Box"
+        painter.drawText(local.adjusted(8, 7, -8, -7), flags | Qt.AlignmentFlag.AlignTop | Qt.TextFlag.TextWordWrap, text)
+        painter.restore()
 
     def mouse_press(self, event) -> None:
         if event.button() == Qt.MouseButton.LeftButton and getattr(self, "_text_tool_active", False):
@@ -269,6 +380,7 @@ def _install_canvas_text_tool(edw) -> None:
             self.update()
             event.accept()
             return
+        _hide_text_editor(self)
         old_press(self, event)
 
     def mouse_move(self, event) -> None:
@@ -290,6 +402,17 @@ def _install_canvas_text_tool(edw) -> None:
             return
         old_release(self, event)
 
+    def mouse_double(self, event) -> None:
+        if event.button() == Qt.MouseButton.LeftButton:
+            point = self._to_canvas_point(event.position())
+            index, _action = self._hit_test_object(point)
+            if index is not None and getattr(self.objects[index], "is_text_box", False):
+                self._select_only(index)
+                _show_text_editor(self, index)
+                event.accept()
+                return
+        old_double(self, event)
+
     def paint_event(self, event) -> None:
         old_paint(self, event)
         preview = getattr(self, "_text_box_preview", None)
@@ -305,9 +428,11 @@ def _install_canvas_text_tool(edw) -> None:
         painter.drawRoundedRect(QRectF(preview).normalized(), 4, 4)
         painter.end()
 
+    edw.EngineeringCanvas._paint_object = paint_object
     edw.EngineeringCanvas.mousePressEvent = mouse_press
     edw.EngineeringCanvas.mouseMoveEvent = mouse_move
     edw.EngineeringCanvas.mouseReleaseEvent = mouse_release
+    edw.EngineeringCanvas.mouseDoubleClickEvent = mouse_double
     edw.EngineeringCanvas.paintEvent = paint_event
     edw.EngineeringCanvas._text_tool_final_patch = PATCH_VERSION
 
@@ -337,6 +462,7 @@ def apply_ui_text_tool_final_patch() -> None:
             QTimer.singleShot(0, lambda sb=start_bar: sb._set_text_toolbar_visible(True, emit=False))
             QTimer.singleShot(0, lambda root=self: _remove_legacy_text_subbars(root))
             QTimer.singleShot(150, lambda root=self: _remove_legacy_text_subbars(root))
+            QTimer.singleShot(400, lambda root=self: _remove_legacy_text_subbars(root))
 
     edw.EngineeringDesignWorkspace.__init__ = workspace_init
     edw.EngineeringDesignWorkspace._engineering_ui_text_tool_final_patch = PATCH_VERSION
