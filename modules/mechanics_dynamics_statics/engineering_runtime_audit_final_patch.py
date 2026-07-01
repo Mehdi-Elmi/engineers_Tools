@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-PATCH_VERSION = "engineering-runtime-audit-final-2026-07-01-b"
+PATCH_VERSION = "engineering-runtime-audit-final-2026-07-01-c"
 
 _CURSOR_SIZE = 28
 _CURSOR_MAP = {
@@ -79,6 +79,14 @@ _KNOWN_LOWER_TEXT_BARS = {
     "floatingtextbar",
     "lowertextbar",
 }
+_COLOR_CONTROL_NAMES = {
+    "textcolorbutton",
+    "inlinecolorpalette",
+    "inlinecolorpaletteholder",
+    "textcolorpalette",
+    "textinlinepalette",
+    "textcolorswatchpalette",
+}
 
 
 def _is_inside(widget: QWidget, parent: QWidget | None) -> bool:
@@ -88,6 +96,14 @@ def _is_inside(widget: QWidget, parent: QWidget | None) -> bool:
             return True
         current = current.parentWidget()
     return False
+
+
+def _remove_widget(widget: QWidget | None) -> None:
+    if widget is None:
+        return
+    widget.hide()
+    widget.setParent(None)
+    widget.deleteLater()
 
 
 def _apply_cursor_maps(svg, fcp=None) -> None:
@@ -246,22 +262,34 @@ def _make_swatch(parent: QWidget, root: QWidget | None, color: str) -> QPushButt
     return button
 
 
+def _clear_color_controls(bar: QWidget) -> None:
+    for child in list(bar.findChildren(QWidget)):
+        name = (child.objectName() or "").lower()
+        if name in _COLOR_CONTROL_NAMES or child.property("runtimeTextColorControl"):
+            _remove_widget(child)
+
+
 def _install_inline_palette(root: QWidget | None) -> None:
     if root is None:
         return
     bar = root.findChild(QWidget, "InlineTextBar")
     if bar is None:
         return
-    old = bar.findChild(QPushButton, "TextColorButton")
-    if old is not None:
-        old.hide()
-        old.setParent(None)
-        old.deleteLater()
-    existing = bar.findChild(QWidget, "InlineColorPaletteHolder")
-    if existing is not None:
+    existing_final = bar.findChild(QWidget, "RuntimeAuditColorPaletteHolder")
+    if existing_final is not None:
+        for old in list(bar.findChildren(QWidget)):
+            name = (old.objectName() or "").lower()
+            if old is existing_final or _is_inside(old, existing_final):
+                continue
+            if name in _COLOR_CONTROL_NAMES or old.property("runtimeTextColorControl"):
+                _remove_widget(old)
         return
+
+    _clear_color_controls(bar)
+
     palette = QWidget(bar)
-    palette.setObjectName("InlineColorPalette")
+    palette.setObjectName("RuntimeAuditColorPalette")
+    palette.setProperty("runtimeTextColorControl", True)
     palette.setFixedSize(66, 34)
     palette.setToolTip("Text color")
     grid = QGridLayout(palette)
@@ -271,18 +299,20 @@ def _install_inline_palette(root: QWidget | None) -> None:
     for index, color in enumerate(_PALETTE):
         grid.addWidget(_make_swatch(palette, root, color), index // 4, index % 4)
     add = QPushButton("+", palette)
-    add.setObjectName("InlineAddColorButton")
+    add.setObjectName("RuntimeAuditAddColorButton")
+    add.setProperty("runtimeTextColorControl", True)
     add.setFixedSize(18, 34)
     add.setToolTip("Add custom color")
     add.setStyleSheet(
-        "QPushButton#InlineAddColorButton{background:#fff2be;border:1px solid #b98920;"
+        "QPushButton#RuntimeAuditAddColorButton{background:#fff2be;border:1px solid #b98920;"
         "border-radius:4px;color:#132238;font-family:'Times New Roman';font-weight:800;}"
-        "QPushButton#InlineAddColorButton:hover{background:#ffd36d;border-color:#ff8a35;}"
+        "QPushButton#RuntimeAuditAddColorButton:hover{background:#ffd36d;border-color:#ff8a35;}"
     )
     add.clicked.connect(lambda checked=False, b=add, w=root: _choose_color(b, w))
 
     holder = QWidget(bar)
-    holder.setObjectName("InlineColorPaletteHolder")
+    holder.setObjectName("RuntimeAuditColorPaletteHolder")
+    holder.setProperty("runtimeTextColorControl", True)
     holder.setFixedSize(88, 34)
     layout = QHBoxLayout(holder)
     layout.setContentsMargins(0, 0, 0, 0)
@@ -307,7 +337,7 @@ def _style_text_bar(root: QWidget | None) -> None:
         layout.setContentsMargins(10, 7, 10, 7)
         layout.setSpacing(5)
     for button in bar.findChildren(QPushButton):
-        if button.objectName() in {"InlineColorSwatch", "InlineAddColorButton"}:
+        if button.objectName() in {"InlineColorSwatch", "RuntimeAuditAddColorButton"}:
             continue
         button.setToolTip(button.toolTip() or button.text())
         if button.toolTip() in {"Bold", "Italic", "Align left", "Align center", "Align right", "Justify", "Left to right", "Right to left", "Line spacing"}:
