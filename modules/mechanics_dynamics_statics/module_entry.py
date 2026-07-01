@@ -8,6 +8,7 @@ from src.engineers_tools.app.modules import LauncherModule
 from .current_interaction_cleanup_fixes import apply_current_interaction_cleanup_fixes
 from .cursor_stability_final_patch import apply_cursor_stability_final_patch
 from .cursor_unification_fixes import apply_cursor_unification_fixes
+from .engineering_runtime_audit_final_patch import apply_engineering_runtime_audit_final_patch
 from .file_export_project_fixes import apply_file_export_project_fixes
 from .file_properties_general_patch import apply_file_properties_general_patch
 from .file_properties_view_final_patch import apply_file_properties_view_final_patch
@@ -67,4 +68,5 @@ def create_window(module: LauncherModule) -> ModuleWindow:
     apply_text_color_inline_palette_patch()
     apply_native_cursor_lock_patch()
     apply_project_dialog_style_cursor_patch()
+    apply_engineering_runtime_audit_final_patch()
     return EngineeringDesignWorkspace(module)
