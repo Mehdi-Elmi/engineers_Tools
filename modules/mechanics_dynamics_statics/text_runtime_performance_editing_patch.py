@@ -14,7 +14,7 @@ from PySide6.QtCore import QTimer, Qt
 from PySide6.QtGui import QFont, QKeySequence, QTextCharFormat
 from PySide6.QtWidgets import QHBoxLayout, QMenu, QPushButton, QTextEdit, QWidget
 
-PATCH_VERSION = "engineering-text-runtime-performance-editing-2026-07-02-a"
+PATCH_VERSION = "engineering-text-runtime-performance-editing-2026-07-02-b"
 
 _BULLET_PREFIX = {
     "filled": "• ",
@@ -60,6 +60,28 @@ def _save(root: QWidget | None) -> None:
         word._save_active_editor(canvas)
     except Exception:
         pass
+
+
+def _patch_save_state(word) -> None:
+    if getattr(word, "_performance_save_state_patch", "") == PATCH_VERSION:
+        return
+    old_save = word._save_active_editor
+
+    def save_active_editor(canvas) -> None:
+        old_save(canvas)
+        root = _root_from_canvas(canvas)
+        buttons = _buttons(root)
+        index = getattr(canvas, "_active_text_editor_index", None)
+        if not isinstance(index, int) or not (0 <= index < len(getattr(canvas, "objects", []))):
+            return
+        obj = canvas.objects[index]
+        bold = buttons.get("Bold")
+        italic = buttons.get("Italic")
+        obj.text_bold = bool(bold.isChecked()) if bold is not None else False
+        obj.text_italic = bool(italic.isChecked()) if italic is not None else False
+
+    word._save_active_editor = save_active_editor
+    word._performance_save_state_patch = PATCH_VERSION
 
 
 def _merge_format(editor: QTextEdit, *, bold: bool | None = None, italic: bool | None = None) -> None:
@@ -302,6 +324,7 @@ def apply_text_runtime_performance_editing_patch() -> None:
     if getattr(edw.EngineeringDesignWorkspace, "_engineering_text_runtime_performance_editing_patch", "") == PATCH_VERSION:
         return
 
+    _patch_save_state(word)
     _patch_bold_italic(word)
     _patch_runtime_palette(runtime)
     _patch_word_menus(word)
@@ -312,6 +335,7 @@ def apply_text_runtime_performance_editing_patch() -> None:
 
     def workspace_init(self, module) -> None:
         old_init(self, module)
+        _patch_save_state(word)
         _patch_bold_italic(word)
         _patch_runtime_palette(runtime)
         _patch_word_menus(word)
