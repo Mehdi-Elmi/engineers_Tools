@@ -26,6 +26,7 @@ from .startbar_cursor_fixes import apply_startbar_cursor_fixes
 from .svg_cursor_assets_activation_patch import apply_svg_cursor_assets_activation_patch
 from .text_color_inline_palette_patch import apply_text_color_inline_palette_patch
 from .text_color_swatch_patch import apply_text_color_swatch_patch
+from .text_lag_final_patch import apply_text_lag_final_patch
 from .text_list_settings_final_patch import apply_text_list_settings_final_patch
 from .text_list_settings_patch import apply_text_list_settings_patch
 from .text_runtime_performance_editing_patch import apply_text_runtime_performance_editing_patch
@@ -75,4 +76,5 @@ def create_window(module: LauncherModule) -> ModuleWindow:
     apply_text_toolbar_word_behavior_patch()
     apply_text_toolbar_final_event_safety_patch()
     apply_text_runtime_performance_editing_patch()
+    apply_text_lag_final_patch()
     return EngineeringDesignWorkspace(module)
