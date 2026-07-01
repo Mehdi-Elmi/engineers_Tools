@@ -17,6 +17,7 @@ from .fixed_workspace_dimension_fixes import apply_fixed_workspace_dimension_fix
 from .interaction_fixes import apply_interaction_fixes
 from .native_cursor_lock_patch import apply_native_cursor_lock_patch
 from .page_setup_properties_hotfix import apply_page_setup_properties_hotfix
+from .project_dialog_style_cursor_patch import apply_project_dialog_style_cursor_patch
 from .properties_grid_cleanup_patch import apply_properties_grid_cleanup_patch
 from .ruler_precision_fixes import apply_ruler_precision_fixes
 from .ruler_unit_origin_final_patch import apply_ruler_unit_origin_final_patch
@@ -57,4 +58,5 @@ def create_window(module: LauncherModule) -> ModuleWindow:
     apply_ui_text_tool_runtime_fix_patch()
     apply_ui_text_runtime_guard_patch()
     apply_native_cursor_lock_patch()
+    apply_project_dialog_style_cursor_patch()
     return EngineeringDesignWorkspace(module)
