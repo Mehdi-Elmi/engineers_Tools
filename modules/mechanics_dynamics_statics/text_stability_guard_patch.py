@@ -1,8 +1,9 @@
 """Focused Text Box copy and key handling fixes.
 
-This single patch directly fixes three tested areas: QTextEdit undo/delete keys,
-saving active Text Box content before canvas copy/cut, and preserving Text Box
-attributes during clone/paste.
+This single patch owns the current Text Box stability subject:
+- text-editor shortcuts must operate inside the active editor only
+- canvas shortcuts must operate on the selected Text Box object only
+- copied Text Box objects must keep runtime text attributes and transparent view state
 """
 
 from __future__ import annotations
@@ -14,7 +15,7 @@ from PySide6.QtCore import QEvent, Qt
 from PySide6.QtGui import QKeySequence, QTextCursor
 from PySide6.QtWidgets import QApplication, QTextEdit, QWidget
 
-PATCH_VERSION = "engineering-text-stability-guard-2026-07-02-f"
+PATCH_VERSION = "engineering-text-stability-guard-2026-07-02-g"
 
 _TEXT_ATTRS = (
     "is_text_box",
@@ -214,6 +215,24 @@ def _delete_text(editor: QTextEdit, *, previous: bool) -> None:
         _save_editor(editor)
 
 
+def _is_editor_command(event) -> bool:
+    return (
+        _shortcut(event, QKeySequence.StandardKey.Undo)
+        or _shortcut(event, QKeySequence.StandardKey.Redo)
+        or _shortcut(event, QKeySequence.StandardKey.Copy)
+        or _shortcut(event, QKeySequence.StandardKey.Cut)
+        or _shortcut(event, QKeySequence.StandardKey.Paste)
+        or _shortcut(event, QKeySequence.StandardKey.SelectAll)
+        or _explicit_shortcut(event, Qt.Key.Key_Z, ctrl=True)
+        or _explicit_shortcut(event, Qt.Key.Key_Z, ctrl=True, shift=True)
+        or _explicit_shortcut(event, Qt.Key.Key_Y, ctrl=True)
+        or _explicit_shortcut(event, Qt.Key.Key_C, ctrl=True)
+        or _explicit_shortcut(event, Qt.Key.Key_X, ctrl=True)
+        or _explicit_shortcut(event, Qt.Key.Key_V, ctrl=True)
+        or _explicit_shortcut(event, Qt.Key.Key_A, ctrl=True)
+    )
+
+
 def _handle_text_key(editor: QTextEdit, event) -> bool:
     if _shortcut(event, QKeySequence.StandardKey.Undo) or _explicit_shortcut(event, Qt.Key.Key_Z, ctrl=True):
         editor.undo()
@@ -260,20 +279,6 @@ def _handle_text_key(editor: QTextEdit, event) -> bool:
     return False
 
 
-def _is_text_shortcut(event) -> bool:
-    return any(
-        _shortcut(event, standard)
-        for standard in (
-            QKeySequence.StandardKey.Undo,
-            QKeySequence.StandardKey.Redo,
-            QKeySequence.StandardKey.Copy,
-            QKeySequence.StandardKey.Cut,
-            QKeySequence.StandardKey.Paste,
-            QKeySequence.StandardKey.SelectAll,
-        )
-    ) or event.key() in (Qt.Key.Key_Backspace, Qt.Key.Key_Delete, Qt.Key.Key_Z, Qt.Key.Key_Y, Qt.Key.Key_C, Qt.Key.Key_X, Qt.Key.Key_V)
-
-
 def _patch_canvas_text_editor() -> None:
     try:
         from . import ui_text_tool_final_patch as text_final
@@ -285,9 +290,9 @@ def _patch_canvas_text_editor() -> None:
     old_event = editor_cls.event
 
     def event(self, event) -> bool:
-        if event.type() == QEvent.Type.ShortcutOverride and _is_text_shortcut(event):
-            event.accept()
-            return False
+        if event.type() == QEvent.Type.ShortcutOverride and _is_editor_command(event):
+            _handle_text_key(self, event)
+            return True
         return old_event(self, event)
 
     def keyPressEvent(self, event) -> None:  # noqa: N802
@@ -326,6 +331,14 @@ def _run_strict_text_action(action: str) -> bool:
     if action == "select_all":
         editor.selectAll()
         return True
+    if action == "undo":
+        editor.undo()
+        _save_editor(editor)
+        return True
+    if action == "redo":
+        editor.redo()
+        _save_editor(editor)
+        return True
     return False
 
 
@@ -347,9 +360,9 @@ def _patch_app_text_filter() -> None:
         if event.type() in (QEvent.Type.KeyPress, QEvent.Type.ShortcutOverride):
             editor = _text_editor_from_widget(watched)
             if editor is not None and editor.isVisible() and editor.isEnabled() and _widget_inside(QApplication.focusWidget(), editor):
-                if event.type() == QEvent.Type.ShortcutOverride and _is_text_shortcut(event):
-                    event.accept()
-                    return False
+                if event.type() == QEvent.Type.ShortcutOverride and _is_editor_command(event):
+                    _handle_text_key(editor, event)
+                    return True
                 if event.type() == QEvent.Type.KeyPress and _handle_text_key(editor, event):
                     return True
         return old_event_filter(self, watched, event)
@@ -370,6 +383,9 @@ def _patch_workspace_shortcuts(edw) -> None:
         return None
 
     def copy_action(self):
+        if _run_strict_text_action("copy"):
+            self._set_status("Copy text")
+            return
         canvas = selected_canvas(self)
         if canvas is not None and canvas.copy_selection():
             self._set_status("Copy")
@@ -377,6 +393,9 @@ def _patch_workspace_shortcuts(edw) -> None:
         super(workspace_cls, self)._copy()
 
     def cut_action(self):
+        if _run_strict_text_action("cut"):
+            self._set_status("Cut text")
+            return
         canvas = selected_canvas(self)
         if canvas is not None and canvas.cut_selection():
             self._set_status("Cut")
@@ -384,15 +403,40 @@ def _patch_workspace_shortcuts(edw) -> None:
         super(workspace_cls, self)._cut()
 
     def paste_action(self):
+        if _run_strict_text_action("paste"):
+            self._set_status("Paste text")
+            return
         canvas = getattr(self, "_canvas", None)
         if isinstance(canvas, edw.EngineeringCanvas) and canvas.paste_selection():
             self._set_status("Paste")
             return
         super(workspace_cls, self)._paste()
 
+    def undo_action(self):
+        if _run_strict_text_action("undo"):
+            self._set_status("Undo text")
+            return
+        canvas = getattr(self, "_canvas", None)
+        if isinstance(canvas, edw.EngineeringCanvas) and canvas.undo():
+            self._set_status("Undo")
+            return
+        self._set_status("Nothing to undo")
+
+    def redo_action(self):
+        if _run_strict_text_action("redo"):
+            self._set_status("Redo text")
+            return
+        canvas = getattr(self, "_canvas", None)
+        if isinstance(canvas, edw.EngineeringCanvas) and canvas.redo():
+            self._set_status("Redo")
+            return
+        self._set_status("Nothing to redo")
+
     workspace_cls._copy = copy_action
     workspace_cls._cut = cut_action
     workspace_cls._paste = paste_action
+    workspace_cls._undo = undo_action
+    workspace_cls._redo = redo_action
     workspace_cls._text_stability_workspace_shortcut_guard = PATCH_VERSION
 
 
@@ -401,10 +445,16 @@ def _patch_clone(edw) -> None:
     if getattr(cls, "_text_stability_clone_guard", "") == PATCH_VERSION:
         return
     old_clone = cls.clone
+    dataclass_fields = set(getattr(cls, "__dataclass_fields__", {}) or {})
 
     def clone(self, offset=None):
         copied = old_clone(self, offset)
+        for name, value in vars(self).items():
+            if name in dataclass_fields:
+                continue
+            setattr(copied, name, _copy_value(value))
         _copy_text_attrs(self, copied)
+        _normalize_text_box(copied)
         return copied
 
     cls.clone = clone
