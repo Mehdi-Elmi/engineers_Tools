@@ -24,7 +24,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-PATCH_VERSION = "engineering-text-line-math-symbols-2026-07-02-d"
+PATCH_VERSION = "engineering-text-line-math-symbols-2026-07-02-e"
 
 PALETTE = ["#000000", "#132238", "#2f7df6", "#36a9e1", "#f18a2a", "#ffbf36", "#c9342b", "#168a50"]
 COLOR_NAMES = {
@@ -107,11 +107,21 @@ def _add_color_button_style() -> str:
     )
 
 
-def _apply_rounded_mask(widget: QWidget | None, radius: int = 12) -> None:
+def _choice_toggle_style() -> str:
+    return (
+        "QPushButton{background:#ffffff;border:1px solid #9fb0c5;border-radius:9px;color:#132238;"
+        "font-family:'Times New Roman';font-size:11px;font-weight:900;font-style:italic;padding:3px 10px;outline:0;}"
+        "QPushButton:checked{background:#fff4cf;border-color:#f18a2a;color:#102238;}"
+        "QPushButton:hover{border-color:#ff8a35;background:#fffaf0;}"
+        "QPushButton:focus{outline:0;border:1px solid #9fb0c5;}"
+    )
+
+
+def _apply_rounded_mask(widget: QWidget | None, radius: int = 14) -> None:
     if widget is None or widget.width() <= 0 or widget.height() <= 0:
         return
     path = QPainterPath()
-    path.addRoundedRect(QRectF(widget.rect()), radius, radius)
+    path.addRoundedRect(QRectF(widget.rect()).adjusted(0.0, 0.0, -1.0, -1.0), radius, radius)
     widget.setMask(QRegion(path.toFillPolygon().toPolygon()))
 
 
@@ -127,12 +137,12 @@ def _combo_style(combo: QComboBox) -> None:
     combo.setFixedHeight(30)
     combo.setStyleSheet(
         "QComboBox{background:#fffefa;border:1px solid #b98920;border-radius:9px;color:#132238;"
-        "font-family:'Times New Roman';font-size:11px;font-weight:800;font-style:normal;padding:1px 35px 1px 9px;outline:0;}"
-        "QComboBox::drop-down{width:32px;border:0;subcontrol-origin:border;subcontrol-position:center right;"
-        "background:#fff0a8;border-top-right-radius:8px;border-bottom-right-radius:8px;}"
+        "font-family:'Times New Roman';font-size:11px;font-weight:500;font-style:normal;padding:1px 28px 1px 9px;outline:0;}"
+        "QComboBox::drop-down{width:26px;border:0;subcontrol-origin:border;subcontrol-position:center right;"
+        "background:transparent;border-top-right-radius:8px;border-bottom-right-radius:8px;}"
         "QComboBox::down-arrow{width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid #102238;}"
     )
-    _font(combo, 10)
+    _font(combo, 10, bold=False, italic=False)
 
 
 def _spin_style(spin) -> None:
@@ -151,9 +161,9 @@ def _spin_style(spin) -> None:
         pass
     spin.setStyleSheet(
         "QSpinBox,QDoubleSpinBox{background:#fffefa;border:1px solid #b98920;border-radius:9px;color:#132238;"
-        "font-family:'Times New Roman';font-size:11px;font-weight:500;font-style:normal;padding:1px 34px 1px 8px;outline:0;}"
-        "QSpinBox::up-button,QDoubleSpinBox::up-button{width:31px;border:0;subcontrol-position:top right;background:#fff0a8;border-top-right-radius:8px;}"
-        "QSpinBox::down-button,QDoubleSpinBox::down-button{width:31px;border:0;subcontrol-position:bottom right;background:#fff0a8;border-bottom-right-radius:8px;}"
+        "font-family:'Times New Roman';font-size:11px;font-weight:500;font-style:normal;padding:1px 28px 1px 8px;outline:0;}"
+        "QSpinBox::up-button,QDoubleSpinBox::up-button{width:26px;border:0;subcontrol-position:top right;background:transparent;border-top-right-radius:8px;}"
+        "QSpinBox::down-button,QDoubleSpinBox::down-button{width:26px;border:0;subcontrol-position:bottom right;background:transparent;border-bottom-right-radius:8px;}"
         "QSpinBox::up-arrow,QDoubleSpinBox::up-arrow{width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-bottom:7px solid #102238;}"
         "QSpinBox::down-arrow,QDoubleSpinBox::down-arrow{width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid #102238;}"
     )
@@ -417,8 +427,8 @@ def _apply_custom_list_style(root: QWidget | None, settings: dict[str, object]) 
     fmt.setFontFamily(str(settings.get("font", "Times New Roman")))
     fmt.setFontPointSize(float(settings.get("size", 12)))
     fmt.setForeground(QColor(str(settings.get("color", "#000000"))))
-    fmt.setFontItalic(False)
-    fmt.setFontWeight(QFont.Weight.Normal)
+    fmt.setFontItalic(bool(settings.get("italic", False)))
+    fmt.setFontWeight(QFont.Weight.Bold if bool(settings.get("bold", True)) else QFont.Weight.Normal)
     mode = str(settings.get("mode", "bullet"))
     style = str(settings.get("style", "•"))
     prefix = _format_numbering_prefix(style, int(settings.get("start_numbering", 1))) if mode == "numbering" else style
@@ -442,7 +452,7 @@ def _popup_shell(parent: QWidget | None, width: int) -> tuple[QDialog, QWidget, 
     shell.setMinimumWidth(width)
     shell.setStyleSheet(
         "QWidget#TextStandardMenuShell{background:qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #ffffff,stop:0.55 #edf8ff,stop:1 #fff1d3);"
-        "border:1px solid #8fa2bb;border-radius:12px;}"
+        "border:1px solid #8fa2bb;border-radius:14px;}"
         "QLabel{background:transparent;color:#1f3148;font-family:'Times New Roman';font-size:12px;font-weight:900;font-style:italic;}"
     )
     root = QVBoxLayout(popup)
@@ -462,8 +472,8 @@ def _show_popup_near(root: QWidget | None, button: QPushButton, popup: QDialog) 
         setattr(root, "_text_standard_popup", popup)
     popup.adjustSize()
     shell = popup.findChild(QWidget, "TextStandardMenuShell")
-    _apply_rounded_mask(shell, 12)
-    _apply_rounded_mask(popup, 12)
+    _apply_rounded_mask(shell, 14)
+    _apply_rounded_mask(popup, 14)
     position = button.mapToGlobal(QPoint(0, button.height() + 3))
     popup.move(position)
     popup.exec()
@@ -546,7 +556,7 @@ def _dialog_shell(parent: QWidget | None, title: str, minimum: tuple[int, int]) 
         "QWidget#DialogRoot{background:#ffffff;border:1px solid #95aac5;border-radius:16px;}"
         "QWidget#DialogHeader{background:#102238;border-top-left-radius:16px;border-top-right-radius:16px;}"
         "QWidget#DialogBody{background:#ffffff;border-bottom-left-radius:16px;border-bottom-right-radius:16px;}"
-        "QLabel{color:#173454;font-family:'Times New Roman';font-weight:900;font-style:normal;}"
+        "QLabel{color:#173454;font-family:'Times New Roman';font-weight:900;font-style:italic;}"
     )
     outer = QVBoxLayout(dialog)
     outer.setContentsMargins(0, 0, 0, 0)
@@ -611,13 +621,14 @@ def _open_custom_color_dialog(parent: QWidget | None, initial: str) -> str | Non
 
 
 def _open_line_spacing_settings(root: QWidget | None) -> None:
-    dialog, _body, body_layout = _dialog_shell(root, "Line and Paragraph Settings", (420, 250))
+    dialog, _body, body_layout = _dialog_shell(root, "Line and Paragraph Settings", (360, 210))
     form = QFormLayout()
     value = QDoubleSpinBox()
     value.setRange(0.5, 6.0)
     value.setDecimals(2)
     value.setSingleStep(0.05)
     value.setValue(1.15)
+    value.setSuffix(" x")
     _spin_style(value)
     form.addRow("Line spacing", value)
     body_layout.addLayout(form)
@@ -646,7 +657,7 @@ def _open_list_settings(root: QWidget | None, mode: str) -> None:
         font_choices = ["Times New Roman", "B Zar", "Zar", "B Nazanin", "Nazanin", "Arial"]
 
     title = "Custom Bullet Settings" if mode == "bullet" else "Custom Numbering Settings"
-    dialog, body, body_layout = _dialog_shell(root, title, (500, 410))
+    dialog, body, body_layout = _dialog_shell(root, title, (500, 450))
     form = QFormLayout()
     form.setHorizontalSpacing(10)
     form.setVerticalSpacing(7)
@@ -656,16 +667,30 @@ def _open_list_settings(root: QWidget | None, mode: str) -> None:
     indent = QDoubleSpinBox(); indent.setRange(0, 100); indent.setDecimals(2); indent.setValue(7.0); indent.setSuffix(" mm"); _spin_style(indent)
     gap = QDoubleSpinBox(); gap.setRange(0, 80); gap.setDecimals(2); gap.setValue(4.0); gap.setSuffix(" mm"); _spin_style(gap)
     font_box = QComboBox(); font_box.addItems(font_choices); _combo_style(font_box)
+    bold_btn = QPushButton("●  Bold")
+    italic_btn = QPushButton("○  Italic")
+    for btn in (bold_btn, italic_btn):
+        btn.setCheckable(True)
+        btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        btn.setStyleSheet(_choice_toggle_style())
+        _font(btn, 10, italic=True)
+    bold_btn.setChecked(True)
     selected = {"color": "#000000"}
     preview = QLabel(body)
     preview.setFixedHeight(32)
     preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
+    def update_toggle_text() -> None:
+        bold_btn.setText(("●" if bold_btn.isChecked() else "○") + "  Bold")
+        italic_btn.setText(("●" if italic_btn.isChecked() else "○") + "  Italic")
+
     def update_preview() -> None:
+        update_toggle_text()
         prefix = _format_numbering_prefix(style.currentText(), start.value()) if mode == "numbering" else style.currentText()
         preview.setText(prefix + "  Sample text")
-        preview_font = QFont(font_box.currentText() or "Times New Roman", size.value(), QFont.Weight.Normal)
-        preview_font.setItalic(False)
+        weight = QFont.Weight.Bold if bold_btn.isChecked() else QFont.Weight.Normal
+        preview_font = QFont(font_box.currentText() or "Times New Roman", size.value(), weight)
+        preview_font.setItalic(italic_btn.isChecked())
         preview.setFont(preview_font)
         preview.setStyleSheet("QLabel{background:#f6fbff;border:1px solid #b7c9dc;border-radius:8px;color:" + selected["color"] + ";font-style:normal;}")
 
@@ -680,6 +705,14 @@ def _open_list_settings(root: QWidget | None, mode: str) -> None:
     form.addRow("Start indent", indent)
     form.addRow("Distance to text", gap)
     form.addRow("Font", font_box)
+    format_holder = QWidget(body)
+    format_row = QHBoxLayout(format_holder)
+    format_row.setContentsMargins(0, 0, 0, 0)
+    format_row.setSpacing(6)
+    format_row.addWidget(bold_btn)
+    format_row.addWidget(italic_btn)
+    format_row.addStretch(1)
+    form.addRow("Format", format_holder)
     body_layout.addLayout(form)
     body_layout.addWidget(preview)
 
@@ -736,6 +769,8 @@ def _open_list_settings(root: QWidget | None, mode: str) -> None:
     indent.valueChanged.connect(lambda _value: update_preview())
     gap.valueChanged.connect(lambda _value: update_preview())
     font_box.currentTextChanged.connect(lambda _value: update_preview())
+    bold_btn.toggled.connect(lambda _value: update_preview())
+    italic_btn.toggled.connect(lambda _value: update_preview())
     update_preview()
     rebuild_colors()
     body_layout.addWidget(color_holder)
@@ -761,6 +796,8 @@ def _open_list_settings(root: QWidget | None, mode: str) -> None:
             "indent_mm": indent.value(),
             "gap_mm": gap.value(),
             "font": font_box.currentText(),
+            "bold": bold_btn.isChecked(),
+            "italic": italic_btn.isChecked(),
             "color": selected["color"],
         }
         setattr(root, "_last_text_list_settings", settings)
