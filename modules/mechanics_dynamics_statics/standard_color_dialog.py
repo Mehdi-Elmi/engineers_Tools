@@ -57,11 +57,11 @@ _SWATCH_STYLE = (
     "QPushButton:pressed{border:2px solid #173454;}"
 )
 _GROUP_STYLE = (
-    "QFrame{background:qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #ffffff,stop:.58 #f5fbff,stop:1 #e8f3ff);"
+    "QFrame{background:qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #ffffff,stop:.55 #f8fcff,stop:1 #eaf4ff);"
     "border:1px solid #9fb1c7;border-radius:10px;}"
 )
 _BODY_STYLE = (
-    "QWidget#DialogBody{background:qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #f8fcff,stop:.55 #edf7ff,stop:1 #e7f1fb);"
+    "QWidget#DialogBody{background:qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #fbfdff,stop:.42 #f0f8ff,stop:1 #e4f0fb);"
     "border-bottom-left-radius:16px;border-bottom-right-radius:16px;} QWidget{background:transparent;}"
 )
 
@@ -79,7 +79,7 @@ def _arrow_path(direction: str) -> str:
     points = [QPointF(9, 4), QPointF(14, 12), QPointF(4, 12)] if direction == "up" else [QPointF(4, 6), QPointF(14, 6), QPointF(9, 14)]
     painter.drawPolygon(QPolygonF(points))
     painter.end()
-    path = Path(tempfile.gettempdir()) / f"engineering_custom_color_arrow_{direction}_20260702b.png"
+    path = Path(tempfile.gettempdir()) / f"engineering_custom_color_arrow_{direction}_20260702c.png"
     pixmap.save(path.as_posix(), "PNG")
     _ARROW_CACHE[direction] = path.as_posix()
     return path.as_posix()
@@ -103,7 +103,7 @@ class _ColorPlane(QWidget):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setFixedSize(188, 168)
+        self.setFixedSize(164, 146)
         self._hue = 216
         self._sat = 206
         self._val = 246
@@ -163,7 +163,7 @@ class _ValueSlider(QWidget):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setFixedSize(16, 168)
+        self.setFixedSize(14, 146)
         self._value = 246
         self.setCursor(Qt.CursorShape.SizeVerCursor)
 
@@ -378,17 +378,18 @@ def get_custom_color(parent: QWidget | None, current: str = "#000000", title: st
     left_column.addStretch(1)
 
     spectrum_group, spectrum_layout = _group(body, None)
-    spectrum_group.setFixedWidth(238)
+    spectrum_group.setFixedWidth(208)
     main.addWidget(spectrum_group)
     plane_row = QHBoxLayout()
     plane_row.setContentsMargins(0, 0, 0, 0)
-    plane_row.setSpacing(8)
+    plane_row.setSpacing(7)
     plane_row.addStretch(1)
     plane = _ColorPlane(spectrum_group)
     value_slider = _ValueSlider(spectrum_group)
     plane_row.addWidget(plane)
     plane_row.addWidget(value_slider)
     plane_row.addStretch(1)
+    spectrum_layout.addStretch(1)
     spectrum_layout.addLayout(plane_row)
 
     preview_row = QHBoxLayout()
