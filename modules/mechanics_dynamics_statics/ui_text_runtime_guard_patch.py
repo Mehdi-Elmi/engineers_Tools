@@ -8,27 +8,22 @@ blue/orange visual language for Text controls.
 
 from __future__ import annotations
 
-PATCH_VERSION = "engineering-ui-text-runtime-guard-2026-07-01-b"
+PATCH_VERSION = "engineering-ui-text-runtime-guard-2026-07-02-c"
 
 FONT_CHOICES = (
     "Times New Roman",
     "B Zar",
-    "Zar",
     "B Nazanin",
-    "Nazanin",
     "B Mitra",
     "B Lotus",
-    "IranNastaliq",
-    "Vazirmatn",
-    "Segoe UI",
-    "Tahoma",
+    "B Titr",
+    "B Yekan",
+    "B Koodak",
+    "B Traffic",
     "Arial",
     "Calibri",
     "Cambria",
     "Cambria Math",
-    "Verdana",
-    "Georgia",
-    "Courier New",
     "Consolas",
     "Symbol",
 )
