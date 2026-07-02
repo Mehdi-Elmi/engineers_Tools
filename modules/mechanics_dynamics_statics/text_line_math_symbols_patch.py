@@ -9,6 +9,7 @@ from pathlib import Path
 from PySide6.QtCore import QTimer, Qt
 from PySide6.QtGui import QColor, QFont, QPixmap, QTextBlockFormat, QTextCharFormat
 from PySide6.QtWidgets import (
+    QApplication,
     QColorDialog,
     QComboBox,
     QDialog,
@@ -64,6 +65,15 @@ def _button_style(selector: str = "QPushButton") -> str:
     )
 
 
+def _close_button_style() -> str:
+    return (
+        "QPushButton{background:#f8fbff;border:1px solid #7fa6ca;border-radius:9px;color:#102238;"
+        "font-family:'Times New Roman';font-size:14px;font-weight:900;font-style:normal;padding:0;}"
+        "QPushButton:hover{background:#fff4cf;border-color:#ff8a35;}"
+        "QPushButton:pressed{background:#f18a2a;color:#ffffff;}"
+    )
+
+
 def _add_color_button_style() -> str:
     return (
         "QPushButton{background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #ffe9a6,stop:.55 #ffc35a,stop:1 #f18a2a);"
@@ -101,28 +111,46 @@ def _spin_style(spin) -> None:
     _font(spin, 10)
 
 
-def _menu_style(*, title_italic: bool = False) -> str:
-    italic = "italic" if title_italic else "normal"
+def _menu_style() -> str:
     return (
-        "QMenu{background:#ffffff;border:1px solid #9fb4cd;border-radius:10px;color:#071b31;"
-        "font-family:'Times New Roman';font-weight:800;font-style:" + italic + ";padding:5px;}"
-        "QMenu::item{min-height:22px;padding:4px 18px 4px 12px;border-radius:7px;}"
-        "QMenu::item:selected{background:#dcecff;color:#071b31;}"
+        "QMenu{background:qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #ffffff,stop:0.55 #edf8ff,stop:1 #fff1d3);"
+        "border:1px solid #8fa2bb;border-radius:10px;color:#1f3148;font-family:'Times New Roman';font-weight:800;font-style:italic;padding:6px;}"
+        "QMenu::item{color:#1f3148;padding:6px 24px 6px 12px;border-radius:7px;font-size:12px;font-style:italic;font-weight:800;}"
+        "QMenu::item:selected{background:#fff4cf;color:#132238;}"
         "QMenu::separator{height:1px;background:#c7d6e8;margin:5px 6px;}"
     )
 
 
-def _prepare_menu(menu: QMenu, *, symbol: bool = False, title_italic: bool = False) -> None:
+def _prepare_menu(menu: QMenu) -> None:
     menu.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+    menu.setWindowFlag(Qt.WindowType.FramelessWindowHint, True)
+    menu.setWindowFlag(Qt.WindowType.NoDropShadowWindowHint, True)
     menu.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-    menu.setStyleSheet(_menu_style(title_italic=title_italic))
-    _font(menu, 10, bold=not symbol, symbol=symbol, italic=title_italic and not symbol)
+    menu.setStyleSheet(_menu_style())
+    _font(menu, 10, italic=True)
 
 
-def _logo_pixmap() -> QPixmap:
-    names = {"logo.png", "app_logo.png", "atlas_logo.png", "engineer_tools_logo.png", "icon.png"}
-    for root in list(Path(__file__).resolve().parents[:5]):
-        for candidate in (root / "assets", root / "icons", root / "src" / "engineers_tools" / "assets"):
+def _logo_pixmap_from_app() -> QPixmap:
+    app = QApplication.instance()
+    if app is None:
+        return QPixmap()
+    for widget in app.topLevelWidgets():
+        icon = widget.windowIcon()
+        if icon is not None and not icon.isNull():
+            pixmap = icon.pixmap(24, 24)
+            if not pixmap.isNull():
+                return pixmap
+    return QPixmap()
+
+
+def _logo_pixmap_from_files() -> QPixmap:
+    names = {
+        "logo.png", "app_logo.png", "atlas_logo.png", "engineer_tools_logo.png", "icon.png",
+        "logo.jpg", "app_icon.png", "window_icon.png", "atlas.png", "atls.png",
+    }
+    for root in list(Path(__file__).resolve().parents[:7]):
+        for folder_name in ("assets", "icons", "images", "resources"):
+            candidate = root / folder_name
             if not candidate.exists():
                 continue
             for path in candidate.rglob("*"):
@@ -137,7 +165,9 @@ def _make_logo_label(parent: QWidget) -> QLabel:
     logo = QLabel(parent)
     logo.setFixedSize(28, 28)
     logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
-    pixmap = _logo_pixmap()
+    pixmap = _logo_pixmap_from_app()
+    if pixmap.isNull():
+        pixmap = _logo_pixmap_from_files()
     if not pixmap.isNull():
         logo.setPixmap(pixmap.scaled(24, 24, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
         logo.setStyleSheet("QLabel{background:#ffffff;border:1px solid #7fa6ca;border-radius:5px;}")
@@ -239,7 +269,7 @@ def _add_symbol_section(menu: QMenu, title: str, symbols: tuple[str, ...], root:
     title_font = QFont("Times New Roman", 10, QFont.Weight.Bold)
     title_font.setItalic(True)
     section.menuAction().setFont(title_font)
-    _prepare_menu(section, symbol=True)
+    _prepare_menu(section)
     for symbol in symbols:
         action = section.addAction(symbol)
         action_font = QFont("Segoe UI Symbol", 10, QFont.Weight.Normal)
@@ -306,8 +336,14 @@ def _dialog_shell(parent: QWidget | None, title: str, minimum: tuple[int, int]) 
     title_label = QLabel(title, header)
     _font(title_label, 12, italic=True)
     title_label.setStyleSheet("QLabel{color:#ffffff;font-style:italic;font-weight:900;}")
+    close = QPushButton("×", header)
+    close.setFixedSize(24, 24)
+    close.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+    close.setStyleSheet(_close_button_style())
+    close.clicked.connect(dialog.reject)
     header_row.addWidget(_make_logo_label(header))
     header_row.addWidget(title_label, 1)
+    header_row.addWidget(close)
     root_layout.addWidget(header)
     body = QWidget(shell)
     body.setObjectName("DialogBody")
@@ -353,14 +389,6 @@ def _open_line_spacing_settings(root: QWidget | None) -> None:
     _spin_style(value)
     form.addRow("Line spacing", value)
     body_layout.addLayout(form)
-    quick = QHBoxLayout()
-    for label, spacing in (("1.0", 1.0), ("1.15", 1.15), ("1.5", 1.5), ("2.0", 2.0)):
-        button = QPushButton(label)
-        button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        button.setStyleSheet(_button_style("QPushButton"))
-        button.clicked.connect(lambda checked=False, v=spacing: value.setValue(v))
-        quick.addWidget(button)
-    body_layout.addLayout(quick)
     actions = QHBoxLayout()
     actions.addStretch(1)
     ok = QPushButton("OK")
@@ -375,46 +403,6 @@ def _open_line_spacing_settings(root: QWidget | None) -> None:
     body_layout.addLayout(actions)
     if dialog.exec() == QDialog.DialogCode.Accepted:
         _apply_line_spacing(root, value.value())
-
-
-def _open_math_symbols_dialog(root: QWidget | None) -> None:
-    dialog, body, body_layout = _dialog_shell(root, "Math Symbols", (560, 420))
-
-    def add_section(title: str, symbols: tuple[str, ...]) -> None:
-        label = QLabel(title, body)
-        _font(label, 11, italic=True)
-        body_layout.addWidget(label)
-        grid_widget = QWidget(body)
-        grid = QGridLayout(grid_widget)
-        grid.setContentsMargins(0, 0, 0, 0)
-        grid.setHorizontalSpacing(3)
-        grid.setVerticalSpacing(3)
-        for index, symbol in enumerate(symbols):
-            button = QPushButton(symbol, grid_widget)
-            button.setFixedSize(32, 28)
-            button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-            _font(button, 12, bold=False, symbol=True, italic=False)
-            button.setStyleSheet("QPushButton{background:#ffffff;border:1px solid #9fb4cd;border-radius:6px;color:#132238;font-style:normal;} QPushButton:hover{background:#dcecff;border-color:#ff8a35;} QPushButton:pressed{background:#f18a2a;color:#ffffff;}")
-            button.clicked.connect(lambda checked=False, s=symbol: _insert_symbol(root, s))
-            grid.addWidget(button, index // 12, index % 12)
-        body_layout.addWidget(grid_widget)
-
-    add_section("Greek letters", GREEK)
-    add_section("Math operators", OPERATORS)
-    add_section("Arrows", ARROWS)
-    actions = QHBoxLayout()
-    convert = QPushButton("Convert Selected To Math")
-    close = QPushButton("Close")
-    for button in (convert, close):
-        button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        button.setStyleSheet(_button_style("QPushButton"))
-    convert.clicked.connect(lambda checked=False: _convert_selection_to_math(root))
-    close.clicked.connect(dialog.accept)
-    actions.addStretch(1)
-    actions.addWidget(convert)
-    actions.addWidget(close)
-    body_layout.addLayout(actions)
-    dialog.exec()
 
 
 def _open_list_settings(root: QWidget | None, mode: str) -> None:
@@ -553,29 +541,29 @@ def _replace_menu(button: QPushButton, property_name: str) -> QMenu:
     return menu
 
 
-def _wire_dialog_button(button: QPushButton, property_name: str, callback) -> None:
-    old = button.menu()
-    if old is not None:
-        old.deleteLater()
-        button.setMenu(None)
-    button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-    if button.property(property_name) == PATCH_VERSION:
-        return
-    button.clicked.connect(lambda checked=False: callback())
-    button.setProperty(property_name, PATCH_VERSION)
-
-
 def _apply_text_menus(root: QWidget | None) -> None:
     buttons = _buttons(root)
 
     line = buttons.get("Line spacing")
-    if isinstance(line, QPushButton):
-        _wire_dialog_button(line, "lineDialogVersion", lambda w=root: _open_line_spacing_settings(w))
+    if isinstance(line, QPushButton) and line.property("lineMenuVersion") != PATCH_VERSION:
+        menu = _replace_menu(line, "lineMenuVersion")
+        for label, value in (("1.0", 1.0), ("1.15", 1.15), ("1.5", 1.5), ("2.0", 2.0)):
+            action = menu.addAction(label)
+            action.triggered.connect(lambda checked=False, v=value, w=root: _apply_line_spacing(w, v))
+        menu.addSeparator()
+        action = menu.addAction("Line and paragraph settings...")
+        action.triggered.connect(lambda checked=False, w=root: _open_line_spacing_settings(w))
         line.setToolTip("Line spacing")
 
     math = buttons.get("Math symbols")
-    if isinstance(math, QPushButton):
-        _wire_dialog_button(math, "mathDialogVersion", lambda w=root: _open_math_symbols_dialog(w))
+    if isinstance(math, QPushButton) and math.property("mathMenuVersion") != PATCH_VERSION:
+        menu = _replace_menu(math, "mathMenuVersion")
+        _add_symbol_section(menu, "Greek letters", GREEK, root)
+        _add_symbol_section(menu, "Math operators", OPERATORS, root)
+        _add_symbol_section(menu, "Arrows", ARROWS, root)
+        menu.addSeparator()
+        convert = menu.addAction("Convert selected text to math")
+        convert.triggered.connect(lambda checked=False, w=root: _convert_selection_to_math(w))
         math.setToolTip("Math symbols")
 
     bullet = buttons.get("Bullet")
