@@ -17,9 +17,10 @@ from PySide6.QtCore import QPointF, QTimer, Qt
 from PySide6.QtGui import QColor, QFont, QPainter, QPixmap, QPolygonF, QTextCharFormat, QTextCursor
 from PySide6.QtWidgets import QComboBox, QDoubleSpinBox, QLineEdit, QListWidget, QPushButton, QSpinBox, QTextEdit, QWidget
 
-PATCH_VERSION = "engineering-project-dialog-style-cursor-2026-07-02-f"
+PATCH_VERSION = "engineering-project-dialog-style-cursor-2026-07-02-g"
 _ARROW_CACHE: dict[str, str] = {}
 _PREFIX_RE = re.compile(r"^\s*(?:\d+[\.)]|[ivxlcdmIVXLCDM]+[\.)]|[A-Za-z]+[\.)]|[●○■◆➤✓•])\s+")
+FONT_CHOICES = ("Times New Roman", "B Zar", "B Nazanin", "B Mitra", "B Lotus", "B Titr", "B Yekan", "B Koodak", "B Traffic")
 
 
 def _arrow_path(direction: str = "down") -> str:
@@ -43,7 +44,7 @@ def _arrow_path(direction: str = "down") -> str:
         points = [QPointF(13, 9), QPointF(5, 4), QPointF(5, 14)]
     painter.drawPolygon(QPolygonF(points))
     painter.end()
-    path = Path(tempfile.gettempdir()) / f"engineering_shared_arrow_{direction}_20260702f.png"
+    path = Path(tempfile.gettempdir()) / f"engineering_shared_arrow_{direction}_20260702g.png"
     pixmap.save(path.as_posix(), "PNG")
     _ARROW_CACHE[direction] = path.as_posix()
     return path.as_posix()
@@ -127,14 +128,34 @@ def _active_text_editor(root: QWidget | None) -> QTextEdit | None:
     return editor if isinstance(editor, QTextEdit) else None
 
 
+def _active_canvas(root: QWidget | None):
+    return getattr(root, "_canvas", None) if root is not None else None
+
+
 def _save_active_text_editor(root: QWidget | None) -> None:
-    canvas = getattr(root, "_canvas", None) if root is not None else None
+    canvas = _active_canvas(root)
     editor = _active_text_editor(root)
     if canvas is None or editor is None:
         return
     try:
         from . import ui_text_tool_final_patch as text_final
         text_final._save_editor_text(canvas, editor)
+    except Exception:
+        pass
+
+
+def _save_text_direction(root: QWidget | None, rtl: bool, alignment: str) -> None:
+    canvas = _active_canvas(root)
+    if canvas is None:
+        return
+    index = getattr(canvas, "_active_text_editor_index", None)
+    if index is None or not (0 <= index < len(getattr(canvas, "objects", []))):
+        return
+    obj = canvas.objects[index]
+    obj.text_rtl = bool(rtl)
+    obj.text_align = alignment
+    try:
+        canvas.update()
     except Exception:
         pass
 
@@ -180,6 +201,78 @@ def _apply_text_italic(root: QWidget | None, checked: bool) -> None:
     _merge_text_format(root, fmt)
 
 
+def _button_map(root: QWidget | None) -> dict:
+    start_bar = getattr(root, "_start_bar_widget", None) if root is not None else None
+    controls = getattr(start_bar, "_text_controls", {}) if start_bar is not None else {}
+    buttons = controls.get("buttons", {}) if isinstance(controls, dict) else {}
+    return buttons if isinstance(buttons, dict) else {}
+
+
+def _set_checked_silent(buttons: dict, name: str, checked: bool) -> None:
+    button = buttons.get(name)
+    if not isinstance(button, QPushButton):
+        return
+    blocked = button.blockSignals(True)
+    button.setChecked(checked)
+    button.blockSignals(blocked)
+
+
+def _apply_text_direction(root: QWidget | None, *, rtl: bool) -> None:
+    buttons = _button_map(root)
+    _set_checked_silent(buttons, "Right to left", rtl)
+    _set_checked_silent(buttons, "Left to right", not rtl)
+    _set_checked_silent(buttons, "Align right", rtl)
+    _set_checked_silent(buttons, "Align left", not rtl)
+    _set_checked_silent(buttons, "Align center", False)
+    _set_checked_silent(buttons, "Justify", False)
+    editor = _active_text_editor(root)
+    if editor is None:
+        return
+    editor.setLayoutDirection(Qt.LayoutDirection.RightToLeft if rtl else Qt.LayoutDirection.LeftToRight)
+    editor.setAlignment(Qt.AlignmentFlag.AlignRight if rtl else Qt.AlignmentFlag.AlignLeft)
+    editor.setFocus()
+    _save_text_direction(root, rtl, "right" if rtl else "left")
+    _save_active_text_editor(root)
+
+
+def _apply_text_alignment(root: QWidget | None, alignment: str) -> None:
+    buttons = _button_map(root)
+    for name in ("Align left", "Align center", "Align right", "Justify"):
+        _set_checked_silent(buttons, name, False)
+    active = {"left": "Align left", "center": "Align center", "right": "Align right", "justify": "Justify"}.get(alignment, "Align left")
+    _set_checked_silent(buttons, active, True)
+    editor = _active_text_editor(root)
+    if editor is None:
+        return
+    qt_alignment = {
+        "left": Qt.AlignmentFlag.AlignLeft,
+        "center": Qt.AlignmentFlag.AlignHCenter,
+        "right": Qt.AlignmentFlag.AlignRight,
+        "justify": Qt.AlignmentFlag.AlignJustify,
+    }.get(alignment, Qt.AlignmentFlag.AlignLeft)
+    editor.setAlignment(qt_alignment)
+    if alignment in {"right", "justify"} and buttons.get("Right to left") and buttons["Right to left"].isChecked():
+        editor.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
+        _save_text_direction(root, True, alignment)
+    else:
+        _save_text_direction(root, editor.layoutDirection() == Qt.LayoutDirection.RightToLeft, alignment)
+    editor.setFocus()
+    _save_active_text_editor(root)
+
+
+def _normalize_font_combo(combo: QComboBox) -> None:
+    current = combo.currentText()
+    wanted = list(FONT_CHOICES)
+    existing = [combo.itemText(i) for i in range(combo.count())]
+    if existing == wanted:
+        return
+    blocked = combo.blockSignals(True)
+    combo.clear()
+    combo.addItems(wanted)
+    combo.setCurrentText(current if current in wanted else "Times New Roman")
+    combo.blockSignals(blocked)
+
+
 def _wire_text_controls(root: QWidget | None) -> None:
     start_bar = getattr(root, "_start_bar_widget", None) if root is not None else None
     controls = getattr(start_bar, "_text_controls", {}) if start_bar is not None else {}
@@ -188,6 +281,8 @@ def _wire_text_controls(root: QWidget | None) -> None:
     combo = controls.get("font")
     size = controls.get("size")
     buttons = controls.get("buttons", {}) if isinstance(controls.get("buttons", {}), dict) else {}
+    if isinstance(combo, QComboBox):
+        _normalize_font_combo(combo)
     if isinstance(combo, QComboBox) and combo.property("finalFontApplyWire") != PATCH_VERSION:
         combo.currentTextChanged.connect(lambda value, w=root: _apply_text_font(w, value))
         combo.setProperty("finalFontApplyWire", PATCH_VERSION)
@@ -199,13 +294,30 @@ def _wire_text_controls(root: QWidget | None) -> None:
     if isinstance(bold, QPushButton) and bold.property("finalBoldApplyWire") != PATCH_VERSION:
         bold.toggled.connect(lambda checked, w=root: _apply_text_bold(w, checked))
         bold.setProperty("finalBoldApplyWire", PATCH_VERSION)
-    if isinstance(italic, QPushButton) and italic.property("finalItalicApplyWire") != PATCH_VERSION:
-        italic.toggled.connect(lambda checked, w=root: _apply_text_italic(w, checked))
-        italic.setProperty("finalItalicApplyWire", PATCH_VERSION)
+    if isinstance(italic, QPushButton):
         font = italic.font()
+        font.setFamily("Times New Roman")
+        font.setPointSize(15)
+        font.setBold(True)
         font.setItalic(True)
         italic.setFont(font)
         italic.setText("I")
+        if italic.property("finalItalicApplyWire") != PATCH_VERSION:
+            italic.toggled.connect(lambda checked, w=root: _apply_text_italic(w, checked))
+            italic.setProperty("finalItalicApplyWire", PATCH_VERSION)
+    wiring = (
+        ("Right to left", lambda w=root: _apply_text_direction(w, rtl=True)),
+        ("Left to right", lambda w=root: _apply_text_direction(w, rtl=False)),
+        ("Align left", lambda w=root: _apply_text_alignment(w, "left")),
+        ("Align center", lambda w=root: _apply_text_alignment(w, "center")),
+        ("Align right", lambda w=root: _apply_text_alignment(w, "right")),
+        ("Justify", lambda w=root: _apply_text_alignment(w, "justify")),
+    )
+    for name, callback in wiring:
+        button = buttons.get(name)
+        if isinstance(button, QPushButton) and button.property("finalDirectionWire") != PATCH_VERSION:
+            button.clicked.connect(lambda checked=False, cb=callback: cb())
+            button.setProperty("finalDirectionWire", PATCH_VERSION)
 
 
 def _remove_current_list_prefix(root: QWidget | None) -> None:
@@ -246,6 +358,37 @@ def _install_text_list_none_behavior() -> None:
     line_patch._project_none_behavior_patch = PATCH_VERSION
 
 
+def _install_text_backspace_behavior() -> None:
+    try:
+        from . import text_toolbar_final_event_safety_patch as final_event
+    except Exception:
+        return
+    if getattr(final_event, "_project_backspace_behavior_patch", "") == PATCH_VERSION:
+        return
+
+    def delete_previous_char(editor: QTextEdit) -> None:
+        cursor = editor.textCursor()
+        if cursor.hasSelection():
+            cursor.removeSelectedText()
+        else:
+            cursor.deletePreviousChar()
+        editor.setTextCursor(cursor)
+        final_event._save_editor(editor)
+
+    def delete_next_char(editor: QTextEdit) -> None:
+        cursor = editor.textCursor()
+        if cursor.hasSelection():
+            cursor.removeSelectedText()
+        else:
+            cursor.deleteChar()
+        editor.setTextCursor(cursor)
+        final_event._save_editor(editor)
+
+    final_event._delete_previous_char = delete_previous_char
+    final_event._delete_next_char = delete_next_char
+    final_event._project_backspace_behavior_patch = PATCH_VERSION
+
+
 def _install_shared_arrow_styles() -> None:
     try:
         from src.engineers_tools.app import interaction_ui_patch as interaction
@@ -261,6 +404,7 @@ def _install_shared_arrow_styles() -> None:
     except Exception:
         pass
     _install_text_list_none_behavior()
+    _install_text_backspace_behavior()
 
 
 def _patch_dialog_class(cls) -> None:
