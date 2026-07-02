@@ -11,9 +11,11 @@ from PySide6.QtCore import QObject, QEvent, QPointF, QRectF, QTimer, Qt, QUrl
 from PySide6.QtGui import QColor, QFont, QFontMetricsF, QImage, QKeySequence, QPainter, QPixmap, QPolygonF, QTextBlockFormat, QTextCharFormat, QTextCursor, QTextDocument, QTextImageFormat
 from PySide6.QtWidgets import QApplication, QCheckBox, QComboBox, QDialog, QDoubleSpinBox, QHBoxLayout, QPushButton, QSpinBox, QTextEdit, QVBoxLayout, QWidget
 
-PATCH_VERSION = "engineering-text-toolbar-final-event-safety-2026-07-02-p"
+PATCH_VERSION = "engineering-text-toolbar-final-event-safety-2026-07-02-q"
 _ARROW_CACHE: dict[str, str] = {}
 _MATH_TOKEN_RE = re.compile(r"([A-Za-z0-9]+)([\^_/])([A-Za-z0-9]+)$")
+LTR_ISOLATE = "\u2066"
+POP_DIRECTIONAL_ISOLATE = "\u2069"
 
 
 def _workspace_from_widget(widget: QWidget | None) -> QWidget | None:
@@ -179,15 +181,19 @@ def _auto_convert_math_token(editor: QTextEdit) -> bool:
     normal = _normal_char_format(editor)
     replace.removeSelectedText()
     if operator == "/":
+        replace.insertText(LTR_ISOLATE, normal)
         replace.insertImage(_fraction_image_format(editor, left, right, normal))
+        replace.insertText(POP_DIRECTIONAL_ISOLATE, normal)
         _reset_math_format(editor, replace)
         return True
     elevated = _math_part_format(
         normal,
         QTextCharFormat.VerticalAlignment.AlignSuperScript if operator == "^" else QTextCharFormat.VerticalAlignment.AlignSubScript,
     )
+    replace.insertText(LTR_ISOLATE, normal)
     replace.insertText(left, normal)
     replace.insertText(right, elevated)
+    replace.insertText(POP_DIRECTIONAL_ISOLATE, normal)
     _reset_math_format(editor, replace)
     return True
 
@@ -284,7 +290,7 @@ def _arrow_url(direction: str) -> str:
     points = [QPointF(9, 4), QPointF(14, 12), QPointF(4, 12)] if direction == "up" else [QPointF(4, 6), QPointF(14, 6), QPointF(9, 14)]
     painter.drawPolygon(QPolygonF(points))
     painter.end()
-    path = Path(tempfile.gettempdir()) / f"engineering_arrow_{direction}_20260702p.png"
+    path = Path(tempfile.gettempdir()) / f"engineering_arrow_{direction}_20260702q.png"
     pixmap.save(path.as_posix(), "PNG")
     _ARROW_CACHE[direction] = path.as_posix()
     return path.as_posix()
@@ -319,11 +325,9 @@ def _text_menu_button_style() -> str:
         "QPushButton{background:qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 #ffffff,stop:0.58 #eef8ff,stop:1 #e5f1ff);"
         "border:1px solid #b8c5d4;border-left:3px solid #43d3bd;border-radius:7px;color:#102238;"
         "font-family:'Times New Roman';font-size:12px;font-style:italic;font-weight:900;padding:4px 8px 4px 10px;text-align:left;outline:0;}"
-        "QPushButton[menuAccent='red']{border-left:3px solid #ff3565;}"
-        "QPushButton[menuAccent='cyan']{border-left:3px solid #43d3bd;}"
-        "QPushButton:hover{background:#fff4cf;border-color:#ff8a35;color:#102238;}"
-        "QPushButton:pressed{background:#f18a2a;color:#ffffff;padding-top:5px;}"
-        "QPushButton:focus{outline:0;border:1px solid #b8c5d4;}"
+        "QPushButton:hover{background:#fff4cf;border:1px solid #ff8a35;border-left:3px solid #ff3565;color:#102238;}"
+        "QPushButton:pressed{background:#f18a2a;border:1px solid #f18a2a;border-left:3px solid #ff3565;color:#ffffff;padding-top:5px;}"
+        "QPushButton:focus{outline:0;border:1px solid #b8c5d4;border-left:3px solid #43d3bd;}"
     )
 
 
@@ -351,7 +355,6 @@ def _text_menu_row(layout: QVBoxLayout, text: str, handler) -> QPushButton:
     button.setCursor(Qt.CursorShape.PointingHandCursor)
     button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
     button.setMinimumHeight(25)
-    button.setProperty("menuAccent", "red" if layout.count() == 0 else "cyan")
     button.setStyleSheet(_text_menu_button_style())
     font = button.font()
     font.setFamily("Times New Roman")
