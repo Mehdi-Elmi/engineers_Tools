@@ -7,63 +7,35 @@ from pathlib import Path
 
 from PySide6.QtCore import QPoint, QPointF, QRect, Signal, Qt
 from PySide6.QtGui import QColor, QCursor, QGuiApplication, QImage, QPainter, QPen, QPixmap, QPolygonF
-from PySide6.QtWidgets import (
-    QFrame,
-    QGridLayout,
-    QHBoxLayout,
-    QLabel,
-    QLineEdit,
-    QPushButton,
-    QSpinBox,
-    QVBoxLayout,
-    QWidget,
-)
+from PySide6.QtWidgets import QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QSpinBox, QVBoxLayout, QWidget
 
 _BASIC_COLORS = [
-    ("#000000", "Black"), ("#8b1e1e", "Red Brown"), ("#168a50", "Green"), ("#cc6600", "Orange"),
-    ("#00a83b", "Bright Green"), ("#c0b800", "Olive"), ("#00ff00", "Lime"), ("#80ff00", "Spring Green"),
-    ("#102238", "Navy"), ("#800080", "Purple"), ("#008080", "Teal"), ("#c070a0", "Rose"),
-    ("#008c8c", "Dark Cyan"), ("#7b7b1c", "Dark Olive"), ("#00ffff", "Cyan"), ("#a0ffa0", "Mint"),
-    ("#2f7df6", "Blue"), ("#ff00ff", "Magenta"), ("#0080ff", "Sky Blue"), ("#c080ff", "Lavender"),
-    ("#00ccff", "Aqua"), ("#8080c0", "Blue Gray"), ("#80ffff", "Light Cyan"), ("#c0ffff", "Pale Cyan"),
-    ("#4f1010", "Dark Red"), ("#ff0000", "Red"), ("#808000", "Dark Yellow"), ("#ff6600", "Amber"),
-    ("#40a000", "Leaf"), ("#ffb020", "Gold"), ("#60ff00", "Neon Green"), ("#ffff00", "Yellow"),
-    ("#8000ff", "Violet"), ("#ff00c0", "Hot Pink"), ("#7c8199", "Slate"), ("#ff6080", "Coral"),
-    ("#60a080", "Sea Green"), ("#ffb090", "Peach"), ("#60ff90", "Fresh Green"), ("#ffff80", "Pale Yellow"),
-    ("#2020ff", "Royal Blue"), ("#ff40ff", "Pink"), ("#8080ff", "Soft Blue"), ("#ff80ff", "Soft Pink"),
-    ("#80ffff", "Light Cyan"), ("#c0ffff", "Pale Cyan"), ("#e6ffff", "Ice"), ("#ffffff", "White"),
+    ("#000000", "Black"), ("#c9342b", "Red"), ("#168a50", "Green"), ("#f18a2a", "Orange"),
+    ("#ffbf36", "Yellow"), ("#2f7df6", "Blue"), ("#8000ff", "Violet"), ("#ffffff", "White"),
+    ("#102238", "Navy"), ("#8b1e1e", "Brown"), ("#008080", "Teal"), ("#00ccff", "Aqua"),
+    ("#ff00ff", "Magenta"), ("#7c8199", "Slate"), ("#60a080", "Sea Green"), ("#ffb090", "Peach"),
+    ("#4f1010", "Dark Red"), ("#008000", "Dark Green"), ("#000080", "Dark Blue"), ("#808000", "Olive"),
+    ("#800080", "Purple"), ("#ff6080", "Coral"), ("#80ffff", "Light Cyan"), ("#ffff80", "Pale Yellow"),
+    ("#ff0000", "Bright Red"), ("#00ff00", "Lime"), ("#0000ff", "Pure Blue"), ("#ffff00", "Pure Yellow"),
+    ("#00ffff", "Cyan"), ("#ff80ff", "Soft Pink"), ("#8080ff", "Soft Blue"), ("#c0ffff", "Pale Cyan"),
 ]
 _ARROW_CACHE: dict[str, str] = {}
-_CLOSE_STYLE = (
-    "QPushButton{background:#102238;border:1px solid #102238;border-radius:9px;color:#ffffff;"
-    "font-family:'Times New Roman';font-size:14px;font-weight:900;font-style:normal;padding:0;outline:0;}"
-    "QPushButton:hover{background:#c9342b;border-color:#9d241f;color:#ffffff;}"
-    "QPushButton:pressed{background:#8f1f1a;color:#ffffff;}"
-    "QPushButton:focus{outline:0;border:1px solid #102238;}"
-)
 _TEXT_STYLE = "font-family:'Times New Roman';font-size:12px;font-weight:900;font-style:italic;color:#173454;"
+_CLOSE_STYLE = (
+    "QPushButton{background:#102238;border:1px solid #102238;border-radius:9px;color:#ffffff;font-family:'Times New Roman';font-size:14px;font-weight:900;padding:0;outline:0;}"
+    "QPushButton:hover{background:#c9342b;border-color:#9d241f;color:#ffffff;} QPushButton:pressed{background:#8f1f1a;color:#ffffff;}"
+)
 _BUTTON_STYLE = (
     "QPushButton{background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #ffffff,stop:.55 #fff6d6,stop:1 #ffc969);"
-    "border:1px solid #b98920;border-radius:8px;color:#132238;font-family:'Times New Roman';font-size:12px;font-weight:900;"
-    "font-style:normal;padding:4px 12px;outline:0;}"
-    "QPushButton:hover{background:#fff4cf;border-color:#ff8a35;}"
-    "QPushButton:pressed{background:#f18a2a;color:#ffffff;padding-top:5px;}"
-    "QPushButton:focus{outline:0;border:1px solid #b98920;}"
+    "border:1px solid #b98920;border-radius:8px;color:#132238;font-family:'Times New Roman';font-size:12px;font-weight:900;padding:4px 12px;outline:0;}"
+    "QPushButton:hover{background:#fff4cf;border-color:#ff8a35;} QPushButton:pressed{background:#f18a2a;color:#ffffff;padding-top:5px;}"
 )
 _SWATCH_STYLE = (
-    "QPushButton{background:%s;border:1px solid #566d86;border-radius:2px;min-width:18px;max-width:18px;"
-    "min-height:15px;max-height:15px;padding:0;outline:0;}"
-    "QPushButton:hover{border:2px solid #ff8a35;}"
-    "QPushButton:pressed{border:2px solid #173454;}"
+    "QPushButton{background:%s;border:1px solid #566d86;border-radius:2px;min-width:18px;max-width:18px;min-height:15px;max-height:15px;padding:0;outline:0;}"
+    "QPushButton:hover{border:2px solid #ff8a35;} QPushButton:pressed{border:2px solid #173454;}"
 )
-_GROUP_STYLE = (
-    "QFrame{background:qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #ffffff,stop:.55 #f7fbff,stop:1 #e7f2ff);"
-    "border:1px solid #9fb1c7;border-radius:10px;}"
-)
-_BODY_STYLE = (
-    "QWidget#DialogBody{background:qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #fdfefe,stop:.42 #eef7ff,stop:1 #dfeefa);"
-    "border-bottom-left-radius:16px;border-bottom-right-radius:16px;} QWidget{background:transparent;}"
-)
+_GROUP_STYLE = "QFrame{background:qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #ffffff,stop:.55 #f7fbff,stop:1 #e7f2ff);border:1px solid #9fb1c7;border-radius:10px;}"
+_BODY_STYLE = "QWidget#DialogBody{background:qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #fdfefe,stop:.42 #eef7ff,stop:1 #dfeefa);border-bottom-left-radius:16px;border-bottom-right-radius:16px;} QWidget{background:transparent;}"
 
 
 def _arrow_path(direction: str) -> str:
@@ -79,7 +51,7 @@ def _arrow_path(direction: str) -> str:
     points = [QPointF(9, 4), QPointF(14, 12), QPointF(4, 12)] if direction == "up" else [QPointF(4, 6), QPointF(14, 6), QPointF(9, 14)]
     painter.drawPolygon(QPolygonF(points))
     painter.end()
-    path = Path(tempfile.gettempdir()) / f"engineering_custom_color_arrow_{direction}_20260702d.png"
+    path = Path(tempfile.gettempdir()) / f"engineering_custom_color_arrow_{direction}_20260702e.png"
     pixmap.save(path.as_posix(), "PNG")
     _ARROW_CACHE[direction] = path.as_posix()
     return path.as_posix()
@@ -87,14 +59,10 @@ def _arrow_path(direction: str) -> str:
 
 def _spin_style() -> str:
     return (
-        "QSpinBox{background:#fffefa;border:1px solid #b88718;border-radius:7px;color:#173454;"
-        "font-family:'Times New Roman';font-size:12px;font-weight:900;font-style:normal;padding:1px 24px 1px 6px;outline:0;}"
-        "QSpinBox::up-button{width:21px;border-left:1px solid #b88718;border-top-right-radius:6px;"
-        "background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #ffe8a8,stop:1 #f1b33d);}"
-        "QSpinBox::down-button{width:21px;border-left:1px solid #b88718;border-bottom-right-radius:6px;"
-        "background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #ffe8a8,stop:1 #f1b33d);}"
-        f"QSpinBox::up-arrow{{image:url({_arrow_path('up')});width:14px;height:14px;}}"
-        f"QSpinBox::down-arrow{{image:url({_arrow_path('down')});width:14px;height:14px;}}"
+        "QSpinBox{background:#fffefa;border:1px solid #b88718;border-radius:7px;color:#173454;font-family:'Times New Roman';font-size:12px;font-weight:900;padding:1px 24px 1px 6px;outline:0;}"
+        "QSpinBox::up-button{width:21px;border-left:1px solid #b88718;border-top-right-radius:6px;background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #ffe8a8,stop:1 #f1b33d);}"
+        "QSpinBox::down-button{width:21px;border-left:1px solid #b88718;border-bottom-right-radius:6px;background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #ffe8a8,stop:1 #f1b33d);}"
+        f"QSpinBox::up-arrow{{image:url({_arrow_path('up')});width:14px;height:14px;}} QSpinBox::down-arrow{{image:url({_arrow_path('down')});width:14px;height:14px;}}"
     )
 
 
@@ -103,7 +71,7 @@ class _ColorPlane(QWidget):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setFixedSize(176, 172)
+        self.setFixedSize(198, 172)
         self._hue = 216
         self._sat = 206
         self._val = 246
@@ -243,7 +211,6 @@ def _polish_shell_close_button(dialog) -> None:
 
 
 def get_custom_color(parent: QWidget | None, current: str = "#000000", title: str = "Add Custom Color") -> str | None:
-    """Open the reusable project-standard custom color picker and return a hex color."""
     try:
         from . import text_line_math_symbols_patch as ui_shell
     except Exception:
@@ -251,7 +218,7 @@ def get_custom_color(parent: QWidget | None, current: str = "#000000", title: st
 
     selected = {"color": QColor(_normal_hex(current))}
     custom_colors = ["#ffffff"] * 16
-    dialog, body, body_layout = ui_shell._dialog_shell(parent, title or "Add Custom Color", (640, 470))
+    dialog, body, body_layout = ui_shell._dialog_shell(parent, title or "Add Custom Color", (700, 470))
     _polish_shell_close_button(dialog)
     body.setStyleSheet(_BODY_STYLE)
     body_layout.setContentsMargins(10, 10, 10, 10)
@@ -374,7 +341,7 @@ def get_custom_color(parent: QWidget | None, current: str = "#000000", title: st
     left_column.addStretch(1)
 
     spectrum_group, spectrum_layout = _group(body, None)
-    spectrum_group.setFixedSize(224, 300)
+    spectrum_group.setFixedSize(252, 300)
     main.addWidget(spectrum_group)
     spectrum_layout.addStretch(1)
     plane_row = QHBoxLayout()
@@ -390,7 +357,6 @@ def get_custom_color(parent: QWidget | None, current: str = "#000000", title: st
 
     preview_row = QHBoxLayout()
     preview_row.setContentsMargins(0, 0, 0, 0)
-    preview_row.setSpacing(8)
     preview_row.addStretch(1)
     preview = QFrame(spectrum_group)
     preview.setFixedSize(58, 42)
@@ -406,6 +372,7 @@ def get_custom_color(parent: QWidget | None, current: str = "#000000", title: st
     for action_button in (ok, cancel):
         action_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         action_button.setStyleSheet(_BUTTON_STYLE)
+        action_button.setMinimumWidth(72)
     ok.clicked.connect(dialog.accept)
     cancel.clicked.connect(dialog.reject)
     actions.addWidget(ok)
