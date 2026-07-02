@@ -20,17 +20,17 @@ from PySide6.QtWidgets import (
 )
 
 _BASIC_COLORS = [
-    ("#000000", "Black"), ("#800000", "Maroon"), ("#008000", "Green"), ("#cc6600", "Orange"),
-    ("#00b000", "Bright Green"), ("#c0c000", "Olive"), ("#00ff00", "Lime"), ("#80ff00", "Spring Green"),
-    ("#000080", "Navy"), ("#800080", "Purple"), ("#008080", "Teal"), ("#c070a0", "Rose"),
-    ("#008c8c", "Dark Cyan"), ("#808000", "Olive"), ("#00ffff", "Cyan"), ("#a0ffa0", "Mint"),
-    ("#0000ff", "Blue"), ("#ff00ff", "Magenta"), ("#0080ff", "Sky Blue"), ("#c080ff", "Lavender"),
+    ("#000000", "Black"), ("#8b1e1e", "Red Brown"), ("#168a50", "Green"), ("#cc6600", "Orange"),
+    ("#00a83b", "Bright Green"), ("#c0b800", "Olive"), ("#00ff00", "Lime"), ("#80ff00", "Spring Green"),
+    ("#102238", "Navy"), ("#800080", "Purple"), ("#008080", "Teal"), ("#c070a0", "Rose"),
+    ("#008c8c", "Dark Cyan"), ("#7b7b1c", "Dark Olive"), ("#00ffff", "Cyan"), ("#a0ffa0", "Mint"),
+    ("#2f7df6", "Blue"), ("#ff00ff", "Magenta"), ("#0080ff", "Sky Blue"), ("#c080ff", "Lavender"),
     ("#00ccff", "Aqua"), ("#8080c0", "Blue Gray"), ("#80ffff", "Light Cyan"), ("#c0ffff", "Pale Cyan"),
-    ("#800000", "Dark Red"), ("#ff0000", "Red"), ("#808000", "Dark Yellow"), ("#ff6600", "Amber"),
+    ("#4f1010", "Dark Red"), ("#ff0000", "Red"), ("#808000", "Dark Yellow"), ("#ff6600", "Amber"),
     ("#40a000", "Leaf"), ("#ffb020", "Gold"), ("#60ff00", "Neon Green"), ("#ffff00", "Yellow"),
-    ("#8000ff", "Violet"), ("#ff00c0", "Hot Pink"), ("#8080a0", "Slate"), ("#ff6080", "Coral"),
+    ("#8000ff", "Violet"), ("#ff00c0", "Hot Pink"), ("#7c8199", "Slate"), ("#ff6080", "Coral"),
     ("#60a080", "Sea Green"), ("#ffb090", "Peach"), ("#60ff90", "Fresh Green"), ("#ffff80", "Pale Yellow"),
-    ("#2020ff", "Blue"), ("#ff40ff", "Magenta"), ("#8080ff", "Soft Blue"), ("#ff80ff", "Soft Pink"),
+    ("#2020ff", "Royal Blue"), ("#ff40ff", "Pink"), ("#8080ff", "Soft Blue"), ("#ff80ff", "Soft Pink"),
     ("#80ffff", "Light Cyan"), ("#c0ffff", "Pale Cyan"), ("#e6ffff", "Ice"), ("#ffffff", "White"),
 ]
 _ARROW_CACHE: dict[str, str] = {}
@@ -57,11 +57,11 @@ _SWATCH_STYLE = (
     "QPushButton:pressed{border:2px solid #173454;}"
 )
 _GROUP_STYLE = (
-    "QFrame{background:qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #ffffff,stop:.55 #f8fcff,stop:1 #eaf4ff);"
+    "QFrame{background:qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #ffffff,stop:.55 #f7fbff,stop:1 #e7f2ff);"
     "border:1px solid #9fb1c7;border-radius:10px;}"
 )
 _BODY_STYLE = (
-    "QWidget#DialogBody{background:qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #fbfdff,stop:.42 #f0f8ff,stop:1 #e4f0fb);"
+    "QWidget#DialogBody{background:qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #fdfefe,stop:.42 #eef7ff,stop:1 #dfeefa);"
     "border-bottom-left-radius:16px;border-bottom-right-radius:16px;} QWidget{background:transparent;}"
 )
 
@@ -79,7 +79,7 @@ def _arrow_path(direction: str) -> str:
     points = [QPointF(9, 4), QPointF(14, 12), QPointF(4, 12)] if direction == "up" else [QPointF(4, 6), QPointF(14, 6), QPointF(9, 14)]
     painter.drawPolygon(QPolygonF(points))
     painter.end()
-    path = Path(tempfile.gettempdir()) / f"engineering_custom_color_arrow_{direction}_20260702c.png"
+    path = Path(tempfile.gettempdir()) / f"engineering_custom_color_arrow_{direction}_20260702d.png"
     pixmap.save(path.as_posix(), "PNG")
     _ARROW_CACHE[direction] = path.as_posix()
     return path.as_posix()
@@ -103,7 +103,7 @@ class _ColorPlane(QWidget):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setFixedSize(164, 146)
+        self.setFixedSize(176, 172)
         self._hue = 216
         self._sat = 206
         self._val = 246
@@ -163,7 +163,7 @@ class _ValueSlider(QWidget):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setFixedSize(14, 146)
+        self.setFixedSize(14, 172)
         self._value = 246
         self.setCursor(Qt.CursorShape.SizeVerCursor)
 
@@ -196,34 +196,6 @@ class _ValueSlider(QWidget):
         self.valueChanged.emit(self._value)
 
 
-def _polish_shell_close_button(dialog) -> bool:
-    found = False
-    for button in dialog.findChildren(QPushButton):
-        if button.text().strip() == "×":
-            button.setStyleSheet(_CLOSE_STYLE)
-            button.setCursor(Qt.CursorShape.ArrowCursor)
-            button.setFixedSize(28, 28)
-            button.show()
-            button.raise_()
-            found = True
-    return found
-
-
-def _ensure_close_button(dialog, body: QWidget, body_layout: QVBoxLayout) -> None:
-    if _polish_shell_close_button(dialog):
-        return
-    row = QHBoxLayout()
-    row.setContentsMargins(0, 0, 0, 0)
-    row.addStretch(1)
-    close = QPushButton("×", body)
-    close.setFixedSize(28, 28)
-    close.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-    close.setStyleSheet(_CLOSE_STYLE)
-    close.clicked.connect(dialog.reject)
-    row.addWidget(close)
-    body_layout.insertLayout(0, row)
-
-
 def _normal_hex(value: str | None) -> str:
     color = QColor(value or "#000000")
     return color.name(QColor.NameFormat.HexRgb) if color.isValid() else "#000000"
@@ -239,10 +211,8 @@ def _make_spin(value: int, parent: QWidget, maximum: int = 255) -> QSpinBox:
     spin.setValue(max(0, min(maximum, int(value))))
     spin.setFixedWidth(82)
     spin.setKeyboardTracking(True)
-    spin.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
     try:
         spin.lineEdit().setReadOnly(False)
-        spin.lineEdit().setFocusPolicy(Qt.FocusPolicy.StrongFocus)
     except Exception:
         pass
     spin.setStyleSheet(_spin_style())
@@ -262,6 +232,16 @@ def _group(parent: QWidget, title: str | None = None) -> tuple[QFrame, QVBoxLayo
     return frame, layout
 
 
+def _polish_shell_close_button(dialog) -> None:
+    for button in dialog.findChildren(QPushButton):
+        if button.text().strip() == "×":
+            button.setStyleSheet(_CLOSE_STYLE)
+            button.setCursor(Qt.CursorShape.ArrowCursor)
+            button.setFixedSize(28, 28)
+            button.show()
+            button.raise_()
+
+
 def get_custom_color(parent: QWidget | None, current: str = "#000000", title: str = "Add Custom Color") -> str | None:
     """Open the reusable project-standard custom color picker and return a hex color."""
     try:
@@ -271,8 +251,8 @@ def get_custom_color(parent: QWidget | None, current: str = "#000000", title: st
 
     selected = {"color": QColor(_normal_hex(current))}
     custom_colors = ["#ffffff"] * 16
-    dialog, body, body_layout = ui_shell._dialog_shell(parent, title or "Add Custom Color", (620, 470))
-    _ensure_close_button(dialog, body, body_layout)
+    dialog, body, body_layout = ui_shell._dialog_shell(parent, title or "Add Custom Color", (640, 470))
+    _polish_shell_close_button(dialog)
     body.setStyleSheet(_BODY_STYLE)
     body_layout.setContentsMargins(10, 10, 10, 10)
     body_layout.setSpacing(7)
@@ -280,7 +260,7 @@ def get_custom_color(parent: QWidget | None, current: str = "#000000", title: st
     main = QHBoxLayout()
     main.setContentsMargins(0, 0, 0, 0)
     main.setSpacing(10)
-    body_layout.addLayout(main)
+    body_layout.addLayout(main, 1)
 
     left_column = QVBoxLayout()
     left_column.setContentsMargins(0, 0, 0, 0)
@@ -294,6 +274,22 @@ def get_custom_color(parent: QWidget | None, current: str = "#000000", title: st
     basic_grid.setHorizontalSpacing(4)
     basic_grid.setVerticalSpacing(4)
     colors_layout.addLayout(basic_grid)
+
+    def set_color(color: QColor) -> None:
+        if not color.isValid():
+            return
+        selected["color"] = QColor(color)
+        hue, sat, val, _alpha = selected["color"].getHsv()
+        if hue < 0:
+            hue = 0
+        plane.set_hsv(hue, sat, val)
+        value_slider.set_value(val)
+        for spin, spin_value in ((hue_spin, hue), (sat_spin, sat), (val_spin, val), (red_spin, color.red()), (green_spin, color.green()), (blue_spin, color.blue())):
+            spin.blockSignals(True)
+            spin.setValue(spin_value)
+            spin.blockSignals(False)
+        html_edit.setText(selected["color"].name(QColor.NameFormat.HexRgb))
+        preview.setStyleSheet("QFrame{background:%s;border:1px solid #173454;border-radius:7px;}" % selected["color"].name())
 
     for index, (hex_value, name) in enumerate(_BASIC_COLORS):
         button = QPushButton("", colors_group)
@@ -378,8 +374,9 @@ def get_custom_color(parent: QWidget | None, current: str = "#000000", title: st
     left_column.addStretch(1)
 
     spectrum_group, spectrum_layout = _group(body, None)
-    spectrum_group.setFixedWidth(208)
+    spectrum_group.setFixedSize(224, 300)
     main.addWidget(spectrum_group)
+    spectrum_layout.addStretch(1)
     plane_row = QHBoxLayout()
     plane_row.setContentsMargins(0, 0, 0, 0)
     plane_row.setSpacing(7)
@@ -389,7 +386,6 @@ def get_custom_color(parent: QWidget | None, current: str = "#000000", title: st
     plane_row.addWidget(plane)
     plane_row.addWidget(value_slider)
     plane_row.addStretch(1)
-    spectrum_layout.addStretch(1)
     spectrum_layout.addLayout(plane_row)
 
     preview_row = QHBoxLayout()
@@ -414,23 +410,7 @@ def get_custom_color(parent: QWidget | None, current: str = "#000000", title: st
     cancel.clicked.connect(dialog.reject)
     actions.addWidget(ok)
     actions.addWidget(cancel)
-    spectrum_layout.addLayout(actions)
-
-    def set_color(color: QColor) -> None:
-        if not color.isValid():
-            return
-        selected["color"] = QColor(color)
-        hue, sat, val, _alpha = selected["color"].getHsv()
-        if hue < 0:
-            hue = 0
-        plane.set_hsv(hue, sat, val)
-        value_slider.set_value(val)
-        for spin, spin_value in ((hue_spin, hue), (sat_spin, sat), (val_spin, val), (red_spin, color.red()), (green_spin, color.green()), (blue_spin, color.blue())):
-            spin.blockSignals(True)
-            spin.setValue(spin_value)
-            spin.blockSignals(False)
-        html_edit.setText(selected["color"].name(QColor.NameFormat.HexRgb))
-        preview.setStyleSheet("QFrame{background:%s;border:1px solid #173454;border-radius:7px;}" % selected["color"].name())
+    body_layout.addLayout(actions)
 
     def from_hsv() -> None:
         set_color(QColor.fromHsv(hue_spin.value(), sat_spin.value(), val_spin.value()))
