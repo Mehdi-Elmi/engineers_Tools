@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-PATCH_VERSION = "engineering-text-toolbar-final-event-safety-2026-07-02-i"
+PATCH_VERSION = "engineering-text-toolbar-final-event-safety-2026-07-02-j"
 _ARROW_CACHE: dict[str, str] = {}
 
 
@@ -52,7 +52,13 @@ def _workspace_from_editor(editor: QTextEdit) -> QWidget | None:
 def _buttons(root: QWidget | None) -> dict:
     if root is None:
         return {}
-    return getattr(root, "_text_toolbar_buttons", {}) or getattr(root, "_text_buttons", {}) or {}
+    direct = getattr(root, "_text_toolbar_buttons", {}) or getattr(root, "_text_buttons", {})
+    if isinstance(direct, dict) and direct:
+        return direct
+    start_bar = getattr(root, "_start_bar_widget", None)
+    controls = getattr(start_bar, "_text_controls", {}) if start_bar is not None else {}
+    buttons = controls.get("buttons", {}) if isinstance(controls, dict) else {}
+    return buttons if isinstance(buttons, dict) else {}
 
 
 def _plain_font(editor: QTextEdit) -> None:
@@ -168,6 +174,50 @@ def _sync_numbering_next_from_current_line(root: QWidget | None, editor: QTextEd
             setattr(root, "_text_numbering_next", 1)
 
 
+def _activate_list_mode(root: QWidget | None, mode: str, style: str | None = None) -> None:
+    if root is None:
+        return
+    try:
+        from . import text_line_math_symbols_patch as line_patch
+    except Exception:
+        return
+    _patch_line_module_controls()
+    try:
+        line_patch._activate_list_style(root, mode, style)
+    except Exception:
+        settings = dict(line_patch._default_list_settings(mode, style))
+        settings.update({"mode": mode, "style": style or settings.get("style")})
+        settings["bold"] = True
+        settings["italic"] = False
+        if mode == "numbering":
+            try:
+                setattr(root, "_text_numbering_next", int(settings.get("start_numbering", 1)))
+            except Exception:
+                setattr(root, "_text_numbering_next", 1)
+        setattr(root, "_last_text_list_settings", settings)
+        try:
+            line_patch._set_list_button_state(root, mode)
+            line_patch._apply_custom_list_style(root, settings)
+        except Exception:
+            logging.exception("text final safety: fallback list activation failed")
+
+
+def _wire_list_buttons(root: QWidget | None) -> None:
+    buttons = _buttons(root)
+    for name, mode, style in (("Bullet", "bullet", "●"), ("Numbering", "numbering", "1.")):
+        button = buttons.get(name) or buttons.get(name.lower())
+        if button is None:
+            continue
+        button.setCheckable(True)
+        if button.property("finalEventListWire") == PATCH_VERSION:
+            continue
+        try:
+            button.clicked.connect(lambda checked=False, w=root, m=mode, s=style: _activate_list_mode(w, m, s))
+            button.setProperty("finalEventListWire", PATCH_VERSION)
+        except Exception:
+            logging.exception("text final safety: list button wire failed")
+
+
 def _insert_active_list_after_enter(editor: QTextEdit) -> bool:
     root = _workspace_from_editor(editor)
     if root is None:
@@ -256,6 +306,7 @@ def _install_editor_filter(editor: QTextEdit | None) -> None:
     if editor is None:
         return
     root = _workspace_from_editor(editor)
+    _wire_list_buttons(root)
     if not editor.property("finalPlainDefaults"):
         _plain_font(editor)
         _reset_style_buttons(root)
@@ -288,7 +339,7 @@ def _arrow_url(direction: str) -> str:
     points = [QPointF(9, 4), QPointF(14, 12), QPointF(4, 12)] if direction == "up" else [QPointF(4, 6), QPointF(14, 6), QPointF(9, 14)]
     painter.drawPolygon(QPolygonF(points))
     painter.end()
-    path = Path(tempfile.gettempdir()) / f"engineering_arrow_{direction}_20260702i.png"
+    path = Path(tempfile.gettempdir()) / f"engineering_arrow_{direction}_20260702j.png"
     pixmap.save(path.as_posix(), "PNG")
     _ARROW_CACHE[direction] = path.as_posix()
     return path.as_posix()
@@ -333,6 +384,7 @@ def _polish_textbar_controls(root: QWidget | None) -> None:
         for spin in bar.findChildren(QDoubleSpinBox):
             _style_toolbar_spin(spin)
     _reset_style_buttons(root)
+    _wire_list_buttons(root)
 
 
 def _patch_show_editor(module) -> None:
@@ -464,6 +516,7 @@ def _patch_line_spacing_dialog() -> None:
 def _install_existing_editors(root: QWidget | None) -> None:
     if root is None:
         return
+    _wire_list_buttons(root)
     for editor in root.findChildren(QTextEdit):
         _install_editor_filter(editor)
 
@@ -517,8 +570,9 @@ def apply_text_toolbar_final_event_safety_patch() -> None:
         _patch_canvas_key_handler(edw)
         _install_existing_editors(self)
         _polish_textbar_controls(self)
+        _wire_list_buttons(self)
         for delay in (0, 80, 250, 700, 1400):
-            QTimer.singleShot(delay, lambda root=self: (_install_existing_editors(root), _polish_textbar_controls(root), _patch_line_module_controls()))
+            QTimer.singleShot(delay, lambda root=self: (_install_existing_editors(root), _polish_textbar_controls(root), _patch_line_module_controls(), _wire_list_buttons(root)))
 
     edw.EngineeringDesignWorkspace.__init__ = workspace_init
     edw.EngineeringDesignWorkspace._engineering_text_toolbar_final_event_safety_patch = PATCH_VERSION
