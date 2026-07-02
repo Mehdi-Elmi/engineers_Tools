@@ -7,11 +7,11 @@ import re
 import tempfile
 from pathlib import Path
 
-from PySide6.QtCore import QObject, QEvent, QPointF, QTimer, Qt
-from PySide6.QtGui import QColor, QFont, QKeySequence, QPainter, QPixmap, QPolygonF, QTextBlockFormat, QTextCharFormat, QTextCursor
+from PySide6.QtCore import QObject, QEvent, QPointF, QRectF, QTimer, Qt, QUrl
+from PySide6.QtGui import QColor, QFont, QFontMetricsF, QImage, QKeySequence, QPainter, QPixmap, QPolygonF, QTextBlockFormat, QTextCharFormat, QTextCursor, QTextDocument, QTextImageFormat
 from PySide6.QtWidgets import QApplication, QCheckBox, QComboBox, QDialog, QDoubleSpinBox, QHBoxLayout, QPushButton, QSpinBox, QTextEdit, QVBoxLayout, QWidget
 
-PATCH_VERSION = "engineering-text-toolbar-final-event-safety-2026-07-02-o"
+PATCH_VERSION = "engineering-text-toolbar-final-event-safety-2026-07-02-p"
 _ARROW_CACHE: dict[str, str] = {}
 _MATH_TOKEN_RE = re.compile(r"([A-Za-z0-9]+)([\^_/])([A-Za-z0-9]+)$")
 
@@ -133,6 +133,36 @@ def _reset_math_format(editor: QTextEdit, cursor: QTextCursor) -> None:
     editor.setTextCursor(cursor)
 
 
+def _fraction_image_format(editor: QTextEdit, top: str, bottom: str, base: QTextCharFormat) -> QTextImageFormat:
+    font = QFont(editor.currentFont())
+    size = base.fontPointSize() or font.pointSizeF() or 12.0
+    font.setPointSizeF(max(6.0, size * 0.82))
+    metrics = QFontMetricsF(font)
+    width = int(max(metrics.horizontalAdvance(top), metrics.horizontalAdvance(bottom)) + 14)
+    line_height = int(metrics.height() + 2)
+    height = int(line_height * 2 + 5)
+    image = QImage(max(18, width), max(20, height), QImage.Format.Format_ARGB32_Premultiplied)
+    image.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(image)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+    painter.setFont(font)
+    painter.setPen(QColor("#132238"))
+    painter.drawText(QRectF(0, 0, image.width(), line_height), Qt.AlignmentFlag.AlignCenter, top)
+    line_y = line_height + 1
+    painter.drawLine(QPointF(3, line_y), QPointF(image.width() - 3, line_y))
+    painter.drawText(QRectF(0, line_y + 2, image.width(), line_height), Qt.AlignmentFlag.AlignCenter, bottom)
+    painter.end()
+    name = f"engineering-inline-fraction-{id(editor)}-{editor.textCursor().position()}-{top}-{bottom}"
+    url = QUrl(name)
+    editor.document().addResource(QTextDocument.ResourceType.ImageResource, url, image)
+    fmt = QTextImageFormat()
+    fmt.setName(name)
+    fmt.setWidth(image.width())
+    fmt.setHeight(image.height())
+    fmt.setVerticalAlignment(QTextCharFormat.VerticalAlignment.AlignMiddle)
+    return fmt
+
+
 def _auto_convert_math_token(editor: QTextEdit) -> bool:
     cursor = editor.textCursor()
     block = cursor.block()
@@ -149,11 +179,7 @@ def _auto_convert_math_token(editor: QTextEdit) -> bool:
     normal = _normal_char_format(editor)
     replace.removeSelectedText()
     if operator == "/":
-        top = _math_part_format(normal, QTextCharFormat.VerticalAlignment.AlignSuperScript)
-        bottom = _math_part_format(normal, QTextCharFormat.VerticalAlignment.AlignSubScript)
-        replace.insertText(left, top)
-        replace.insertText("⁄", normal)
-        replace.insertText(right, bottom)
+        replace.insertImage(_fraction_image_format(editor, left, right, normal))
         _reset_math_format(editor, replace)
         return True
     elevated = _math_part_format(
@@ -258,7 +284,7 @@ def _arrow_url(direction: str) -> str:
     points = [QPointF(9, 4), QPointF(14, 12), QPointF(4, 12)] if direction == "up" else [QPointF(4, 6), QPointF(14, 6), QPointF(9, 14)]
     painter.drawPolygon(QPolygonF(points))
     painter.end()
-    path = Path(tempfile.gettempdir()) / f"engineering_arrow_{direction}_20260702o.png"
+    path = Path(tempfile.gettempdir()) / f"engineering_arrow_{direction}_20260702p.png"
     pixmap.save(path.as_posix(), "PNG")
     _ARROW_CACHE[direction] = path.as_posix()
     return path.as_posix()
