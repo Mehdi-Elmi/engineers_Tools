@@ -1,9 +1,9 @@
-"""Project dialog and shared control styling for the engineering UI.
+"""Project dialog and final text-input ownership for the engineering UI.
 
-This patch is also the last shared owner for ComboBox and SpinBox arrow styling.
-The arrows intentionally use generated dark-blue PNG assets instead of Qt CSS
-triangles, because the triangle fallback was rendering as square blocks on the
-Windows runtime.
+This patch runs at the end of the engineering module patch chain. It owns the
+shared ComboBox/SpinBox arrows, Text toolbar wiring, TextBox Backspace/Delete
+behavior, math auto-conversion, and the shortcut entry for converting selected
+text to math.
 """
 
 from __future__ import annotations
@@ -14,10 +14,10 @@ import tempfile
 from pathlib import Path
 
 from PySide6.QtCore import QEvent, QObject, QPointF, QTimer, Qt
-from PySide6.QtGui import QColor, QFont, QPainter, QPixmap, QPolygonF, QTextCharFormat, QTextCursor
+from PySide6.QtGui import QColor, QFont, QKeySequence, QPainter, QPixmap, QPolygonF, QTextCharFormat, QTextCursor
 from PySide6.QtWidgets import QApplication, QComboBox, QDoubleSpinBox, QLineEdit, QListWidget, QPushButton, QSpinBox, QTextEdit, QWidget
 
-PATCH_VERSION = "engineering-project-dialog-style-cursor-2026-07-02-h"
+PATCH_VERSION = "engineering-project-dialog-style-cursor-2026-07-02-i"
 _ARROW_CACHE: dict[str, str] = {}
 _PREFIX_RE = re.compile(r"^\s*(?:\d+[\.)]|[ivxlcdmIVXLCDM]+[\.)]|[A-Za-z]+[\.)]|[●○■◆➤✓•])\s+")
 _MATH_TOKEN_RE = re.compile(r"([A-Za-z0-9]+)([\^_/])([A-Za-z0-9]+)$")
@@ -28,8 +28,7 @@ def _arrow_path(direction: str = "down") -> str:
     cached = _ARROW_CACHE.get(direction)
     if cached:
         return cached
-    size = 18
-    pixmap = QPixmap(size, size)
+    pixmap = QPixmap(18, 18)
     pixmap.fill(Qt.GlobalColor.transparent)
     painter = QPainter(pixmap)
     painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
@@ -37,15 +36,15 @@ def _arrow_path(direction: str = "down") -> str:
     painter.setPen(Qt.PenStyle.NoPen)
     if direction == "up":
         points = [QPointF(9, 4), QPointF(14, 12), QPointF(4, 12)]
-    elif direction == "down":
-        points = [QPointF(4, 6), QPointF(14, 6), QPointF(9, 14)]
     elif direction == "left":
         points = [QPointF(5, 9), QPointF(13, 4), QPointF(13, 14)]
-    else:
+    elif direction == "right":
         points = [QPointF(13, 9), QPointF(5, 4), QPointF(5, 14)]
+    else:
+        points = [QPointF(4, 6), QPointF(14, 6), QPointF(9, 14)]
     painter.drawPolygon(QPolygonF(points))
     painter.end()
-    path = Path(tempfile.gettempdir()) / f"engineering_shared_arrow_{direction}_20260702h.png"
+    path = Path(tempfile.gettempdir()) / f"engineering_shared_arrow_{direction}_20260702i.png"
     pixmap.save(path.as_posix(), "PNG")
     _ARROW_CACHE[direction] = path.as_posix()
     return path.as_posix()
@@ -75,7 +74,6 @@ def _style_numeric_spin(spin: QSpinBox | QDoubleSpinBox) -> None:
         edit = spin.lineEdit()
         edit.setReadOnly(False)
         edit.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-        edit.setCursorPosition(0)
         edit.setStyleSheet(
             "QLineEdit{background:transparent;border:0;color:#173454;font-family:'Times New Roman';"
             "font-size:12px;font-weight:900;font-style:normal;padding:0;outline:0;}"
@@ -123,14 +121,42 @@ def _polish_dialog(root: QWidget | None) -> None:
         button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
 
 
-def _active_text_editor(root: QWidget | None) -> QTextEdit | None:
-    canvas = getattr(root, "_canvas", None) if root is not None else None
-    editor = getattr(canvas, "_active_text_editor", None) if canvas is not None else None
-    return editor if isinstance(editor, QTextEdit) else None
+def _workspace_from_widget(widget: QWidget | None) -> QWidget | None:
+    current = widget
+    while current is not None:
+        if hasattr(current, "_start_bar_widget") or current.objectName() == "EngineeringDesignWorkspace":
+            return current
+        current = current.parentWidget()
+    return None
+
+
+def _workspace_from_editor(editor: QTextEdit) -> QWidget | None:
+    root = _workspace_from_widget(editor)
+    if root is not None:
+        return root
+    owner = getattr(editor, "_canvas_owner", None)
+    root = _workspace_from_widget(owner) if owner is not None else None
+    if root is not None:
+        return root
+    app = QApplication.instance()
+    if app is not None:
+        for widget in app.topLevelWidgets():
+            root = _workspace_from_widget(widget)
+            canvas = getattr(root, "_canvas", None) if root is not None else None
+            if getattr(canvas, "_active_text_editor", None) is editor:
+                editor._canvas_owner = canvas
+                return root
+    return None
 
 
 def _active_canvas(root: QWidget | None):
     return getattr(root, "_canvas", None) if root is not None else None
+
+
+def _active_text_editor(root: QWidget | None) -> QTextEdit | None:
+    canvas = _active_canvas(root)
+    editor = getattr(canvas, "_active_text_editor", None) if canvas is not None else None
+    return editor if isinstance(editor, QTextEdit) else None
 
 
 def _save_active_text_editor(root: QWidget | None) -> None:
@@ -145,20 +171,11 @@ def _save_active_text_editor(root: QWidget | None) -> None:
         pass
 
 
-def _save_text_direction(root: QWidget | None, rtl: bool, alignment: str) -> None:
-    canvas = _active_canvas(root)
-    if canvas is None:
-        return
-    index = getattr(canvas, "_active_text_editor_index", None)
-    if index is None or not (0 <= index < len(getattr(canvas, "objects", []))):
-        return
-    obj = canvas.objects[index]
-    obj.text_rtl = bool(rtl)
-    obj.text_align = alignment
-    try:
-        canvas.update()
-    except Exception:
-        pass
+def _buttons(root: QWidget | None) -> dict:
+    start_bar = getattr(root, "_start_bar_widget", None) if root is not None else None
+    controls = getattr(start_bar, "_text_controls", {}) if start_bar is not None else {}
+    buttons = controls.get("buttons", {}) if isinstance(controls, dict) else {}
+    return buttons if isinstance(buttons, dict) else {}
 
 
 def _merge_text_format(root: QWidget | None, fmt: QTextCharFormat) -> None:
@@ -181,12 +198,8 @@ def _apply_text_font(root: QWidget | None, family: str) -> None:
 
 
 def _apply_text_size(root: QWidget | None, size: int | float) -> None:
-    try:
-        point_size = max(1.0, float(size))
-    except Exception:
-        point_size = 12.0
     fmt = QTextCharFormat()
-    fmt.setFontPointSize(point_size)
+    fmt.setFontPointSize(max(1.0, float(size or 12)))
     _merge_text_format(root, fmt)
 
 
@@ -202,24 +215,28 @@ def _apply_text_italic(root: QWidget | None, checked: bool) -> None:
     _merge_text_format(root, fmt)
 
 
-def _button_map(root: QWidget | None) -> dict:
-    start_bar = getattr(root, "_start_bar_widget", None) if root is not None else None
-    controls = getattr(start_bar, "_text_controls", {}) if start_bar is not None else {}
-    buttons = controls.get("buttons", {}) if isinstance(controls, dict) else {}
-    return buttons if isinstance(buttons, dict) else {}
+def _normalize_font_combo(combo: QComboBox) -> None:
+    current = combo.currentText()
+    wanted = list(FONT_CHOICES)
+    if [combo.itemText(i) for i in range(combo.count())] == wanted:
+        return
+    blocked = combo.blockSignals(True)
+    combo.clear()
+    combo.addItems(wanted)
+    combo.setCurrentText(current if current in wanted else "Times New Roman")
+    combo.blockSignals(blocked)
 
 
 def _set_checked_silent(buttons: dict, name: str, checked: bool) -> None:
     button = buttons.get(name)
-    if not isinstance(button, QPushButton):
-        return
-    blocked = button.blockSignals(True)
-    button.setChecked(checked)
-    button.blockSignals(blocked)
+    if isinstance(button, QPushButton):
+        blocked = button.blockSignals(True)
+        button.setChecked(checked)
+        button.blockSignals(blocked)
 
 
 def _apply_text_direction(root: QWidget | None, *, rtl: bool) -> None:
-    buttons = _button_map(root)
+    buttons = _buttons(root)
     _set_checked_silent(buttons, "Right to left", rtl)
     _set_checked_silent(buttons, "Left to right", not rtl)
     _set_checked_silent(buttons, "Align right", rtl)
@@ -232,12 +249,11 @@ def _apply_text_direction(root: QWidget | None, *, rtl: bool) -> None:
     editor.setLayoutDirection(Qt.LayoutDirection.RightToLeft if rtl else Qt.LayoutDirection.LeftToRight)
     editor.setAlignment(Qt.AlignmentFlag.AlignRight if rtl else Qt.AlignmentFlag.AlignLeft)
     editor.setFocus()
-    _save_text_direction(root, rtl, "right" if rtl else "left")
     _save_active_text_editor(root)
 
 
 def _apply_text_alignment(root: QWidget | None, alignment: str) -> None:
-    buttons = _button_map(root)
+    buttons = _buttons(root)
     for name in ("Align left", "Align center", "Align right", "Justify"):
         _set_checked_silent(buttons, name, False)
     active = {"left": "Align left", "center": "Align center", "right": "Align right", "justify": "Justify"}.get(alignment, "Align left")
@@ -252,26 +268,8 @@ def _apply_text_alignment(root: QWidget | None, alignment: str) -> None:
         "justify": Qt.AlignmentFlag.AlignJustify,
     }.get(alignment, Qt.AlignmentFlag.AlignLeft)
     editor.setAlignment(qt_alignment)
-    if alignment in {"right", "justify"} and buttons.get("Right to left") and buttons["Right to left"].isChecked():
-        editor.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
-        _save_text_direction(root, True, alignment)
-    else:
-        _save_text_direction(root, editor.layoutDirection() == Qt.LayoutDirection.RightToLeft, alignment)
     editor.setFocus()
     _save_active_text_editor(root)
-
-
-def _normalize_font_combo(combo: QComboBox) -> None:
-    current = combo.currentText()
-    wanted = list(FONT_CHOICES)
-    existing = [combo.itemText(i) for i in range(combo.count())]
-    if existing == wanted:
-        return
-    blocked = combo.blockSignals(True)
-    combo.clear()
-    combo.addItems(wanted)
-    combo.setCurrentText(current if current in wanted else "Times New Roman")
-    combo.blockSignals(blocked)
 
 
 def _wire_text_controls(root: QWidget | None) -> None:
@@ -284,9 +282,9 @@ def _wire_text_controls(root: QWidget | None) -> None:
     buttons = controls.get("buttons", {}) if isinstance(controls.get("buttons", {}), dict) else {}
     if isinstance(combo, QComboBox):
         _normalize_font_combo(combo)
-    if isinstance(combo, QComboBox) and combo.property("finalFontApplyWire") != PATCH_VERSION:
-        combo.currentTextChanged.connect(lambda value, w=root: _apply_text_font(w, value))
-        combo.setProperty("finalFontApplyWire", PATCH_VERSION)
+        if combo.property("finalFontApplyWire") != PATCH_VERSION:
+            combo.currentTextChanged.connect(lambda value, w=root: _apply_text_font(w, value))
+            combo.setProperty("finalFontApplyWire", PATCH_VERSION)
     if isinstance(size, (QSpinBox, QDoubleSpinBox)) and size.property("finalSizeApplyWire") != PATCH_VERSION:
         size.valueChanged.connect(lambda value, w=root: _apply_text_size(w, value))
         size.setProperty("finalSizeApplyWire", PATCH_VERSION)
@@ -337,28 +335,6 @@ def _remove_current_list_prefix(root: QWidget | None) -> None:
     _save_active_text_editor(root)
 
 
-def _install_text_list_none_behavior() -> None:
-    try:
-        from . import text_line_math_symbols_patch as line_patch
-    except Exception:
-        return
-    if getattr(line_patch, "_project_none_behavior_patch", "") == PATCH_VERSION:
-        return
-
-    def deactivate_list_style(root: QWidget | None) -> None:
-        try:
-            line_patch._set_list_button_state(root, None)
-        except Exception:
-            pass
-        if root is not None:
-            setattr(root, "_last_text_list_settings", {})
-            setattr(root, "_text_numbering_next", 1)
-        _remove_current_list_prefix(root)
-
-    line_patch._deactivate_list_style = deactivate_list_style
-    line_patch._project_none_behavior_patch = PATCH_VERSION
-
-
 def _escape_html(text: str) -> str:
     return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
@@ -380,112 +356,168 @@ def _auto_convert_math_token(editor: QTextEdit) -> bool:
     block = cursor.block()
     block_start = block.position()
     rel_pos = max(0, cursor.position() - block_start)
-    text = block.text()
-    prefix = text[:rel_pos].rstrip()
+    prefix = (block.text() or "")[:rel_pos].rstrip()
     match = _MATH_TOKEN_RE.search(prefix)
     if match is None:
         return False
     html = _math_html(match.group(1), match.group(2), match.group(3))
     if not html:
         return False
-    start = block_start + match.start()
-    end = block_start + match.end()
     replace = editor.textCursor()
-    replace.setPosition(start)
-    replace.setPosition(end, QTextCursor.MoveMode.KeepAnchor)
+    replace.setPosition(block_start + match.start())
+    replace.setPosition(block_start + match.end(), QTextCursor.MoveMode.KeepAnchor)
     replace.insertHtml(html)
     editor.setTextCursor(replace)
     return True
 
 
-def _install_text_backspace_behavior() -> None:
+def _save_editor(editor: QTextEdit) -> None:
+    root = _workspace_from_editor(editor)
+    if root is not None:
+        _save_active_text_editor(root)
+
+
+def _delete_previous_char(editor: QTextEdit) -> None:
+    cursor = editor.textCursor()
+    if cursor.hasSelection():
+        cursor.removeSelectedText()
+    else:
+        cursor.deletePreviousChar()
+    editor.setTextCursor(cursor)
+    _save_editor(editor)
+
+
+def _delete_next_char(editor: QTextEdit) -> None:
+    cursor = editor.textCursor()
+    if cursor.hasSelection():
+        cursor.removeSelectedText()
+    else:
+        cursor.deleteChar()
+    editor.setTextCursor(cursor)
+    _save_editor(editor)
+
+
+def _matches(event, standard_key: QKeySequence.StandardKey) -> bool:
     try:
-        from . import final_focus_editing_icons_patch as focus_patch
-        from . import text_toolbar_final_event_safety_patch as final_event
-        from . import ui_text_tool_final_patch as text_final
+        return bool(event.matches(standard_key))
+    except Exception:
+        return False
+
+
+def _install_text_list_none_behavior() -> None:
+    try:
+        from . import text_line_math_symbols_patch as line_patch
     except Exception:
         return
-    if getattr(final_event, "_project_backspace_behavior_patch", "") == PATCH_VERSION:
-        return
 
-    def delete_previous_char(editor: QTextEdit) -> None:
-        cursor = editor.textCursor()
-        if cursor.hasSelection():
-            cursor.removeSelectedText()
-        else:
-            cursor.deletePreviousChar()
-        editor.setTextCursor(cursor)
-        final_event._save_editor(editor)
+    def deactivate_list_style(root: QWidget | None) -> None:
+        try:
+            line_patch._set_list_button_state(root, None)
+        except Exception:
+            pass
+        if root is not None:
+            setattr(root, "_last_text_list_settings", {})
+        _remove_current_list_prefix(root)
 
-    def delete_next_char(editor: QTextEdit) -> None:
-        cursor = editor.textCursor()
-        if cursor.hasSelection():
-            cursor.removeSelectedText()
-        else:
-            cursor.deleteChar()
-        editor.setTextCursor(cursor)
-        final_event._save_editor(editor)
+    line_patch._deactivate_list_style = deactivate_list_style
+    line_patch._project_none_behavior_patch = PATCH_VERSION
 
-    original_handler = final_event._handle_editor_event
 
-    def final_text_key_handler(editor: QTextEdit, event) -> bool:
-        if event.type() == QEvent.Type.KeyPress and event.key() == Qt.Key.Key_Space:
-            QTextEdit.keyPressEvent(editor, event)
-            _auto_convert_math_token(editor)
-            final_event._save_editor(editor)
+def _insert_active_list_after_enter(editor: QTextEdit) -> bool:
+    root = _workspace_from_editor(editor)
+    if root is None:
+        return False
+    try:
+        from . import text_line_math_symbols_patch as line_patch
+    except Exception:
+        return False
+    settings = line_patch._text_settings_for_active_list(root)
+    if settings is None:
+        return False
+    cursor = editor.textCursor()
+    cursor.insertBlock()
+    line_patch._insert_list_prefix_with_cursor(root, cursor, settings, advance_number=True)
+    editor.setTextCursor(cursor)
+    _save_editor(editor)
+    return True
+
+
+def _final_text_key_handler(editor: QTextEdit, event) -> bool:
+    if event.type() == QEvent.Type.ShortcutOverride:
+        if event.key() in (Qt.Key.Key_Backspace, Qt.Key.Key_Delete):
             event.accept()
             return True
-        if event.type() == QEvent.Type.KeyPress and event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
-            if original_handler(editor, event):
-                return True
-            _auto_convert_math_token(editor)
-            QTextEdit.keyPressEvent(editor, event)
-            final_event._save_editor(editor)
+        if any(_matches(event, key) for key in (QKeySequence.StandardKey.Copy, QKeySequence.StandardKey.Cut, QKeySequence.StandardKey.Paste, QKeySequence.StandardKey.SelectAll)):
             event.accept()
             return True
-        return original_handler(editor, event)
-
-    final_event._delete_previous_char = delete_previous_char
-    final_event._delete_next_char = delete_next_char
-    final_event._handle_editor_event = final_text_key_handler
-    text_final._handle_editor_key = final_text_key_handler
-    focus_patch._handle_editor_key = final_text_key_handler
-    final_event._project_backspace_behavior_patch = PATCH_VERSION
-    _install_application_text_filter(final_event)
+        return False
+    if event.type() != QEvent.Type.KeyPress:
+        return False
+    if _matches(event, QKeySequence.StandardKey.Copy):
+        editor.copy(); event.accept(); return True
+    if _matches(event, QKeySequence.StandardKey.Cut):
+        editor.cut(); _save_editor(editor); event.accept(); return True
+    if _matches(event, QKeySequence.StandardKey.Paste):
+        editor.paste(); _save_editor(editor); event.accept(); return True
+    if _matches(event, QKeySequence.StandardKey.SelectAll):
+        editor.selectAll(); event.accept(); return True
+    if event.key() == Qt.Key.Key_Backspace:
+        _delete_previous_char(editor); event.accept(); return True
+    if event.key() == Qt.Key.Key_Delete:
+        _delete_next_char(editor); event.accept(); return True
+    if event.key() == Qt.Key.Key_Space:
+        QTextEdit.keyPressEvent(editor, event)
+        _auto_convert_math_token(editor)
+        _save_editor(editor)
+        event.accept()
+        return True
+    if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+        if _insert_active_list_after_enter(editor):
+            event.accept()
+            return True
+        _auto_convert_math_token(editor)
+        QTextEdit.keyPressEvent(editor, event)
+        _save_editor(editor)
+        event.accept()
+        return True
+    return False
 
 
 class _ProjectTextKeyFilter(QObject):
-    def __init__(self, final_event, parent=None) -> None:
-        super().__init__(parent)
-        self._final_event = final_event
-
     def eventFilter(self, watched, event) -> bool:  # noqa: N802
-        if isinstance(watched, QTextEdit) and self._final_event._handle_editor_event(watched, event):
+        if isinstance(watched, QTextEdit) and _final_text_key_handler(watched, event):
             return True
         return super().eventFilter(watched, event)
 
 
-def _install_application_text_filter(final_event=None) -> None:
+def _install_application_text_filter() -> None:
     app = QApplication.instance()
     if app is None:
         return
-    if final_event is None:
-        try:
-            from . import text_toolbar_final_event_safety_patch as final_event
-        except Exception:
-            return
     old_filter = getattr(app, "_engineering_project_text_key_filter", None)
-    if old_filter is not None and getattr(old_filter, "_project_version", "") == PATCH_VERSION:
-        return
     if old_filter is not None:
         try:
             app.removeEventFilter(old_filter)
         except Exception:
             pass
-    filter_obj = _ProjectTextKeyFilter(final_event, app)
+    filter_obj = _ProjectTextKeyFilter(app)
     filter_obj._project_version = PATCH_VERSION
     app.installEventFilter(filter_obj)
     app._engineering_project_text_key_filter = filter_obj
+
+
+def _install_text_backspace_behavior() -> None:
+    for module_name in ("text_toolbar_final_event_safety_patch", "text_line_math_symbols_patch", "ui_text_tool_final_patch", "final_focus_editing_icons_patch"):
+        try:
+            module = __import__(f"modules.mechanics_dynamics_statics.{module_name}", fromlist=[module_name])
+            module._handle_editor_event = _final_text_key_handler
+            module._handle_editor_key = _final_text_key_handler
+            module._handle_text_editor_key = _final_text_key_handler
+            module._delete_previous_char = _delete_previous_char
+            module._delete_next_char = _delete_next_char
+        except Exception:
+            pass
+    _install_application_text_filter()
 
 
 def _install_shortcut_policy() -> None:
@@ -497,11 +529,10 @@ def _install_shortcut_policy() -> None:
         return
     if getattr(epp, "_project_text_shortcut_policy", "") == PATCH_VERSION:
         return
-
     cleaned = []
     has_math = False
     for key, label, default, method in epp.SHORTCUT_SPECS:
-        if key == "delete_alt" and default.strip().lower() == "backspace":
+        if key == "delete_alt":
             default = ""
         if key == "convert_selected_math":
             has_math = True
@@ -510,13 +541,11 @@ def _install_shortcut_policy() -> None:
         cleaned.append(("convert_selected_math", "Convert Selected Text To Math", "Ctrl+M", "_convert_selected_text_to_math"))
     epp.SHORTCUT_SPECS = tuple(cleaned)
     epp.DEFAULT_SHORTCUTS = {key: sequence for key, _label, sequence, _method in epp.SHORTCUT_SPECS}
-
     old_install = epp._install_shortcuts
 
     def install_shortcuts(workspace, shortcuts: dict[str, str]) -> None:
         filtered = dict(shortcuts or {})
-        if str(filtered.get("delete_alt", "")).strip().lower() == "backspace":
-            filtered["delete_alt"] = ""
+        filtered["delete_alt"] = ""
         old_install(workspace, filtered)
 
     def convert_selected_text_to_math(self) -> None:
