@@ -8,10 +8,10 @@ import tempfile
 from pathlib import Path
 
 from PySide6.QtCore import QObject, QEvent, QPointF, QTimer, Qt
-from PySide6.QtGui import QColor, QFont, QKeySequence, QPainter, QPixmap, QPolygonF, QTextBlockFormat, QTextCursor
-from PySide6.QtWidgets import QApplication, QCheckBox, QComboBox, QDoubleSpinBox, QHBoxLayout, QPushButton, QSpinBox, QTextEdit, QWidget
+from PySide6.QtGui import QColor, QFont, QKeySequence, QPainter, QPixmap, QPolygonF, QTextBlockFormat, QTextCharFormat, QTextCursor
+from PySide6.QtWidgets import QApplication, QCheckBox, QComboBox, QDialog, QDoubleSpinBox, QHBoxLayout, QPushButton, QSpinBox, QTextEdit, QVBoxLayout, QWidget
 
-PATCH_VERSION = "engineering-text-toolbar-final-event-safety-2026-07-02-n"
+PATCH_VERSION = "engineering-text-toolbar-final-event-safety-2026-07-02-o"
 _ARROW_CACHE: dict[str, str] = {}
 _MATH_TOKEN_RE = re.compile(r"([A-Za-z0-9]+)([\^_/])([A-Za-z0-9]+)$")
 
@@ -110,6 +110,62 @@ def _matches(event, standard_key: QKeySequence.StandardKey) -> bool:
         return False
 
 
+def _normal_char_format(editor: QTextEdit) -> QTextCharFormat:
+    fmt = QTextCharFormat(editor.currentCharFormat())
+    fmt.setVerticalAlignment(QTextCharFormat.VerticalAlignment.AlignNormal)
+    return fmt
+
+
+def _math_part_format(base: QTextCharFormat, alignment: QTextCharFormat.VerticalAlignment) -> QTextCharFormat:
+    fmt = QTextCharFormat(base)
+    fmt.setVerticalAlignment(alignment)
+    size = fmt.fontPointSize()
+    if size > 0:
+        fmt.setFontPointSize(max(6.0, size * 0.82))
+    return fmt
+
+
+def _reset_math_format(editor: QTextEdit, cursor: QTextCursor) -> None:
+    normal = _normal_char_format(editor)
+    normal.setVerticalAlignment(QTextCharFormat.VerticalAlignment.AlignNormal)
+    cursor.setCharFormat(normal)
+    editor.setCurrentCharFormat(normal)
+    editor.setTextCursor(cursor)
+
+
+def _auto_convert_math_token(editor: QTextEdit) -> bool:
+    cursor = editor.textCursor()
+    block = cursor.block()
+    block_start = block.position()
+    rel_pos = max(0, cursor.position() - block_start)
+    prefix = (block.text() or "")[:rel_pos].rstrip()
+    match = _MATH_TOKEN_RE.search(prefix)
+    if match is None:
+        return False
+    left, operator, right = match.group(1), match.group(2), match.group(3)
+    replace = editor.textCursor()
+    replace.setPosition(block_start + match.start())
+    replace.setPosition(block_start + match.end(), QTextCursor.MoveMode.KeepAnchor)
+    normal = _normal_char_format(editor)
+    replace.removeSelectedText()
+    if operator == "/":
+        top = _math_part_format(normal, QTextCharFormat.VerticalAlignment.AlignSuperScript)
+        bottom = _math_part_format(normal, QTextCharFormat.VerticalAlignment.AlignSubScript)
+        replace.insertText(left, top)
+        replace.insertText("⁄", normal)
+        replace.insertText(right, bottom)
+        _reset_math_format(editor, replace)
+        return True
+    elevated = _math_part_format(
+        normal,
+        QTextCharFormat.VerticalAlignment.AlignSuperScript if operator == "^" else QTextCharFormat.VerticalAlignment.AlignSubScript,
+    )
+    replace.insertText(left, normal)
+    replace.insertText(right, elevated)
+    _reset_math_format(editor, replace)
+    return True
+
+
 def _delete_previous_char(editor: QTextEdit) -> None:
     cursor = editor.textCursor()
     if cursor.hasSelection():
@@ -132,7 +188,7 @@ def _delete_next_char(editor: QTextEdit) -> None:
 
 def _handle_editor_event(editor: QTextEdit, event) -> bool:
     if event.type() == QEvent.Type.ShortcutOverride:
-        if event.key() in (Qt.Key.Key_Backspace, Qt.Key.Key_Delete):
+        if event.key() in (Qt.Key.Key_Backspace, Qt.Key.Key_Delete, Qt.Key.Key_Space):
             event.accept(); return True
         if any(_matches(event, key) for key in (QKeySequence.StandardKey.Copy, QKeySequence.StandardKey.Cut, QKeySequence.StandardKey.Paste, QKeySequence.StandardKey.SelectAll)):
             event.accept(); return True
@@ -151,6 +207,12 @@ def _handle_editor_event(editor: QTextEdit, event) -> bool:
         _delete_previous_char(editor); event.accept(); return True
     if event.key() == Qt.Key.Key_Delete:
         _delete_next_char(editor); event.accept(); return True
+    if event.key() == Qt.Key.Key_Space:
+        QTextEdit.keyPressEvent(editor, event)
+        _auto_convert_math_token(editor)
+        _save_editor(editor)
+        event.accept()
+        return True
     return False
 
 
@@ -196,7 +258,7 @@ def _arrow_url(direction: str) -> str:
     points = [QPointF(9, 4), QPointF(14, 12), QPointF(4, 12)] if direction == "up" else [QPointF(4, 6), QPointF(14, 6), QPointF(9, 14)]
     painter.drawPolygon(QPolygonF(points))
     painter.end()
-    path = Path(tempfile.gettempdir()) / f"engineering_arrow_{direction}_20260702n.png"
+    path = Path(tempfile.gettempdir()) / f"engineering_arrow_{direction}_20260702o.png"
     pixmap.save(path.as_posix(), "PNG")
     _ARROW_CACHE[direction] = path.as_posix()
     return path.as_posix()
@@ -224,6 +286,65 @@ def _style_toolbar_spin(spin: QSpinBox | QDoubleSpinBox) -> None:
         "QSpinBox::down-button,QDoubleSpinBox::down-button{subcontrol-origin:border;subcontrol-position:bottom right;width:23px;border-left:1px solid #b88718;border-bottom-right-radius:7px;background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #ffe8a8,stop:1 #f1b33d);}"
         f"QSpinBox::up-arrow,QDoubleSpinBox::up-arrow{{image:url({_arrow_url('up')});width:14px;height:14px;}} QSpinBox::down-arrow,QDoubleSpinBox::down-arrow{{image:url({_arrow_url('down')});width:14px;height:14px;}}"
     )
+
+
+def _text_menu_button_style() -> str:
+    return (
+        "QPushButton{background:qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 #ffffff,stop:0.58 #eef8ff,stop:1 #e5f1ff);"
+        "border:1px solid #b8c5d4;border-left:3px solid #43d3bd;border-radius:7px;color:#102238;"
+        "font-family:'Times New Roman';font-size:12px;font-style:italic;font-weight:900;padding:4px 8px 4px 10px;text-align:left;outline:0;}"
+        "QPushButton[menuAccent='red']{border-left:3px solid #ff3565;}"
+        "QPushButton[menuAccent='cyan']{border-left:3px solid #43d3bd;}"
+        "QPushButton:hover{background:#fff4cf;border-color:#ff8a35;color:#102238;}"
+        "QPushButton:pressed{background:#f18a2a;color:#ffffff;padding-top:5px;}"
+        "QPushButton:focus{outline:0;border:1px solid #b8c5d4;}"
+    )
+
+
+def _text_popup_shell(parent: QWidget | None, width: int):
+    popup = QDialog(parent, Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint)
+    popup.setObjectName("TextStandardMenuPopup")
+    popup.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+    popup.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
+    popup.setStyleSheet("QDialog#TextStandardMenuPopup{background:transparent;border:0;} QWidget#TextStandardMenuShell{background:qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #ffffff,stop:1 #eaf6ff);border:1px solid #9fb1c7;border-radius:11px;} QLabel{color:#173454;font-family:'Times New Roman';font-size:12px;font-style:italic;font-weight:900;}")
+    outer = QVBoxLayout(popup)
+    outer.setContentsMargins(0, 0, 0, 0)
+    outer.setSpacing(0)
+    shell = QWidget(popup)
+    shell.setObjectName("TextStandardMenuShell")
+    shell.setMinimumWidth(width)
+    outer.addWidget(shell)
+    layout = QVBoxLayout(shell)
+    layout.setContentsMargins(4, 4, 4, 4)
+    layout.setSpacing(3)
+    return popup, shell, layout
+
+
+def _text_menu_row(layout: QVBoxLayout, text: str, handler) -> QPushButton:
+    button = QPushButton(text)
+    button.setCursor(Qt.CursorShape.PointingHandCursor)
+    button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+    button.setMinimumHeight(25)
+    button.setProperty("menuAccent", "red" if layout.count() == 0 else "cyan")
+    button.setStyleSheet(_text_menu_button_style())
+    font = button.font()
+    font.setFamily("Times New Roman")
+    font.setBold(True)
+    font.setItalic(True)
+    button.setFont(font)
+    button.clicked.connect(lambda checked=False: handler())
+    layout.addWidget(button)
+    return button
+
+
+def _patch_text_popup_menu_style() -> None:
+    try:
+        from . import text_line_math_symbols_patch as line_patch
+    except Exception:
+        return
+    line_patch._menu_button_style = _text_menu_button_style
+    line_patch._popup_shell = _text_popup_shell
+    line_patch._add_menu_row = _text_menu_row
 
 
 def _polish_textbar_controls(root: QWidget | None) -> None:
@@ -334,6 +455,7 @@ def _patch_line_module_controls() -> None:
         return
     line_patch._combo_style = _style_toolbar_combo
     line_patch._spin_style = _style_toolbar_spin
+    line_patch._auto_convert_math_token = _auto_convert_math_token
 
 
 def _patch_line_spacing_dialog() -> None:
@@ -341,6 +463,7 @@ def _patch_line_spacing_dialog() -> None:
         from . import text_line_math_symbols_patch as line_patch
     except Exception:
         return
+    _patch_text_popup_menu_style()
     _patch_line_module_controls()
 
     def show_line_popup(root: QWidget | None, anchor: QPushButton) -> None:
@@ -384,12 +507,13 @@ def _patch_line_spacing_dialog() -> None:
 
 
 def _patch_key_handlers() -> None:
-    for module_name in ("text_lag_final_patch", "text_line_math_symbols_patch", "ui_text_tool_final_patch", "final_focus_editing_icons_patch"):
+    for module_name in ("text_lag_final_patch", "text_line_math_symbols_patch", "ui_text_tool_final_patch", "final_focus_editing_icons_patch", "project_dialog_style_cursor_patch"):
         try:
             module = __import__(f"modules.mechanics_dynamics_statics.{module_name}", fromlist=[module_name])
             module._handle_text_editor_key = _handle_editor_event
             module._handle_editor_key = _handle_editor_event
             module._handle_editor_event = _handle_editor_event
+            module._auto_convert_math_token = _auto_convert_math_token
         except Exception:
             pass
 
@@ -436,10 +560,10 @@ def apply_text_toolbar_final_event_safety_patch() -> None:
             pass
     from . import workspace as edw
 
-    if getattr(edw.EngineeringDesignWorkspace, "_engineering_text_toolbar_final_event_safety_patch", "") == PATCH_VERSION:
-        return
+    already_wrapped = getattr(edw.EngineeringDesignWorkspace, "_engineering_text_toolbar_final_event_safety_patch", "") == PATCH_VERSION
 
     _patch_color_dialog()
+    _patch_text_popup_menu_style()
     _patch_line_spacing_dialog()
     _patch_line_module_controls()
     _patch_key_handlers()
@@ -447,11 +571,15 @@ def apply_text_toolbar_final_event_safety_patch() -> None:
     for module in modules:
         _patch_show_editor(module)
 
+    if already_wrapped:
+        return
+
     old_init = edw.EngineeringDesignWorkspace.__init__
 
     def workspace_init(self, module) -> None:
         old_init(self, module)
         _patch_color_dialog()
+        _patch_text_popup_menu_style()
         _patch_line_spacing_dialog()
         _patch_line_module_controls()
         _patch_key_handlers()
@@ -459,7 +587,7 @@ def apply_text_toolbar_final_event_safety_patch() -> None:
         _install_existing_editors(self)
         _polish_textbar_controls(self)
         for delay in (0, 80, 250, 700, 1400):
-            QTimer.singleShot(delay, lambda root=self: (_patch_key_handlers(), _install_existing_editors(root), _polish_textbar_controls(root), _patch_line_spacing_dialog(), _patch_line_module_controls()))
+            QTimer.singleShot(delay, lambda root=self: (_patch_key_handlers(), _install_existing_editors(root), _polish_textbar_controls(root), _patch_text_popup_menu_style(), _patch_line_spacing_dialog(), _patch_line_module_controls()))
 
     edw.EngineeringDesignWorkspace.__init__ = workspace_init
     edw.EngineeringDesignWorkspace._engineering_text_toolbar_final_event_safety_patch = PATCH_VERSION
