@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-PATCH_VERSION = "engineering-text-toolbar-final-event-safety-2026-07-02-h"
+PATCH_VERSION = "engineering-text-toolbar-final-event-safety-2026-07-02-i"
 _ARROW_CACHE: dict[str, str] = {}
 
 
@@ -285,13 +285,10 @@ def _arrow_url(direction: str) -> str:
     painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
     painter.setBrush(QColor("#173454"))
     painter.setPen(Qt.PenStyle.NoPen)
-    if direction == "up":
-        points = [QPointF(9, 4), QPointF(14, 12), QPointF(4, 12)]
-    else:
-        points = [QPointF(4, 6), QPointF(14, 6), QPointF(9, 14)]
+    points = [QPointF(9, 4), QPointF(14, 12), QPointF(4, 12)] if direction == "up" else [QPointF(4, 6), QPointF(14, 6), QPointF(9, 14)]
     painter.drawPolygon(QPolygonF(points))
     painter.end()
-    path = Path(tempfile.gettempdir()) / f"engineering_arrow_{direction}_20260702h.png"
+    path = Path(tempfile.gettempdir()) / f"engineering_arrow_{direction}_20260702i.png"
     pixmap.save(path.as_posix(), "PNG")
     _ARROW_CACHE[direction] = path.as_posix()
     return path.as_posix()
@@ -385,18 +382,41 @@ def _current_unit(root: QWidget | None) -> str:
     return "mm"
 
 
+def _patch_line_module_controls() -> None:
+    try:
+        from . import text_line_math_symbols_patch as line_patch
+    except Exception:
+        return
+    line_patch._combo_style = _style_toolbar_combo
+    line_patch._spin_style = _style_toolbar_spin
+    if getattr(line_patch, "_final_exact_start_number_patch", "") != PATCH_VERSION:
+        old_format_prefix = line_patch._format_prefix
+
+        def format_prefix(settings, root=None, advance_number=False):
+            if isinstance(settings, dict) and settings.get("mode") == "numbering" and root is not None and not advance_number:
+                try:
+                    setattr(root, "_text_numbering_next", int(settings.get("start_numbering", 1)))
+                except Exception:
+                    setattr(root, "_text_numbering_next", 1)
+            return old_format_prefix(settings, root, advance_number)
+
+        line_patch._format_prefix = format_prefix
+        line_patch._final_exact_start_number_patch = PATCH_VERSION
+
+
 def _patch_line_spacing_dialog() -> None:
     try:
         from . import text_line_math_symbols_patch as line_patch
     except Exception:
         return
+    _patch_line_module_controls()
 
     def open_line_spacing_settings(root: QWidget | None) -> None:
-        dialog, body, body_layout = line_patch._dialog_shell(root, "Line and Paragraph Settings", (360, 210))
+        dialog, body, body_layout = line_patch._dialog_shell(root, "Line and Paragraph Settings", (380, 210))
         body.setStyleSheet("QWidget{background:#ffffff;border:0;}")
         unit = _current_unit(root)
         row = QHBoxLayout()
-        row.setContentsMargins(0, 0, 0, 0)
+        row.setContentsMargins(4, 4, 4, 4)
         row.setSpacing(8)
         custom = QCheckBox("Custom", body)
         custom.setChecked(True)
@@ -409,7 +429,7 @@ def _patch_line_spacing_dialog() -> None:
         value.setSingleStep(0.5)
         value.setValue(float(getattr(root, "_text_line_spacing", 1.0) or 1.0))
         value.setSuffix(f" {unit}")
-        value.setMinimumWidth(130)
+        value.setMinimumWidth(138)
         _style_toolbar_spin(value)
         row.addWidget(custom)
         row.addWidget(value)
@@ -482,6 +502,7 @@ def apply_text_toolbar_final_event_safety_patch() -> None:
 
     _patch_color_dialog()
     _patch_line_spacing_dialog()
+    _patch_line_module_controls()
     _patch_canvas_key_handler(edw)
     for module in modules:
         _patch_show_editor(module)
@@ -492,11 +513,12 @@ def apply_text_toolbar_final_event_safety_patch() -> None:
         old_init(self, module)
         _patch_color_dialog()
         _patch_line_spacing_dialog()
+        _patch_line_module_controls()
         _patch_canvas_key_handler(edw)
         _install_existing_editors(self)
         _polish_textbar_controls(self)
         for delay in (0, 80, 250, 700, 1400):
-            QTimer.singleShot(delay, lambda root=self: (_install_existing_editors(root), _polish_textbar_controls(root)))
+            QTimer.singleShot(delay, lambda root=self: (_install_existing_editors(root), _polish_textbar_controls(root), _patch_line_module_controls()))
 
     edw.EngineeringDesignWorkspace.__init__ = workspace_init
     edw.EngineeringDesignWorkspace._engineering_text_toolbar_final_event_safety_patch = PATCH_VERSION
