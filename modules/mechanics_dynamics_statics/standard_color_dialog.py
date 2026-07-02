@@ -34,7 +34,6 @@ _BASIC_COLORS = [
     ("#80ffff", "Light Cyan"), ("#c0ffff", "Pale Cyan"), ("#e6ffff", "Ice"), ("#ffffff", "White"),
 ]
 _ARROW_CACHE: dict[str, str] = {}
-
 _CLOSE_STYLE = (
     "QPushButton{background:#102238;border:1px solid #102238;border-radius:9px;color:#ffffff;"
     "font-family:'Times New Roman';font-size:14px;font-weight:900;font-style:normal;padding:0;outline:0;}"
@@ -57,7 +56,14 @@ _SWATCH_STYLE = (
     "QPushButton:hover{border:2px solid #ff8a35;}"
     "QPushButton:pressed{border:2px solid #173454;}"
 )
-_GROUP_STYLE = "QFrame{background:#f7fbff;border:1px solid #9fb1c7;border-radius:10px;}"
+_GROUP_STYLE = (
+    "QFrame{background:qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #ffffff,stop:.58 #f5fbff,stop:1 #e8f3ff);"
+    "border:1px solid #9fb1c7;border-radius:10px;}"
+)
+_BODY_STYLE = (
+    "QWidget#DialogBody{background:qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #f8fcff,stop:.55 #edf7ff,stop:1 #e7f1fb);"
+    "border-bottom-left-radius:16px;border-bottom-right-radius:16px;} QWidget{background:transparent;}"
+)
 
 
 def _arrow_path(direction: str) -> str:
@@ -73,7 +79,7 @@ def _arrow_path(direction: str) -> str:
     points = [QPointF(9, 4), QPointF(14, 12), QPointF(4, 12)] if direction == "up" else [QPointF(4, 6), QPointF(14, 6), QPointF(9, 14)]
     painter.drawPolygon(QPolygonF(points))
     painter.end()
-    path = Path(tempfile.gettempdir()) / f"engineering_custom_color_arrow_{direction}_20260702.png"
+    path = Path(tempfile.gettempdir()) / f"engineering_custom_color_arrow_{direction}_20260702b.png"
     pixmap.save(path.as_posix(), "PNG")
     _ARROW_CACHE[direction] = path.as_posix()
     return path.as_posix()
@@ -97,7 +103,7 @@ class _ColorPlane(QWidget):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setFixedSize(220, 200)
+        self.setFixedSize(188, 168)
         self._hue = 216
         self._sat = 206
         self._val = 246
@@ -132,8 +138,8 @@ class _ColorPlane(QWidget):
         x = int(self._hue / 359 * (self.width() - 1))
         y = int((1.0 - self._sat / 255) * (self.height() - 1))
         painter.setPen(QPen(QColor("#102238"), 1))
-        painter.drawLine(x - 10, y, x + 10, y)
-        painter.drawLine(x, y - 10, x, y + 10)
+        painter.drawLine(x - 9, y, x + 9, y)
+        painter.drawLine(x, y - 9, x, y + 9)
         painter.setPen(QPen(QColor("#ffffff"), 1))
         painter.drawEllipse(QPoint(x, y), 4, 4)
 
@@ -157,7 +163,7 @@ class _ValueSlider(QWidget):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setFixedSize(16, 200)
+        self.setFixedSize(16, 168)
         self._value = 246
         self.setCursor(Qt.CursorShape.SizeVerCursor)
 
@@ -265,9 +271,9 @@ def get_custom_color(parent: QWidget | None, current: str = "#000000", title: st
 
     selected = {"color": QColor(_normal_hex(current))}
     custom_colors = ["#ffffff"] * 16
-    dialog, body, body_layout = ui_shell._dialog_shell(parent, title or "Add Custom Color", (650, 505))
+    dialog, body, body_layout = ui_shell._dialog_shell(parent, title or "Add Custom Color", (620, 470))
     _ensure_close_button(dialog, body, body_layout)
-    body.setStyleSheet("QWidget#DialogBody{background:qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #eef7ff,stop:1 #fff5dc);border-bottom-left-radius:16px;border-bottom-right-radius:16px;} QWidget{background:transparent;}")
+    body.setStyleSheet(_BODY_STYLE)
     body_layout.setContentsMargins(10, 10, 10, 10)
     body_layout.setSpacing(7)
 
@@ -372,22 +378,25 @@ def get_custom_color(parent: QWidget | None, current: str = "#000000", title: st
     left_column.addStretch(1)
 
     spectrum_group, spectrum_layout = _group(body, None)
-    spectrum_group.setFixedWidth(270)
+    spectrum_group.setFixedWidth(238)
     main.addWidget(spectrum_group)
     plane_row = QHBoxLayout()
     plane_row.setContentsMargins(0, 0, 0, 0)
     plane_row.setSpacing(8)
+    plane_row.addStretch(1)
     plane = _ColorPlane(spectrum_group)
     value_slider = _ValueSlider(spectrum_group)
     plane_row.addWidget(plane)
     plane_row.addWidget(value_slider)
+    plane_row.addStretch(1)
     spectrum_layout.addLayout(plane_row)
 
     preview_row = QHBoxLayout()
     preview_row.setContentsMargins(0, 0, 0, 0)
     preview_row.setSpacing(8)
+    preview_row.addStretch(1)
     preview = QFrame(spectrum_group)
-    preview.setFixedSize(58, 48)
+    preview.setFixedSize(58, 42)
     preview_row.addWidget(preview)
     preview_row.addStretch(1)
     spectrum_layout.addLayout(preview_row)
