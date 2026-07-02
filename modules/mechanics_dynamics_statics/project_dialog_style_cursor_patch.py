@@ -16,7 +16,7 @@ from PySide6.QtCore import QPointF, QTimer, Qt
 from PySide6.QtGui import QColor, QPainter, QPixmap, QPolygonF
 from PySide6.QtWidgets import QComboBox, QDoubleSpinBox, QLineEdit, QListWidget, QPushButton, QSpinBox, QWidget
 
-PATCH_VERSION = "engineering-project-dialog-style-cursor-2026-07-02-d"
+PATCH_VERSION = "engineering-project-dialog-style-cursor-2026-07-02-e"
 _ARROW_CACHE: dict[str, str] = {}
 
 
@@ -41,7 +41,7 @@ def _arrow_path(direction: str = "down") -> str:
         points = [QPointF(13, 9), QPointF(5, 4), QPointF(5, 14)]
     painter.drawPolygon(QPolygonF(points))
     painter.end()
-    path = Path(tempfile.gettempdir()) / f"engineering_shared_arrow_{direction}_20260702d.png"
+    path = Path(tempfile.gettempdir()) / f"engineering_shared_arrow_{direction}_20260702e.png"
     pixmap.save(path.as_posix(), "PNG")
     _ARROW_CACHE[direction] = path.as_posix()
     return path.as_posix()
@@ -65,7 +65,19 @@ def _style_combo_arrow(combo: QComboBox) -> None:
 
 def _style_numeric_spin(spin: QSpinBox | QDoubleSpinBox) -> None:
     spin.setButtonSymbols(QSpinBox.ButtonSymbols.UpDownArrows)
+    spin.setKeyboardTracking(True)
     spin.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+    try:
+        edit = spin.lineEdit()
+        edit.setReadOnly(False)
+        edit.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        edit.setCursorPosition(0)
+        edit.setStyleSheet(
+            "QLineEdit{background:transparent;border:0;color:#173454;font-family:'Times New Roman';"
+            "font-size:12px;font-weight:900;font-style:normal;padding:0;outline:0;}"
+        )
+    except Exception:
+        pass
     spin.setStyleSheet(
         "QSpinBox,QDoubleSpinBox{background:#fffefa;border:1px solid #b88718;border-radius:8px;color:#173454;"
         "font-family:'Times New Roman';font-size:12px;font-weight:900;font-style:normal;padding:2px 26px 2px 8px;outline:0;}"
@@ -110,11 +122,17 @@ def _polish_dialog(root: QWidget | None) -> None:
 def _install_shared_arrow_styles() -> None:
     try:
         from src.engineers_tools.app import interaction_ui_patch as interaction
+        interaction._control_arrow_path = _arrow_path
+        interaction._style_numeric_spin = _style_numeric_spin
+        interaction._style_combo_arrow = _style_combo_arrow
     except Exception:
-        return
-    interaction._control_arrow_path = _arrow_path
-    interaction._style_numeric_spin = _style_numeric_spin
-    interaction._style_combo_arrow = _style_combo_arrow
+        pass
+    try:
+        from . import text_line_math_symbols_patch as line_patch
+        line_patch._combo_style = _style_combo_arrow
+        line_patch._spin_style = _style_numeric_spin
+    except Exception:
+        pass
 
 
 def _patch_dialog_class(cls) -> None:
