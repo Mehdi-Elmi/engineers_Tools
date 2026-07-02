@@ -14,7 +14,7 @@ from PySide6.QtCore import QTimer, Qt
 from PySide6.QtGui import QKeySequence, QTextBlockFormat
 from PySide6.QtWidgets import QButtonGroup, QTextEdit, QWidget
 
-PATCH_VERSION = "engineering-text-toolbar-final-event-safety-2026-07-02-b"
+PATCH_VERSION = "engineering-text-toolbar-final-event-safety-2026-07-02-c"
 
 
 def _stable_build_exclusive_group(bar: QWidget, root: QWidget | None, names: tuple[str, ...], attr: str, default: str, callback) -> None:
@@ -23,7 +23,6 @@ def _stable_build_exclusive_group(bar: QWidget, root: QWidget | None, names: tup
     old = getattr(bar, attr, None)
     buttons = word._buttons(root)
     if isinstance(old, QButtonGroup):
-        # Repeated toolbar passes must not clear the user's current choice.
         if not any(buttons.get(name) is not None and buttons[name].isChecked() for name in names):
             button = buttons.get(default)
             if button is not None:
@@ -59,7 +58,6 @@ def _safe_apply_line_spacing(root: QWidget | None, value: float) -> None:
     block.setLineHeight(float(value) * 100.0, int(height_type))
     cursor.mergeBlockFormat(block)
     editor.setTextCursor(cursor)
-    word._move_cursor_to_end(editor)
     canvas = word._canvas(root)
     if canvas is not None:
         word._save_active_editor(canvas)
@@ -79,7 +77,6 @@ def _patch_canvas_key_handler(edw) -> None:
                 event.accept()
                 return
             editor.keyPressEvent(event)
-            word._move_cursor_to_end(editor)
             word._save_active_editor(self)
             return
         old_key(self, event)
