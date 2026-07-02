@@ -11,7 +11,7 @@ from PySide6.QtCore import QObject, QEvent, QPointF, QTimer, Qt
 from PySide6.QtGui import QColor, QFont, QKeySequence, QPainter, QPixmap, QPolygonF, QTextBlockFormat, QTextCursor
 from PySide6.QtWidgets import QApplication, QCheckBox, QComboBox, QDoubleSpinBox, QHBoxLayout, QPushButton, QSpinBox, QTextEdit, QWidget
 
-PATCH_VERSION = "engineering-text-toolbar-final-event-safety-2026-07-02-m"
+PATCH_VERSION = "engineering-text-toolbar-final-event-safety-2026-07-02-n"
 _ARROW_CACHE: dict[str, str] = {}
 _MATH_TOKEN_RE = re.compile(r"([A-Za-z0-9]+)([\^_/])([A-Za-z0-9]+)$")
 
@@ -47,9 +47,6 @@ def _workspace_from_editor(editor: QTextEdit) -> QWidget | None:
 def _buttons(root: QWidget | None) -> dict:
     if root is None:
         return {}
-    direct = getattr(root, "_text_toolbar_buttons", {}) or getattr(root, "_text_buttons", {})
-    if isinstance(direct, dict) and direct:
-        return direct
     start_bar = getattr(root, "_start_bar_widget", None)
     controls = getattr(start_bar, "_text_controls", {}) if start_bar is not None else {}
     buttons = controls.get("buttons", {}) if isinstance(controls, dict) else {}
@@ -70,13 +67,12 @@ def _plain_font(editor: QTextEdit) -> None:
 
 def _reset_style_buttons(root: QWidget | None) -> None:
     buttons = _buttons(root)
-    bold = buttons.get("Bold") or buttons.get("bold")
-    italic = buttons.get("Italic") or buttons.get("italic")
-    if bold is not None and not bold.property("userChangedTextStyle"):
-        bold.setChecked(False)
+    for name in ("Bold", "Italic"):
+        button = buttons.get(name)
+        if button is not None and not button.property("userChangedTextStyle"):
+            button.setChecked(False)
+    italic = buttons.get("Italic")
     if italic is not None:
-        if not italic.property("userChangedTextStyle"):
-            italic.setChecked(False)
         font = italic.font()
         font.setFamily("Times New Roman")
         font.setBold(True)
@@ -134,52 +130,6 @@ def _delete_next_char(editor: QTextEdit) -> None:
     _save_editor(editor)
 
 
-def _escape_html(text: str) -> str:
-    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-
-
-def _auto_convert_math_token(editor: QTextEdit) -> bool:
-    cursor = editor.textCursor()
-    block = cursor.block()
-    block_start = block.position()
-    rel_pos = max(0, cursor.position() - block_start)
-    prefix = (block.text() or "")[:rel_pos].rstrip()
-    match = _MATH_TOKEN_RE.search(prefix)
-    if match is None:
-        return False
-    left = _escape_html(match.group(1))
-    right = _escape_html(match.group(3))
-    operator = match.group(2)
-    html = {"^": f"{left}<sup>{right}</sup>", "_": f"{left}<sub>{right}</sub>", "/": f"{left}&divide;{right}"}.get(operator)
-    if not html:
-        return False
-    replace = editor.textCursor()
-    replace.setPosition(block_start + match.start())
-    replace.setPosition(block_start + match.end(), QTextCursor.MoveMode.KeepAnchor)
-    replace.insertHtml(html)
-    editor.setTextCursor(replace)
-    return True
-
-
-def _insert_active_list_after_enter(editor: QTextEdit) -> bool:
-    root = _workspace_from_editor(editor)
-    if root is None:
-        return False
-    try:
-        from . import text_line_math_symbols_patch as line_patch
-    except Exception:
-        return False
-    settings = line_patch._text_settings_for_active_list(root)
-    if settings is None:
-        return False
-    cursor = editor.textCursor()
-    cursor.insertBlock()
-    line_patch._insert_list_prefix_with_cursor(root, cursor, settings, advance_number=True)
-    editor.setTextCursor(cursor)
-    _save_editor(editor)
-    return True
-
-
 def _handle_editor_event(editor: QTextEdit, event) -> bool:
     if event.type() == QEvent.Type.ShortcutOverride:
         if event.key() in (Qt.Key.Key_Backspace, Qt.Key.Key_Delete):
@@ -201,18 +151,6 @@ def _handle_editor_event(editor: QTextEdit, event) -> bool:
         _delete_previous_char(editor); event.accept(); return True
     if event.key() == Qt.Key.Key_Delete:
         _delete_next_char(editor); event.accept(); return True
-    if event.key() == Qt.Key.Key_Space:
-        QTextEdit.keyPressEvent(editor, event)
-        _auto_convert_math_token(editor)
-        _save_editor(editor)
-        event.accept(); return True
-    if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
-        if _insert_active_list_after_enter(editor):
-            event.accept(); return True
-        _auto_convert_math_token(editor)
-        QTextEdit.keyPressEvent(editor, event)
-        _save_editor(editor)
-        event.accept(); return True
     return False
 
 
@@ -227,7 +165,6 @@ def _install_editor_filter(editor: QTextEdit | None) -> None:
     if editor is None:
         return
     root = _workspace_from_editor(editor)
-    _wire_list_buttons(root)
     if not editor.property("finalPlainDefaults"):
         _plain_font(editor)
         _reset_style_buttons(root)
@@ -259,7 +196,7 @@ def _arrow_url(direction: str) -> str:
     points = [QPointF(9, 4), QPointF(14, 12), QPointF(4, 12)] if direction == "up" else [QPointF(4, 6), QPointF(14, 6), QPointF(9, 14)]
     painter.drawPolygon(QPolygonF(points))
     painter.end()
-    path = Path(tempfile.gettempdir()) / f"engineering_arrow_{direction}_20260702m.png"
+    path = Path(tempfile.gettempdir()) / f"engineering_arrow_{direction}_20260702n.png"
     pixmap.save(path.as_posix(), "PNG")
     _ARROW_CACHE[direction] = path.as_posix()
     return path.as_posix()
@@ -268,12 +205,8 @@ def _arrow_url(direction: str) -> str:
 def _style_toolbar_combo(combo: QComboBox) -> None:
     combo.setFocusPolicy(Qt.FocusPolicy.NoFocus)
     combo.setStyleSheet(
-        "QComboBox{background:#fffefa;border:1px solid #b88718;border-radius:8px;color:#173454;"
-        "font-family:'Times New Roman';font-size:12px;font-weight:900;font-style:normal;padding:2px 28px 2px 8px;outline:0;}"
-        "QComboBox:hover{border-color:#173454;background:#ffffff;}"
-        "QComboBox::drop-down{subcontrol-origin:padding;subcontrol-position:top right;width:24px;"
-        "border-left:1px solid #b88718;border-top-right-radius:7px;border-bottom-right-radius:7px;"
-        "background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #ffe8a8,stop:1 #f1b33d);}"
+        "QComboBox{background:#fffefa;border:1px solid #b88718;border-radius:8px;color:#173454;font-family:'Times New Roman';font-size:12px;font-weight:900;font-style:normal;padding:2px 28px 2px 8px;outline:0;}"
+        "QComboBox::drop-down{subcontrol-origin:padding;subcontrol-position:top right;width:24px;border-left:1px solid #b88718;border-top-right-radius:7px;border-bottom-right-radius:7px;background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #ffe8a8,stop:1 #f1b33d);}"
         f"QComboBox::down-arrow{{image:url({_arrow_url('down')});width:16px;height:16px;}}"
     )
 
@@ -286,14 +219,10 @@ def _style_toolbar_spin(spin: QSpinBox | QDoubleSpinBox) -> None:
     except Exception:
         pass
     spin.setStyleSheet(
-        "QSpinBox,QDoubleSpinBox{background:#fffefa;border:1px solid #b88718;border-radius:8px;color:#173454;"
-        "font-family:'Times New Roman';font-size:12px;font-weight:900;font-style:normal;padding:2px 26px 2px 8px;outline:0;}"
-        "QSpinBox::up-button,QDoubleSpinBox::up-button{subcontrol-origin:border;subcontrol-position:top right;width:23px;"
-        "border-left:1px solid #b88718;border-top-right-radius:7px;background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #ffe8a8,stop:1 #f1b33d);}"
-        "QSpinBox::down-button,QDoubleSpinBox::down-button{subcontrol-origin:border;subcontrol-position:bottom right;width:23px;"
-        "border-left:1px solid #b88718;border-bottom-right-radius:7px;background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #ffe8a8,stop:1 #f1b33d);}"
-        f"QSpinBox::up-arrow,QDoubleSpinBox::up-arrow{{image:url({_arrow_url('up')});width:14px;height:14px;}}"
-        f"QSpinBox::down-arrow,QDoubleSpinBox::down-arrow{{image:url({_arrow_url('down')});width:14px;height:14px;}}"
+        "QSpinBox,QDoubleSpinBox{background:#fffefa;border:1px solid #b88718;border-radius:8px;color:#173454;font-family:'Times New Roman';font-size:12px;font-weight:900;font-style:normal;padding:2px 26px 2px 8px;outline:0;}"
+        "QSpinBox::up-button,QDoubleSpinBox::up-button{subcontrol-origin:border;subcontrol-position:top right;width:23px;border-left:1px solid #b88718;border-top-right-radius:7px;background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #ffe8a8,stop:1 #f1b33d);}"
+        "QSpinBox::down-button,QDoubleSpinBox::down-button{subcontrol-origin:border;subcontrol-position:bottom right;width:23px;border-left:1px solid #b88718;border-bottom-right-radius:7px;background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #ffe8a8,stop:1 #f1b33d);}"
+        f"QSpinBox::up-arrow,QDoubleSpinBox::up-arrow{{image:url({_arrow_url('up')});width:14px;height:14px;}} QSpinBox::down-arrow,QDoubleSpinBox::down-arrow{{image:url({_arrow_url('down')});width:14px;height:14px;}}"
     )
 
 
@@ -309,7 +238,6 @@ def _polish_textbar_controls(root: QWidget | None) -> None:
         for spin in bar.findChildren(QDoubleSpinBox):
             _style_toolbar_spin(spin)
     _reset_style_buttons(root)
-    _wire_list_buttons(root)
 
 
 def _patch_show_editor(module) -> None:
@@ -393,8 +321,6 @@ def _apply_custom_line_spacing(root: QWidget | None, value: float, unit: str) ->
     cursor.mergeBlockFormat(block)
     editor.setTextCursor(cursor)
     editor.setFocus()
-    setattr(root, "_text_line_spacing", float(value))
-    setattr(root, "_text_line_spacing_unit", unit)
     try:
         line_patch._save(root)
     except Exception:
@@ -418,11 +344,11 @@ def _patch_line_spacing_dialog() -> None:
     _patch_line_module_controls()
 
     def show_line_popup(root: QWidget | None, anchor: QPushButton) -> None:
-        popup, _shell, layout = line_patch._popup_shell(anchor, 270)
+        popup, _shell, layout = line_patch._popup_shell(anchor, 306)
         for label, value in (("1.0", 1.0), ("1.15", 1.15), ("1.5", 1.5), ("2.0", 2.0)):
             line_patch._add_menu_row(layout, label, lambda checked=False, v=value, p=popup, w=root: (p.accept(), line_patch._apply_line_spacing(w, v)))
         custom_holder = QWidget(popup)
-        custom_holder.setMinimumHeight(40)
+        custom_holder.setMinimumHeight(42)
         row = QHBoxLayout(custom_holder)
         row.setContentsMargins(6, 4, 6, 4)
         row.setSpacing(7)
@@ -476,20 +402,10 @@ def _install_existing_editors(root: QWidget | None) -> None:
     if isinstance(editor, QTextEdit):
         editor._canvas_owner = canvas
         _install_editor_filter(editor)
-    _wire_list_buttons(root)
     for editor in root.findChildren(QTextEdit):
         if getattr(editor, "_canvas_owner", None) is None and canvas is not None:
             editor._canvas_owner = canvas
         _install_editor_filter(editor)
-
-
-def _wire_list_buttons(root: QWidget | None) -> None:
-    buttons = _buttons(root)
-    for name, mode, style in (("Bullet", "bullet", "●"), ("Numbering", "numbering", "1.")):
-        button = buttons.get(name) or buttons.get(name.lower())
-        if button is None:
-            continue
-        button.setCheckable(True)
 
 
 def _patch_canvas_key_handler(edw) -> None:
@@ -542,9 +458,8 @@ def apply_text_toolbar_final_event_safety_patch() -> None:
         _patch_canvas_key_handler(edw)
         _install_existing_editors(self)
         _polish_textbar_controls(self)
-        _wire_list_buttons(self)
         for delay in (0, 80, 250, 700, 1400):
-            QTimer.singleShot(delay, lambda root=self: (_patch_key_handlers(), _install_existing_editors(root), _polish_textbar_controls(root), _patch_line_spacing_dialog(), _patch_line_module_controls(), _wire_list_buttons(root)))
+            QTimer.singleShot(delay, lambda root=self: (_patch_key_handlers(), _install_existing_editors(root), _polish_textbar_controls(root), _patch_line_spacing_dialog(), _patch_line_module_controls()))
 
     edw.EngineeringDesignWorkspace.__init__ = workspace_init
     edw.EngineeringDesignWorkspace._engineering_text_toolbar_final_event_safety_patch = PATCH_VERSION
