@@ -32,6 +32,7 @@ from .text_line_math_symbols_patch import apply_text_line_math_symbols_patch
 from .text_list_settings_final_patch import apply_text_list_settings_final_patch
 from .text_list_settings_patch import apply_text_list_settings_patch
 from .text_runtime_performance_editing_patch import apply_text_runtime_performance_editing_patch
+from .text_stability_guard_patch import apply_text_stability_guard_patch
 from .text_toolbar_final_event_safety_patch import apply_text_toolbar_final_event_safety_patch
 from .text_toolbar_word_behavior_patch import apply_text_toolbar_word_behavior_patch
 from .ui_refinement_fixes import apply_ui_refinement_fixes
@@ -73,7 +74,6 @@ def create_window(module: LauncherModule) -> ModuleWindow:
     apply_text_list_settings_final_patch()
     apply_text_color_inline_palette_patch()
     apply_native_cursor_lock_patch()
-    apply_project_dialog_style_cursor_patch()
     apply_engineering_runtime_audit_final_patch()
     apply_text_toolbar_word_behavior_patch()
     apply_text_runtime_performance_editing_patch()
@@ -82,4 +82,5 @@ def create_window(module: LauncherModule) -> ModuleWindow:
     apply_text_lag_final_patch()
     apply_text_toolbar_final_event_safety_patch()
     apply_project_dialog_style_cursor_patch()
+    apply_text_stability_guard_patch()
     return EngineeringDesignWorkspace(module)
