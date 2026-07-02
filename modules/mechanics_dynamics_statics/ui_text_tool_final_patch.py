@@ -13,8 +13,18 @@ from PySide6.QtCore import QEvent, QPointF, QRect, QRectF, QTimer, Qt
 from PySide6.QtGui import QColor, QFont, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QComboBox, QDoubleSpinBox, QFrame, QHBoxLayout, QPushButton, QSizePolicy, QSpinBox, QTextEdit, QWidget
 
-PATCH_VERSION = "engineering-ui-text-tool-final-2026-07-02-e"
-FONT_CHOICES = ("Times New Roman", "B Zar", "Zar", "B Nazanin", "Nazanin", "Arial")
+PATCH_VERSION = "engineering-ui-text-tool-final-2026-07-02-f"
+FONT_CHOICES = (
+    "Times New Roman",
+    "B Zar",
+    "B Nazanin",
+    "B Mitra",
+    "B Lotus",
+    "B Titr",
+    "B Yekan",
+    "B Koodak",
+    "B Traffic",
+)
 CURSOR_OVERRIDES = {
     "rotate": ("rotate.svg", 14, 14, 28),
     "rotate_drag": ("rotate.svg", 14, 14, 28),
@@ -125,6 +135,16 @@ def _save_editor_text(canvas, editor: QTextEdit | None = None) -> None:
     obj.text_size = max(1, font.pointSize() if font.pointSize() > 0 else int(getattr(obj, "text_size", 12)))
     obj.text_bold = font.bold()
     obj.text_italic = font.italic()
+    obj.text_rtl = editor.layoutDirection() == Qt.LayoutDirection.RightToLeft
+    alignment = editor.alignment()
+    if alignment & Qt.AlignmentFlag.AlignJustify:
+        obj.text_align = "justify"
+    elif alignment & Qt.AlignmentFlag.AlignHCenter:
+        obj.text_align = "center"
+    elif alignment & Qt.AlignmentFlag.AlignRight:
+        obj.text_align = "right"
+    else:
+        obj.text_align = "left"
     canvas.update()
 
 
@@ -153,8 +173,26 @@ def _handle_editor_key(editor: QTextEdit, event) -> bool:
         editor.selectAll()
         event.accept()
         return True
-    if event.key() in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace):
-        return False
+    if event.key() == Qt.Key.Key_Backspace:
+        cursor = editor.textCursor()
+        if cursor.hasSelection():
+            cursor.removeSelectedText()
+        else:
+            cursor.deletePreviousChar()
+        editor.setTextCursor(cursor)
+        _save_editor_text(canvas, editor)
+        event.accept()
+        return True
+    if event.key() == Qt.Key.Key_Delete:
+        cursor = editor.textCursor()
+        if cursor.hasSelection():
+            cursor.removeSelectedText()
+        else:
+            cursor.deleteChar()
+        editor.setTextCursor(cursor)
+        _save_editor_text(canvas, editor)
+        event.accept()
+        return True
     return False
 
 
@@ -208,7 +246,7 @@ def _current_text_settings(window: QWidget | None) -> dict[str, object]:
         "size": int(font_size),
         "bold": bool(buttons.get("Bold").isChecked()) if buttons.get("Bold") is not None else False,
         "italic": bool(buttons.get("Italic").isChecked()) if buttons.get("Italic") is not None else False,
-        "align": "left",
+        "align": "right" if bool(buttons.get("Right to left").isChecked()) if buttons.get("Right to left") is not None else False else "left",
         "rtl": bool(buttons.get("Right to left").isChecked()) if buttons.get("Right to left") is not None else False,
     }
 
@@ -237,6 +275,15 @@ def _show_text_editor(canvas, index: int) -> None:
     font.setItalic(bool(getattr(obj, "text_italic", False)))
     editor.setFont(font)
     editor.setStyleSheet("QTextEdit#CanvasTextEditor{background:rgba(255,255,255,230);border:1px solid #ff8a35;border-radius:6px;color:#132238;padding:4px;font-family:'Times New Roman';font-style:normal;font-weight:400;}")
+    rtl = bool(getattr(obj, "text_rtl", False))
+    editor.setLayoutDirection(Qt.LayoutDirection.RightToLeft if rtl else Qt.LayoutDirection.LeftToRight)
+    align_name = str(getattr(obj, "text_align", "right" if rtl else "left"))
+    alignment = {
+        "right": Qt.AlignmentFlag.AlignRight,
+        "center": Qt.AlignmentFlag.AlignHCenter,
+        "justify": Qt.AlignmentFlag.AlignJustify,
+    }.get(align_name, Qt.AlignmentFlag.AlignLeft)
+    editor.setAlignment(alignment)
     editor.textChanged.connect(lambda e=editor, c=canvas: _save_editor_text(c, e))
     editor.show()
     editor.raise_()
@@ -349,7 +396,15 @@ def _install_textbar(sb, svg) -> None:
         if "Bold" in buttons:
             buttons["Bold"].setChecked(False)
         if "Italic" in buttons:
-            buttons["Italic"].setChecked(False)
+            italic_button = buttons["Italic"]
+            italic_button.setChecked(False)
+            italic_font = italic_button.font()
+            italic_font.setFamily("Times New Roman")
+            italic_font.setPointSize(15)
+            italic_font.setBold(True)
+            italic_font.setItalic(True)
+            italic_button.setFont(italic_font)
+            italic_button.setText("I")
         self._text_controls = {"font": combo, "size": size, "buttons": buttons}
         command_bar.layout().insertWidget(max(0, command_bar.layout().count() - 1), bar, 0, Qt.AlignmentFlag.AlignVCenter)
         bar.show()
@@ -427,6 +482,7 @@ def _install_canvas_text_tool(edw) -> None:
         obj.text_bold = bool(settings["bold"])
         obj.text_italic = bool(settings["italic"])
         obj.text_rtl = settings["rtl"]
+        obj.text_align = settings["align"]
         self.objects.append(obj)
         index = len(self.objects) - 1
         self._select_only(index)
@@ -460,7 +516,12 @@ def _install_canvas_text_tool(edw) -> None:
         font.setItalic(bool(getattr(obj, "text_italic", False)))
         painter.setFont(font)
         painter.setPen(QPen(QColor("#132238"), 1.0))
-        flags = Qt.AlignmentFlag.AlignRight if bool(getattr(obj, "text_rtl", False)) else Qt.AlignmentFlag.AlignLeft
+        align_name = str(getattr(obj, "text_align", "right" if bool(getattr(obj, "text_rtl", False)) else "left"))
+        flags = {
+            "right": Qt.AlignmentFlag.AlignRight,
+            "center": Qt.AlignmentFlag.AlignHCenter,
+            "justify": Qt.AlignmentFlag.AlignJustify,
+        }.get(align_name, Qt.AlignmentFlag.AlignLeft)
         text = str(getattr(obj, "text", "")) or "Text Box"
         painter.drawText(local.adjusted(8, 7, -8, -7), flags | Qt.AlignmentFlag.AlignTop | Qt.TextFlag.TextWordWrap, text)
         painter.restore()
