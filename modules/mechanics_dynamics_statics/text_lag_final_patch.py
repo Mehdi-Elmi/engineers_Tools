@@ -12,21 +12,25 @@ import logging
 
 from PySide6.QtCore import QTimer, Qt
 from PySide6.QtGui import QColor, QKeySequence, QTextCharFormat
-from PySide6.QtWidgets import QGridLayout, QHBoxLayout, QPushButton, QSizePolicy, QTextEdit, QWidget
+from PySide6.QtWidgets import QColorDialog, QDialog, QGridLayout, QHBoxLayout, QLabel, QPushButton, QSizePolicy, QTextEdit, QWidget
 
-PATCH_VERSION = "engineering-text-lag-final-2026-07-02-c"
+PATCH_VERSION = "engineering-text-lag-final-2026-07-02-d"
 
 _COLOR_NAMES = {
     "#000000": "Black",
     "#132238": "Navy",
     "#2f7df6": "Blue",
+    "#36a9e1": "Sky blue",
     "#0f2a44": "Dark blue",
     "#f18a2a": "Orange",
+    "#ffbf36": "Yellow",
     "#c9342b": "Red",
     "#168a50": "Green",
     "#6e4ad6": "Purple",
     "#536271": "Gray",
 }
+_BASE_COLORS = ["#000000", "#132238", "#2f7df6", "#36a9e1", "#f18a2a", "#ffbf36", "#c9342b", "#168a50"]
+_DIALOG_COLORS = _BASE_COLORS + ["#ffffff", "#e8eef7", "#7f95b2", "#8b5cf6", "#ec4899", "#14b8a6", "#84cc16", "#f97316"]
 
 
 def _workspace_from_canvas(canvas) -> QWidget | None:
@@ -36,6 +40,15 @@ def _workspace_from_canvas(canvas) -> QWidget | None:
             return current
         current = current.parentWidget() if hasattr(current, "parentWidget") else None
     return canvas.window() if canvas is not None and hasattr(canvas, "window") else None
+
+
+def _workspace_from_widget(widget: QWidget | None) -> QWidget | None:
+    current = widget
+    while current is not None:
+        if hasattr(current, "_start_bar_widget") and hasattr(current, "_canvas"):
+            return current
+        current = current.parentWidget()
+    return None
 
 
 def _buttons(root: QWidget | None) -> dict[str, QPushButton]:
@@ -182,6 +195,37 @@ def _patch_text_key_ownership(edw) -> None:
     edw.EngineeringCanvas._lag_final_text_key_owner = PATCH_VERSION
 
 
+def _activate_list_mode(root: QWidget | None, mode: str, style: str | None = None) -> None:
+    if root is None:
+        return
+    try:
+        from . import text_line_math_symbols_patch as line_patch
+    except Exception:
+        return
+    settings = dict(getattr(root, "_last_text_list_settings", {}) or line_patch._default_list_settings(mode, style))
+    if settings.get("mode") != mode:
+        settings = line_patch._default_list_settings(mode, style)
+    if style:
+        settings["style"] = style
+    settings["mode"] = mode
+    settings.setdefault("bold", True)
+    settings["italic"] = bool(settings.get("italic", False))
+    setattr(root, "_last_text_list_settings", settings)
+    line_patch._set_list_button_state(root, mode)
+    if mode == "numbering":
+        setattr(root, "_text_numbering_next", int(settings.get("start_numbering", 1)))
+
+
+def _wire_list_activation(root: QWidget | None) -> None:
+    buttons = _buttons(root)
+    for name, mode, style in (("Bullet", "bullet", "●"), ("Numbering", "numbering", "1.")):
+        button = buttons.get(name)
+        if button is None or button.property("lagListActivation") == PATCH_VERSION:
+            continue
+        button.pressed.connect(lambda w=root, m=mode, s=style: _activate_list_mode(w, m, s))
+        button.setProperty("lagListActivation", PATCH_VERSION)
+
+
 def _apply_text_color(root: QWidget | None, value: str) -> None:
     try:
         from . import ui_text_tool_runtime_fix_patch as runtime
@@ -203,7 +247,58 @@ def _swatch_style(color: str) -> str:
 def _open_standard_color_dialog(parent: QWidget, current: str) -> str | None:
     try:
         from . import text_line_math_symbols_patch as line_patch
-        return line_patch._open_custom_color_dialog(parent, current)
+        dialog, body, body_layout = line_patch._dialog_shell(parent, "Add Custom Color", (380, 270))
+        selected = {"value": current or "#000000"}
+        preview = QLabel(body)
+        preview.setFixedHeight(30)
+        preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        preview.setText("Selected color")
+
+        def update_preview() -> None:
+            preview.setStyleSheet("QLabel{background:" + selected["value"] + ";border:1px solid #7f95b2;border-radius:8px;color:#ffffff;font-family:'Times New Roman';font-weight:900;font-style:italic;}")
+
+        grid_holder = QWidget(body)
+        grid = QGridLayout(grid_holder)
+        grid.setContentsMargins(0, 0, 0, 0)
+        grid.setHorizontalSpacing(2)
+        grid.setVerticalSpacing(2)
+        for index, color in enumerate(_DIALOG_COLORS):
+            swatch = QPushButton(grid_holder)
+            swatch.setFixedSize(24, 24)
+            swatch.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+            swatch.setToolTip(_COLOR_NAMES.get(color.lower(), color))
+            swatch.setStyleSheet(_swatch_style(color))
+            swatch.clicked.connect(lambda checked=False, c=color: (selected.update({"value": c}), update_preview()))
+            grid.addWidget(swatch, index // 8, index % 8)
+        pick = QPushButton("Pick Custom Color", body)
+        pick.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        pick.setStyleSheet(line_patch._button_style("QPushButton"))
+
+        def pick_color() -> None:
+            color = QColorDialog.getColor(QColor(selected["value"]), dialog, "Pick Custom Color")
+            if color.isValid():
+                selected["value"] = color.name()
+                update_preview()
+
+        pick.clicked.connect(pick_color)
+        actions = QHBoxLayout()
+        actions.addStretch(1)
+        ok = QPushButton("OK", body)
+        cancel = QPushButton("Cancel", body)
+        for button in (ok, cancel):
+            button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+            button.setStyleSheet(line_patch._button_style("QPushButton"))
+        ok.clicked.connect(dialog.accept)
+        cancel.clicked.connect(dialog.reject)
+        actions.addWidget(ok)
+        actions.addWidget(cancel)
+        update_preview()
+        body_layout.addWidget(preview)
+        body_layout.addWidget(grid_holder)
+        body_layout.addWidget(pick)
+        body_layout.addLayout(actions)
+        line_patch._prepare_dialog_masks(dialog)
+        return selected["value"] if dialog.exec() == QDialog.DialogCode.Accepted else None
     except Exception:
         return None
 
@@ -245,8 +340,10 @@ def _custom_colors(root: QWidget | None) -> list[str]:
 def _ensure_color_strip(bar: QWidget | None, root: QWidget | None) -> None:
     if bar is None:
         return
+    root = root or _workspace_from_widget(bar)
     holder = bar.findChild(QWidget, "RuntimeTextColorPaletteHolder")
-    if holder is not None and holder.property("lagColorVersion") == PATCH_VERSION:
+    root_id = str(id(root)) if root is not None else "none"
+    if holder is not None and holder.property("lagColorVersion") == PATCH_VERSION and holder.property("lagColorRoot") == root_id:
         holder.show()
         return
     if holder is not None:
@@ -254,8 +351,7 @@ def _ensure_color_strip(bar: QWidget | None, root: QWidget | None) -> None:
         holder.setParent(None)
         holder.deleteLater()
 
-    base_colors = ["#000000", "#132238", "#2f7df6", "#36a9e1", "#f18a2a", "#ffbf36", "#c9342b", "#168a50"]
-    colors = base_colors + _custom_colors(root)
+    colors = _BASE_COLORS + _custom_colors(root)
     swatch = 16
     gap = 1
     columns = max(4, (len(colors) + 1) // 2)
@@ -308,6 +404,7 @@ def _ensure_color_strip(bar: QWidget | None, root: QWidget | None) -> None:
     holder.setObjectName("RuntimeTextColorPaletteHolder")
     holder.setProperty("runtimeTextColorControl", True)
     holder.setProperty("lagColorVersion", PATCH_VERSION)
+    holder.setProperty("lagColorRoot", root_id)
     holder.setFixedSize(palette_width + 20, palette_height)
     row = QHBoxLayout(holder)
     row.setContentsMargins(0, 0, 0, 0)
@@ -370,6 +467,7 @@ def _patch_word_apply_toolbar(word) -> None:
                 layout.setContentsMargins(10, 6, 10, 6)
                 layout.setSpacing(5)
             _reset_text_defaults(root)
+        _wire_list_activation(root)
         _ensure_color_strip(bar, root)
         editor = word._active_editor(root)
         if editor is not None and not editor.property("lagEditorNormalized"):
@@ -392,6 +490,7 @@ def _patch_runtime_style(runtime) -> None:
     def style_inline_text_bar(bar: QWidget | None) -> None:
         if bar is None:
             return
+        root = _workspace_from_widget(bar)
         if bar.property("lagRuntimeStyled") != PATCH_VERSION:
             old_style(bar)
             bar.setProperty("lagRuntimeStyled", PATCH_VERSION)
@@ -403,7 +502,7 @@ def _patch_runtime_style(runtime) -> None:
             if isinstance(layout, QHBoxLayout):
                 layout.setContentsMargins(10, 6, 10, 6)
                 layout.setSpacing(5)
-        _ensure_color_strip(bar, bar.window())
+        _ensure_color_strip(bar, root)
 
     runtime._install_text_color_palette = install_text_color_palette
     runtime._style_inline_text_bar = style_inline_text_bar
@@ -420,6 +519,7 @@ def _patch_canvas_defaults(edw) -> None:
         old_release(self, event)
         root = _workspace_from_canvas(self)
         _reset_text_defaults(root)
+        _wire_list_activation(root)
         index = getattr(self, "_active_text_editor_index", None)
         if isinstance(index, int) and 0 <= index < len(getattr(self, "objects", [])):
             buttons = _buttons(root)
@@ -469,8 +569,9 @@ def apply_text_lag_final_patch() -> None:
             if callable(ensure):
                 bar = ensure()
                 _ensure_color_strip(bar, root)
+        _wire_list_activation(root)
         _reset_text_defaults(root)
-        QTimer.singleShot(0, lambda r=root: word._apply_word_toolbar(r))
+        QTimer.singleShot(0, lambda r=root: (word._apply_word_toolbar(r), _wire_list_activation(r)))
         QTimer.singleShot(0, lambda: _patch_text_key_ownership(edw))
         logging.info("text_lag_final_patch: installed version=%s", PATCH_VERSION)
 
