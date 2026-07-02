@@ -1,4 +1,4 @@
-"""Final Line Spacing, Math Symbols, and white list settings patch."""
+"""Final Line Spacing, Math Symbols, and list settings patch."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import logging
 import re
 from pathlib import Path
 
-from PySide6.QtCore import QTimer, Qt
+from PySide6.QtCore import QPoint, QTimer, Qt
 from PySide6.QtGui import QColor, QFont, QPixmap, QTextBlockFormat, QTextCharFormat
 from PySide6.QtWidgets import (
     QApplication,
@@ -18,14 +18,13 @@ from PySide6.QtWidgets import (
     QGridLayout,
     QHBoxLayout,
     QLabel,
-    QMenu,
     QPushButton,
     QSpinBox,
     QVBoxLayout,
     QWidget,
 )
 
-PATCH_VERSION = "engineering-text-line-math-symbols-2026-07-02-b"
+PATCH_VERSION = "engineering-text-line-math-symbols-2026-07-02-c"
 
 PALETTE = ["#132238", "#2f7df6", "#36a9e1", "#f18a2a", "#ffbf36", "#c9342b", "#168a50", "#6e4ad6"]
 COLOR_NAMES = {
@@ -65,12 +64,35 @@ def _button_style(selector: str = "QPushButton") -> str:
     )
 
 
+def _menu_button_style() -> str:
+    return (
+        "QPushButton{background:rgba(255,255,255,218);border:1px solid #b8c5d4;border-radius:8px;"
+        "color:#1f3148;font-family:'Times New Roman';font-size:12px;font-style:italic;font-weight:900;"
+        "padding:5px 10px;text-align:left;outline:0;}"
+        "QPushButton:hover{background:#fff4cf;border-color:#ff8a35;}"
+        "QPushButton:pressed{background:#f18a2a;color:#ffffff;padding-top:6px;}"
+        "QPushButton:focus{outline:0;border:1px solid #b8c5d4;}"
+    )
+
+
+def _symbol_button_style() -> str:
+    return (
+        "QPushButton{background:rgba(255,255,255,230);border:1px solid #b8c5d4;border-radius:7px;"
+        "color:#132238;font-family:'Segoe UI Symbol';font-size:14px;font-weight:400;font-style:normal;"
+        "padding:0;outline:0;}"
+        "QPushButton:hover{background:#fff4cf;border-color:#ff8a35;}"
+        "QPushButton:pressed{background:#f18a2a;color:#ffffff;}"
+        "QPushButton:focus{outline:0;border:1px solid #b8c5d4;}"
+    )
+
+
 def _close_button_style() -> str:
     return (
         "QPushButton{background:#f8fbff;border:1px solid #7fa6ca;border-radius:9px;color:#102238;"
-        "font-family:'Times New Roman';font-size:14px;font-weight:900;font-style:normal;padding:0;}"
+        "font-family:'Times New Roman';font-size:14px;font-weight:900;font-style:normal;padding:0;outline:0;}"
         "QPushButton:hover{background:#fff4cf;border-color:#ff8a35;}"
         "QPushButton:pressed{background:#f18a2a;color:#ffffff;}"
+        "QPushButton:focus{outline:0;border:1px solid #7fa6ca;}"
     )
 
 
@@ -81,6 +103,7 @@ def _add_color_button_style() -> str:
         "font-weight:900;font-style:normal;padding:0;margin:0;outline:0;}"
         "QPushButton:hover{background:#ffdc78;border-color:#ff8a35;}"
         "QPushButton:pressed{background:#d8781f;color:#ffffff;padding-top:1px;}"
+        "QPushButton:focus{outline:0;border:1px solid #8b5d13;}"
     )
 
 
@@ -89,7 +112,7 @@ def _combo_style(combo: QComboBox) -> None:
     combo.setFixedHeight(30)
     combo.setStyleSheet(
         "QComboBox{background:#fffefa;border:1px solid #b98920;border-radius:9px;color:#132238;"
-        "font-family:'Times New Roman';font-size:11px;font-weight:800;font-style:normal;padding:1px 35px 1px 9px;}"
+        "font-family:'Times New Roman';font-size:11px;font-weight:800;font-style:normal;padding:1px 35px 1px 9px;outline:0;}"
         "QComboBox::drop-down{width:32px;border:0;subcontrol-origin:border;subcontrol-position:center right;"
         "background:#fff0a8;border-top-right-radius:8px;border-bottom-right-radius:8px;}"
         "QComboBox::down-arrow{width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid #102238;}"
@@ -102,32 +125,13 @@ def _spin_style(spin) -> None:
     spin.setFixedHeight(30)
     spin.setStyleSheet(
         "QSpinBox,QDoubleSpinBox{background:#fffefa;border:1px solid #b98920;border-radius:9px;color:#132238;"
-        "font-family:'Times New Roman';font-size:11px;font-weight:800;font-style:normal;padding:1px 34px 1px 8px;}"
+        "font-family:'Times New Roman';font-size:11px;font-weight:800;font-style:normal;padding:1px 34px 1px 8px;outline:0;}"
         "QSpinBox::up-button,QDoubleSpinBox::up-button{width:31px;border:0;subcontrol-position:top right;background:#fff0a8;border-top-right-radius:8px;}"
         "QSpinBox::down-button,QDoubleSpinBox::down-button{width:31px;border:0;subcontrol-position:bottom right;background:#fff0a8;border-bottom-right-radius:8px;}"
         "QSpinBox::up-arrow,QDoubleSpinBox::up-arrow{width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-bottom:7px solid #102238;}"
         "QSpinBox::down-arrow,QDoubleSpinBox::down-arrow{width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid #102238;}"
     )
     _font(spin, 10)
-
-
-def _menu_style() -> str:
-    return (
-        "QMenu{background:qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #ffffff,stop:0.55 #edf8ff,stop:1 #fff1d3);"
-        "border:1px solid #8fa2bb;border-radius:10px;color:#1f3148;font-family:'Times New Roman';font-weight:800;font-style:italic;padding:6px;}"
-        "QMenu::item{color:#1f3148;padding:6px 24px 6px 12px;border-radius:7px;font-size:12px;font-style:italic;font-weight:800;}"
-        "QMenu::item:selected{background:#fff4cf;color:#132238;}"
-        "QMenu::separator{height:1px;background:#c7d6e8;margin:5px 6px;}"
-    )
-
-
-def _prepare_menu(menu: QMenu) -> None:
-    menu.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
-    menu.setWindowFlag(Qt.WindowType.FramelessWindowHint, True)
-    menu.setWindowFlag(Qt.WindowType.NoDropShadowWindowHint, True)
-    menu.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-    menu.setStyleSheet(_menu_style())
-    _font(menu, 10, italic=True)
 
 
 def _logo_pixmap_from_app() -> QPixmap:
@@ -149,12 +153,12 @@ def _logo_pixmap_from_files() -> QPixmap:
         "logo.jpg", "app_icon.png", "window_icon.png", "atlas.png", "atls.png",
     }
     for root in list(Path(__file__).resolve().parents[:7]):
-        for folder_name in ("assets", "icons", "images", "resources"):
+        for folder_name in ("logo", "assets", "icons", "images", "resources"):
             candidate = root / folder_name
             if not candidate.exists():
                 continue
             for path in candidate.rglob("*"):
-                if path.name.lower() in names and path.suffix.lower() in {".png", ".jpg", ".jpeg"}:
+                if path.name.lower() in names or path.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp"}:
                     pixmap = QPixmap(str(path))
                     if not pixmap.isNull():
                         return pixmap
@@ -172,8 +176,8 @@ def _make_logo_label(parent: QWidget) -> QLabel:
         logo.setPixmap(pixmap.scaled(24, 24, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
         logo.setStyleSheet("QLabel{background:#ffffff;border:1px solid #7fa6ca;border-radius:5px;}")
     else:
-        logo.setText("A")
-        logo.setStyleSheet("QLabel{background:#ffffff;border:1px solid #7fa6ca;border-radius:5px;color:#123d6f;font-size:16px;font-weight:900;}")
+        logo.setText("")
+        logo.setStyleSheet("QLabel{background:#ffffff;border:1px solid #7fa6ca;border-radius:5px;}")
     return logo
 
 
@@ -264,20 +268,6 @@ def _buttons(root: QWidget | None) -> dict:
     return buttons if isinstance(buttons, dict) else {}
 
 
-def _add_symbol_section(menu: QMenu, title: str, symbols: tuple[str, ...], root: QWidget | None) -> None:
-    section = menu.addMenu(title)
-    title_font = QFont("Times New Roman", 10, QFont.Weight.Bold)
-    title_font.setItalic(True)
-    section.menuAction().setFont(title_font)
-    _prepare_menu(section)
-    for symbol in symbols:
-        action = section.addAction(symbol)
-        action_font = QFont("Segoe UI Symbol", 10, QFont.Weight.Normal)
-        action_font.setItalic(False)
-        action.setFont(action_font)
-        action.triggered.connect(lambda checked=False, s=symbol, w=root: _insert_symbol(w, s))
-
-
 def _insert_list_prefix(root: QWidget | None, prefix: str) -> None:
     _canvas, editor = _root_editor(root)
     if editor is None:
@@ -304,6 +294,107 @@ def _apply_custom_list_style(root: QWidget | None, settings: dict[str, object]) 
     editor.setTextCursor(cursor)
     editor.setFocus()
     _save(root)
+
+
+def _popup_shell(parent: QWidget | None, width: int) -> tuple[QDialog, QWidget, QVBoxLayout]:
+    popup = QDialog(parent)
+    popup.setObjectName("TextStandardMenuPopup")
+    popup.setWindowFlags(Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint)
+    popup.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+    popup.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
+    popup.setStyleSheet("QDialog#TextStandardMenuPopup{background:transparent;border:0;} QWidget{background:transparent;}")
+    shell = QWidget(popup)
+    shell.setObjectName("TextStandardMenuShell")
+    shell.setMinimumWidth(width)
+    shell.setStyleSheet(
+        "QWidget#TextStandardMenuShell{background:qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #ffffff,stop:0.55 #edf8ff,stop:1 #fff1d3);"
+        "border:1px solid #8fa2bb;border-radius:12px;}"
+        "QLabel{background:transparent;color:#1f3148;font-family:'Times New Roman';font-size:12px;font-weight:900;font-style:italic;}"
+    )
+    root = QVBoxLayout(popup)
+    root.setContentsMargins(0, 0, 0, 0)
+    root.addWidget(shell)
+    layout = QVBoxLayout(shell)
+    layout.setContentsMargins(8, 8, 8, 8)
+    layout.setSpacing(5)
+    return popup, shell, layout
+
+
+def _show_popup_near(root: QWidget | None, button: QPushButton, popup: QDialog) -> None:
+    if root is not None:
+        old = getattr(root, "_text_standard_popup", None)
+        if old is not None:
+            old.close()
+        setattr(root, "_text_standard_popup", popup)
+    popup.adjustSize()
+    position = button.mapToGlobal(QPoint(0, button.height() + 3))
+    popup.move(position)
+    popup.exec()
+
+
+def _add_menu_row(layout: QVBoxLayout, text: str, handler) -> None:
+    button = QPushButton(text)
+    button.setMinimumHeight(25)
+    button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+    button.setStyleSheet(_menu_button_style())
+    _font(button, 10, italic=True)
+    button.clicked.connect(handler)
+    layout.addWidget(button)
+
+
+def _show_line_popup(root: QWidget | None, anchor: QPushButton) -> None:
+    popup, _shell, layout = _popup_shell(anchor, 186)
+    for label, value in (("1.0", 1.0), ("1.15", 1.15), ("1.5", 1.5), ("2.0", 2.0)):
+        _add_menu_row(layout, label, lambda checked=False, v=value, p=popup, w=root: (p.accept(), _apply_line_spacing(w, v)))
+    _add_menu_row(layout, "Line and paragraph settings...", lambda checked=False, p=popup, w=root: (p.accept(), _open_line_spacing_settings(w)))
+    _show_popup_near(root, anchor, popup)
+
+
+def _show_math_popup(root: QWidget | None, anchor: QPushButton) -> None:
+    popup, _shell, layout = _popup_shell(anchor, 278)
+    for title, symbols in (("Greek letters", GREEK), ("Math operators", OPERATORS), ("Arrows", ARROWS)):
+        label = QLabel(title)
+        _font(label, 10, italic=True)
+        layout.addWidget(label)
+        grid_holder = QWidget(popup)
+        grid = QGridLayout(grid_holder)
+        grid.setContentsMargins(0, 0, 0, 0)
+        grid.setHorizontalSpacing(3)
+        grid.setVerticalSpacing(3)
+        for index, symbol in enumerate(symbols):
+            button = QPushButton(symbol)
+            button.setFixedSize(28, 25)
+            button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+            button.setStyleSheet(_symbol_button_style())
+            _font(button, 11, bold=False, symbol=True, italic=False)
+            button.clicked.connect(lambda checked=False, s=symbol, p=popup, w=root: (p.accept(), _insert_symbol(w, s)))
+            grid.addWidget(button, index // 8, index % 8)
+        layout.addWidget(grid_holder)
+    _add_menu_row(layout, "Convert selected text to math", lambda checked=False, p=popup, w=root: (p.accept(), _convert_selection_to_math(w)))
+    _show_popup_near(root, anchor, popup)
+
+
+def _show_list_popup(root: QWidget | None, anchor: QPushButton, mode: str) -> None:
+    popup, _shell, layout = _popup_shell(anchor, 210)
+    _add_menu_row(layout, "None", lambda checked=False, p=popup: p.accept())
+    values = BULLETS if mode == "bullet" else NUMBERING
+    grid_holder = QWidget(popup)
+    grid = QGridLayout(grid_holder)
+    grid.setContentsMargins(0, 0, 0, 0)
+    grid.setHorizontalSpacing(4)
+    grid.setVerticalSpacing(4)
+    for index, value in enumerate(values):
+        button = QPushButton(value)
+        button.setFixedSize(42, 30)
+        button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        button.setStyleSheet(_symbol_button_style())
+        _font(button, 11, bold=False, symbol=(mode == "bullet"), italic=False)
+        button.clicked.connect(lambda checked=False, v=value, p=popup, w=root: (p.accept(), _insert_list_prefix(w, v)))
+        grid.addWidget(button, index // 3, index % 3)
+    layout.addWidget(grid_holder)
+    settings_text = "Custom bullet settings..." if mode == "bullet" else "Custom numbering settings..."
+    _add_menu_row(layout, settings_text, lambda checked=False, p=popup, w=root, m=mode: (p.accept(), _open_list_settings(w, m)))
+    _show_popup_near(root, anchor, popup)
 
 
 def _dialog_shell(parent: QWidget | None, title: str, minimum: tuple[int, int]) -> tuple[QDialog, QWidget, QVBoxLayout]:
@@ -529,73 +620,46 @@ def _open_list_settings(root: QWidget | None, mode: str) -> None:
         _apply_custom_list_style(root, settings)
 
 
-def _replace_menu(button: QPushButton, property_name: str) -> QMenu:
-    old = button.menu()
-    if old is not None:
-        old.deleteLater()
-    menu = QMenu(button)
-    _prepare_menu(menu)
-    button.setMenu(menu)
+def _wire_popup_button(button: QPushButton, property_name: str, callback) -> None:
+    old_menu = button.menu()
+    if old_menu is not None:
+        try:
+            button.setMenu(None)
+        except TypeError:
+            pass
+        old_menu.deleteLater()
+    if button.property(property_name) == PATCH_VERSION:
+        return
+    try:
+        button.clicked.disconnect()
+    except Exception:
+        pass
+    button.clicked.connect(callback)
     button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
     button.setProperty(property_name, PATCH_VERSION)
-    return menu
 
 
 def _apply_text_menus(root: QWidget | None) -> None:
     buttons = _buttons(root)
 
     line = buttons.get("Line spacing")
-    if isinstance(line, QPushButton) and line.property("lineMenuVersion") != PATCH_VERSION:
-        menu = _replace_menu(line, "lineMenuVersion")
-        for label, value in (("1.0", 1.0), ("1.15", 1.15), ("1.5", 1.5), ("2.0", 2.0)):
-            action = menu.addAction(label)
-            action.triggered.connect(lambda checked=False, v=value, w=root: _apply_line_spacing(w, v))
-        menu.addSeparator()
-        action = menu.addAction("Line and paragraph settings...")
-        action.triggered.connect(lambda checked=False, w=root: _open_line_spacing_settings(w))
+    if isinstance(line, QPushButton):
+        _wire_popup_button(line, "lineMenuVersion", lambda checked=False, b=line, w=root: _show_line_popup(w, b))
         line.setToolTip("Line spacing")
 
     math = buttons.get("Math symbols")
-    if isinstance(math, QPushButton) and math.property("mathMenuVersion") != PATCH_VERSION:
-        menu = _replace_menu(math, "mathMenuVersion")
-        _add_symbol_section(menu, "Greek letters", GREEK, root)
-        _add_symbol_section(menu, "Math operators", OPERATORS, root)
-        _add_symbol_section(menu, "Arrows", ARROWS, root)
-        menu.addSeparator()
-        convert = menu.addAction("Convert selected text to math")
-        convert.triggered.connect(lambda checked=False, w=root: _convert_selection_to_math(w))
+    if isinstance(math, QPushButton):
+        _wire_popup_button(math, "mathMenuVersion", lambda checked=False, b=math, w=root: _show_math_popup(w, b))
         math.setToolTip("Math symbols")
 
     bullet = buttons.get("Bullet")
-    if isinstance(bullet, QPushButton) and bullet.property("bulletMenuVersion") != PATCH_VERSION:
-        menu = _replace_menu(bullet, "bulletMenuVersion")
-        none = menu.addAction("None")
-        none.triggered.connect(lambda checked=False, w=root: None)
-        for value in BULLETS:
-            action = menu.addAction(value)
-            action_font = QFont("Segoe UI Symbol", 11, QFont.Weight.Normal)
-            action_font.setItalic(False)
-            action.setFont(action_font)
-            action.triggered.connect(lambda checked=False, v=value, w=root: _insert_list_prefix(w, v))
-        menu.addSeparator()
-        action = menu.addAction("Custom bullet settings...")
-        action.triggered.connect(lambda checked=False, w=root: _open_list_settings(w, "bullet"))
+    if isinstance(bullet, QPushButton):
+        _wire_popup_button(bullet, "bulletMenuVersion", lambda checked=False, b=bullet, w=root: _show_list_popup(w, b, "bullet"))
         bullet.setToolTip("Bullet")
 
     numbering = buttons.get("Numbering")
-    if isinstance(numbering, QPushButton) and numbering.property("numberingMenuVersion") != PATCH_VERSION:
-        menu = _replace_menu(numbering, "numberingMenuVersion")
-        none = menu.addAction("None")
-        none.triggered.connect(lambda checked=False, w=root: None)
-        for value in NUMBERING:
-            action = menu.addAction(value)
-            action_font = QFont("Times New Roman", 10, QFont.Weight.Normal)
-            action_font.setItalic(False)
-            action.setFont(action_font)
-            action.triggered.connect(lambda checked=False, v=value, w=root: _insert_list_prefix(w, v))
-        menu.addSeparator()
-        action = menu.addAction("Custom numbering settings...")
-        action.triggered.connect(lambda checked=False, w=root: _open_list_settings(w, "numbering"))
+    if isinstance(numbering, QPushButton):
+        _wire_popup_button(numbering, "numberingMenuVersion", lambda checked=False, b=numbering, w=root: _show_list_popup(w, b, "numbering"))
         numbering.setToolTip("Numbering")
 
 
