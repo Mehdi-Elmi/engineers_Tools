@@ -13,7 +13,7 @@ from PySide6.QtCore import QEvent, QPointF, QRect, QRectF, QTimer, Qt
 from PySide6.QtGui import QColor, QFont, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QComboBox, QDoubleSpinBox, QFrame, QHBoxLayout, QPushButton, QSizePolicy, QSpinBox, QTextEdit, QWidget
 
-PATCH_VERSION = "engineering-ui-text-tool-final-2026-07-02-f"
+PATCH_VERSION = "engineering-ui-text-tool-final-2026-07-02-g"
 FONT_CHOICES = (
     "Times New Roman",
     "B Zar",
@@ -241,13 +241,15 @@ def _current_text_settings(window: QWidget | None) -> dict[str, object]:
     buttons = controls.get("buttons", {}) if isinstance(controls, dict) else {}
     font_name = font_combo.currentText() if isinstance(font_combo, QComboBox) else "Times New Roman"
     font_size = size_spin.value() if isinstance(size_spin, QSpinBox) else 12
+    rtl_button = buttons.get("Right to left")
+    rtl_enabled = bool(rtl_button.isChecked()) if rtl_button is not None else False
     return {
         "font": font_name or "Times New Roman",
         "size": int(font_size),
         "bold": bool(buttons.get("Bold").isChecked()) if buttons.get("Bold") is not None else False,
         "italic": bool(buttons.get("Italic").isChecked()) if buttons.get("Italic") is not None else False,
-        "align": "right" if bool(buttons.get("Right to left").isChecked()) if buttons.get("Right to left") is not None else False else "left",
-        "rtl": bool(buttons.get("Right to left").isChecked()) if buttons.get("Right to left") is not None else False,
+        "align": "right" if rtl_enabled else "left",
+        "rtl": rtl_enabled,
     }
 
 
