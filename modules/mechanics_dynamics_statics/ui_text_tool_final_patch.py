@@ -13,7 +13,7 @@ from PySide6.QtCore import QEvent, QPointF, QRect, QRectF, QTimer, Qt
 from PySide6.QtGui import QColor, QFont, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QComboBox, QDoubleSpinBox, QFrame, QHBoxLayout, QPushButton, QSizePolicy, QSpinBox, QTextEdit, QWidget
 
-PATCH_VERSION = "engineering-ui-text-tool-final-2026-07-02-d"
+PATCH_VERSION = "engineering-ui-text-tool-final-2026-07-02-e"
 FONT_CHOICES = ("Times New Roman", "B Zar", "Zar", "B Nazanin", "Nazanin", "Arial")
 CURSOR_OVERRIDES = {
     "rotate": ("rotate.svg", 14, 14, 28),
@@ -166,7 +166,7 @@ class _CanvasTextEdit(QTextEdit):
 
     def event(self, event) -> bool:
         if event.type() == QEvent.Type.ShortcutOverride:
-            if event.key() in (Qt.Key.Key_C, Qt.Key.Key_X, Qt.Key.Key_V, Qt.Key.Key_A):
+            if event.key() in (Qt.Key.Key_C, Qt.Key.Key_X, Qt.Key.Key_V, Qt.Key.Key_A, Qt.Key.Key_Delete, Qt.Key.Key_Backspace):
                 event.accept()
                 return True
         return super().event(event)
