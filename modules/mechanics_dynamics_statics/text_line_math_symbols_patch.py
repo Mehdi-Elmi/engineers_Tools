@@ -26,7 +26,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-PATCH_VERSION = "engineering-text-line-math-symbols-2026-07-02-f"
+PATCH_VERSION = "engineering-text-line-math-symbols-2026-07-02-g"
 
 PALETTE = ["#000000", "#132238", "#2f7df6", "#36a9e1", "#f18a2a", "#ffbf36", "#c9342b", "#168a50"]
 COLOR_NAMES = {
@@ -66,10 +66,7 @@ def _arrow_url(direction: str) -> str:
     painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
     painter.setPen(Qt.PenStyle.NoPen)
     painter.setBrush(QColor("#102238"))
-    if direction == "up":
-        points = [QPointF(9, 2), QPointF(3, 9), QPointF(15, 9)]
-    else:
-        points = [QPointF(3, 3), QPointF(15, 3), QPointF(9, 10)]
+    points = [QPointF(9, 2), QPointF(3, 9), QPointF(15, 9)] if direction == "up" else [QPointF(3, 3), QPointF(15, 3), QPointF(9, 10)]
     painter.drawPolygon(QPolygonF(points))
     painter.end()
     icon_dir = Path(tempfile.gettempdir()) / "engineer_tools_text_arrows"
@@ -84,8 +81,7 @@ def _arrow_url(direction: str) -> str:
 def _button_style(selector: str = "QPushButton") -> str:
     return (
         selector + "{background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #ffffff,stop:.55 #fff6d6,stop:1 #ffc969);"
-        "border:1px solid #b98920;border-radius:8px;color:#132238;font-family:'Times New Roman';"
-        "font-weight:900;font-style:normal;padding:4px 12px;outline:0;}"
+        "border:1px solid #b98920;border-radius:8px;color:#132238;font-family:'Times New Roman';font-weight:900;font-style:normal;padding:4px 12px;outline:0;}"
         + selector + ":hover{background:#fff4cf;border-color:#ff8a35;}"
         + selector + ":pressed{background:#f18a2a;color:#ffffff;padding-top:5px;}"
         + selector + ":focus{outline:0;border:1px solid #b98920;}"
@@ -94,9 +90,8 @@ def _button_style(selector: str = "QPushButton") -> str:
 
 def _menu_button_style() -> str:
     return (
-        "QPushButton{background:rgba(255,255,255,218);border:1px solid #b8c5d4;border-radius:8px;"
-        "color:#1f3148;font-family:'Times New Roman';font-size:12px;font-style:italic;font-weight:900;"
-        "padding:5px 10px;text-align:left;outline:0;}"
+        "QPushButton{background:rgba(255,255,255,218);border:1px solid #b8c5d4;border-radius:8px;color:#1f3148;"
+        "font-family:'Times New Roman';font-size:12px;font-style:italic;font-weight:900;padding:5px 10px;text-align:left;outline:0;}"
         "QPushButton:hover{background:#fff4cf;border-color:#ff8a35;}"
         "QPushButton:pressed{background:#f18a2a;color:#ffffff;padding-top:6px;}"
         "QPushButton:focus{outline:0;border:1px solid #b8c5d4;}"
@@ -105,9 +100,8 @@ def _menu_button_style() -> str:
 
 def _symbol_button_style() -> str:
     return (
-        "QPushButton{background:rgba(255,255,255,230);border:1px solid #b8c5d4;border-radius:7px;"
-        "color:#132238;font-family:'Segoe UI Symbol';font-size:14px;font-weight:400;font-style:normal;"
-        "padding:0;outline:0;}"
+        "QPushButton{background:rgba(255,255,255,230);border:1px solid #b8c5d4;border-radius:7px;color:#132238;"
+        "font-family:'Segoe UI Symbol';font-size:14px;font-weight:400;font-style:normal;padding:0;outline:0;}"
         "QPushButton:hover{background:#fff4cf;border-color:#ff8a35;}"
         "QPushButton:pressed{background:#f18a2a;color:#ffffff;}"
         "QPushButton:focus{outline:0;border:1px solid #b8c5d4;}"
@@ -116,8 +110,7 @@ def _symbol_button_style() -> str:
 
 def _close_button_style() -> str:
     return (
-        "QPushButton{background:#f8fbff;border:1px solid #7fa6ca;border-radius:9px;color:#102238;"
-        "font-family:'Times New Roman';font-size:14px;font-weight:900;font-style:normal;padding:0;outline:0;}"
+        "QPushButton{background:#f8fbff;border:1px solid #7fa6ca;border-radius:9px;color:#102238;font-family:'Times New Roman';font-size:14px;font-weight:900;font-style:normal;padding:0;outline:0;}"
         "QPushButton:hover{background:#c9342b;border-color:#9d241f;color:#ffffff;}"
         "QPushButton:pressed{background:#8f1f1a;color:#ffffff;}"
         "QPushButton:focus{outline:0;border:1px solid #7fa6ca;}"
@@ -127,8 +120,7 @@ def _close_button_style() -> str:
 def _add_color_button_style() -> str:
     return (
         "QPushButton{background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #ffe9a6,stop:.55 #ffc35a,stop:1 #f18a2a);"
-        "border:1px solid #8b5d13;border-radius:6px;color:#102238;font-family:'Times New Roman';font-size:16px;"
-        "font-weight:900;font-style:normal;padding:0;margin:0;outline:0;}"
+        "border:1px solid #8b5d13;border-radius:6px;color:#102238;font-family:'Times New Roman';font-size:16px;font-weight:900;font-style:normal;padding:0;margin:0;outline:0;}"
         "QPushButton:hover{background:#ffdc78;border-color:#ff8a35;}"
         "QPushButton:pressed{background:#d8781f;color:#ffffff;padding-top:1px;}"
         "QPushButton:focus{outline:0;border:1px solid #8b5d13;}"
@@ -137,8 +129,7 @@ def _add_color_button_style() -> str:
 
 def _choice_toggle_style() -> str:
     return (
-        "QCheckBox{background:transparent;color:#132238;font-family:'Times New Roman';font-size:11px;"
-        "font-weight:900;font-style:italic;spacing:6px;outline:0;}"
+        "QCheckBox{background:transparent;color:#132238;font-family:'Times New Roman';font-size:11px;font-weight:900;font-style:italic;spacing:6px;outline:0;}"
         "QCheckBox::indicator{width:16px;height:16px;border-radius:8px;border:2px solid #2d7eea;background:#ffffff;}"
         "QCheckBox::indicator:checked{border:2px solid #2d7eea;background:qradialgradient(cx:.5,cy:.5,radius:.48,fx:.5,fy:.5,stop:0 #2d7eea,stop:.48 #2d7eea,stop:.52 #ffffff,stop:1 #ffffff);}"
     )
@@ -155,8 +146,7 @@ def _apply_rounded_mask(widget: QWidget | None, radius: int = 14) -> None:
 def _prepare_dialog_masks(dialog: QDialog, radius: int = 16) -> None:
     dialog.adjustSize()
     _apply_rounded_mask(dialog, radius)
-    root = dialog.findChild(QWidget, "DialogRoot")
-    _apply_rounded_mask(root, radius)
+    _apply_rounded_mask(dialog.findChild(QWidget, "DialogRoot"), radius)
 
 
 def _combo_style(combo: QComboBox) -> None:
@@ -164,10 +154,8 @@ def _combo_style(combo: QComboBox) -> None:
     combo.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
     combo.setFixedHeight(30)
     combo.setStyleSheet(
-        "QComboBox{background:#fffefa;border:1px solid #b98920;border-radius:9px;color:#132238;"
-        "font-family:'Times New Roman';font-size:11px;font-weight:700;font-style:normal;padding:1px 28px 1px 9px;outline:0;}"
-        "QComboBox::drop-down{width:26px;border:0;subcontrol-origin:border;subcontrol-position:center right;"
-        "background:transparent;border-top-right-radius:8px;border-bottom-right-radius:8px;}"
+        "QComboBox{background:#fffefa;border:1px solid #b98920;border-radius:9px;color:#132238;font-family:'Times New Roman';font-size:11px;font-weight:700;font-style:normal;padding:1px 28px 1px 9px;outline:0;}"
+        "QComboBox::drop-down{width:26px;border:0;subcontrol-origin:border;subcontrol-position:center right;background:transparent;border-top-right-radius:8px;border-bottom-right-radius:8px;}"
         f"QComboBox::down-arrow{{image:url({arrow});width:14px;height:9px;}}"
     )
     _font(combo, 10, bold=True, italic=False)
@@ -183,15 +171,11 @@ def _spin_style(spin) -> None:
         edit = spin.lineEdit()
         edit.setReadOnly(False)
         edit.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-        edit.setStyleSheet(
-            "QLineEdit{background:transparent;border:0;color:#132238;font-family:'Times New Roman';"
-            "font-size:11px;font-weight:800;font-style:normal;padding:0;}"
-        )
+        edit.setStyleSheet("QLineEdit{background:transparent;border:0;color:#132238;font-family:'Times New Roman';font-size:11px;font-weight:800;font-style:normal;padding:0;}")
     except Exception:
         pass
     spin.setStyleSheet(
-        "QSpinBox,QDoubleSpinBox{background:#fffefa;border:1px solid #b98920;border-radius:9px;color:#132238;"
-        "font-family:'Times New Roman';font-size:11px;font-weight:800;font-style:normal;padding:1px 28px 1px 8px;outline:0;}"
+        "QSpinBox,QDoubleSpinBox{background:#fffefa;border:1px solid #b98920;border-radius:9px;color:#132238;font-family:'Times New Roman';font-size:11px;font-weight:800;font-style:normal;padding:1px 28px 1px 8px;outline:0;}"
         "QSpinBox::up-button,QDoubleSpinBox::up-button{width:26px;border:0;subcontrol-position:top right;background:transparent;border-top-right-radius:8px;}"
         "QSpinBox::down-button,QDoubleSpinBox::down-button{width:26px;border:0;subcontrol-position:bottom right;background:transparent;border-bottom-right-radius:8px;}"
         f"QSpinBox::up-arrow,QDoubleSpinBox::up-arrow{{image:url({up});width:14px;height:9px;}}"
@@ -275,6 +259,10 @@ def _text_window_from_editor(editor: QWidget | None) -> QWidget | None:
     return canvas.window() if canvas is not None else None
 
 
+def _default_list_settings(mode: str, style: str | None = None) -> dict[str, object]:
+    return {"mode": mode, "style": style or ("1." if mode == "numbering" else "●"), "size": 12, "start_numbering": 1, "indent_mm": 7.0, "gap_mm": 4.0, "font": "Times New Roman", "bold": True, "italic": False, "color": "#000000"}
+
+
 def _text_settings_for_active_list(root: QWidget | None, mode_hint: str | None = None) -> dict[str, object] | None:
     buttons = _buttons(root)
     bullet_active = bool(buttons.get("Bullet") and buttons["Bullet"].isChecked())
@@ -285,11 +273,19 @@ def _text_settings_for_active_list(root: QWidget | None, mode_hint: str | None =
         numbering_active = True
     if not bullet_active and not numbering_active:
         return None
-    settings = dict(getattr(root, "_last_text_list_settings", {}) or {})
     mode = "numbering" if numbering_active else "bullet"
+    settings = dict(getattr(root, "_last_text_list_settings", {}) or {})
     if settings.get("mode") != mode:
-        settings = {"mode": mode, "style": "1." if mode == "numbering" else "●", "size": 12, "start_numbering": 1, "indent_mm": 7.0, "gap_mm": 4.0, "font": "Times New Roman", "bold": True, "italic": False, "color": "#000000"}
+        settings = _default_list_settings(mode)
     return settings
+
+
+def _set_list_button_state(root: QWidget | None, mode: str | None) -> None:
+    buttons = _buttons(root)
+    if buttons.get("Bullet") is not None:
+        buttons["Bullet"].setChecked(mode == "bullet")
+    if buttons.get("Numbering") is not None:
+        buttons["Numbering"].setChecked(mode == "numbering")
 
 
 def _patch_text_edit_key_handlers() -> None:
@@ -316,16 +312,22 @@ def _patch_text_edit_key_handlers() -> None:
             editor.setTextCursor(cursor)
             _save_editor(editor)
             return True
-        moved = cursor.movePosition(
-            QTextCursor.MoveOperation.PreviousCharacter if previous else QTextCursor.MoveOperation.NextCharacter,
-            QTextCursor.MoveMode.KeepAnchor,
-            1,
-        )
-        if moved:
-            cursor.removeSelectedText()
-            editor.setTextCursor(cursor)
-            _save_editor(editor)
-            return True
+        pos = cursor.position()
+        doc_len = max(0, editor.document().characterCount() - 1)
+        if previous:
+            if pos <= 0:
+                return True
+            start, end = pos - 1, pos
+        else:
+            if pos >= doc_len:
+                return True
+            start, end = pos, pos + 1
+        cursor.setPosition(start)
+        cursor.setPosition(end, QTextCursor.MoveMode.KeepAnchor)
+        cursor.removeSelectedText()
+        cursor.setPosition(start)
+        editor.setTextCursor(cursor)
+        _save_editor(editor)
         return True
 
     def _insert_list_after_enter(editor) -> bool:
@@ -432,17 +434,6 @@ def _apply_line_spacing(root: QWidget | None, value: float) -> None:
     _save(root)
 
 
-def _insert_list_prefix(root: QWidget | None, prefix: str) -> None:
-    _canvas, editor = _root_editor(root)
-    if editor is None:
-        return
-    cursor = editor.textCursor()
-    cursor.insertText(prefix + " ")
-    editor.setTextCursor(cursor)
-    editor.setFocus()
-    _save(root)
-
-
 def _roman(value: int, lower: bool = False) -> str:
     pairs = ((1000, "M"), (900, "CM"), (500, "D"), (400, "CD"), (100, "C"), (90, "XC"), (50, "L"), (40, "XL"), (10, "X"), (9, "IX"), (5, "V"), (4, "IV"), (1, "I"))
     number = max(1, min(int(value), 3999))
@@ -518,12 +509,8 @@ def _apply_custom_list_style(root: QWidget | None, settings: dict[str, object]) 
     _canvas, editor = _root_editor(root)
     if editor is None:
         return
-    buttons = _buttons(root)
     mode = str(settings.get("mode", "bullet"))
-    if buttons.get("Bullet") is not None:
-        buttons["Bullet"].setChecked(mode == "bullet")
-    if buttons.get("Numbering") is not None:
-        buttons["Numbering"].setChecked(mode == "numbering")
+    _set_list_button_state(root, mode)
     if mode == "numbering" and root is not None:
         setattr(root, "_text_numbering_next", int(settings.get("start_numbering", 1)) + 1)
     cursor = editor.textCursor()
@@ -531,6 +518,21 @@ def _apply_custom_list_style(root: QWidget | None, settings: dict[str, object]) 
     editor.setTextCursor(cursor)
     editor.setFocus()
     _save(root)
+
+
+def _activate_list_style(root: QWidget | None, mode: str, style: str) -> None:
+    settings = dict(getattr(root, "_last_text_list_settings", {}) or _default_list_settings(mode, style))
+    settings.update({"mode": mode, "style": style})
+    if mode == "numbering" and root is not None:
+        settings.setdefault("start_numbering", 1)
+        setattr(root, "_text_numbering_next", int(settings.get("start_numbering", 1)) + 1)
+    if root is not None:
+        setattr(root, "_last_text_list_settings", settings)
+    _apply_custom_list_style(root, settings)
+
+
+def _deactivate_list_style(root: QWidget | None) -> None:
+    _set_list_button_state(root, None)
 
 
 def _popup_shell(parent: QWidget | None, width: int) -> tuple[QDialog, QWidget, QVBoxLayout]:
@@ -546,8 +548,7 @@ def _popup_shell(parent: QWidget | None, width: int) -> tuple[QDialog, QWidget, 
     shell.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
     shell.setMinimumWidth(width)
     shell.setStyleSheet(
-        "QWidget#TextStandardMenuShell{background:qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #ffffff,stop:0.55 #edf8ff,stop:1 #fff1d3);"
-        "border:1px solid #8fa2bb;border-radius:14px;}"
+        "QWidget#TextStandardMenuShell{background:qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #ffffff,stop:0.55 #edf8ff,stop:1 #fff1d3);border:1px solid #8fa2bb;border-radius:14px;}"
         "QLabel{background:transparent;color:#1f3148;font-family:'Times New Roman';font-size:12px;font-weight:900;font-style:italic;}"
     )
     root = QVBoxLayout(popup)
@@ -569,8 +570,7 @@ def _show_popup_near(root: QWidget | None, button: QPushButton, popup: QDialog) 
     shell = popup.findChild(QWidget, "TextStandardMenuShell")
     _apply_rounded_mask(shell, 14)
     _apply_rounded_mask(popup, 14)
-    position = button.mapToGlobal(QPoint(0, button.height() + 3))
-    popup.move(position)
+    popup.move(button.mapToGlobal(QPoint(0, button.height() + 3)))
     popup.exec()
 
 
@@ -618,7 +618,7 @@ def _show_math_popup(root: QWidget | None, anchor: QPushButton) -> None:
 
 def _show_list_popup(root: QWidget | None, anchor: QPushButton, mode: str) -> None:
     popup, _shell, layout = _popup_shell(anchor, 210)
-    _add_menu_row(layout, "None", lambda checked=False, p=popup: p.accept())
+    _add_menu_row(layout, "None", lambda checked=False, p=popup, w=root: (p.accept(), _deactivate_list_style(w)))
     values = BULLETS if mode == "bullet" else NUMBERING
     grid_holder = QWidget(popup)
     grid = QGridLayout(grid_holder)
@@ -631,7 +631,7 @@ def _show_list_popup(root: QWidget | None, anchor: QPushButton, mode: str) -> No
         button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         button.setStyleSheet(_symbol_button_style())
         _font(button, 11, bold=False, symbol=(mode == "bullet"), italic=False)
-        button.clicked.connect(lambda checked=False, v=value, p=popup, w=root: (p.accept(), _insert_list_prefix(w, v)))
+        button.clicked.connect(lambda checked=False, v=value, p=popup, w=root, m=mode: (p.accept(), _activate_list_style(w, m, v)))
         grid.addWidget(button, index // 3, index % 3)
     layout.addWidget(grid_holder)
     settings_text = "Custom bullet settings..." if mode == "bullet" else "Custom numbering settings..."
@@ -680,6 +680,27 @@ def _dialog_shell(parent: QWidget | None, title: str, minimum: tuple[int, int]) 
     header_row.addWidget(title_label, 1)
     header_row.addWidget(close)
     root_layout.addWidget(header)
+
+    drag = {"offset": None}
+
+    def press(event) -> None:
+        if event.button() == Qt.MouseButton.LeftButton:
+            drag["offset"] = event.globalPosition().toPoint() - dialog.frameGeometry().topLeft()
+            event.accept()
+
+    def move(event) -> None:
+        if drag["offset"] is not None:
+            dialog.move(event.globalPosition().toPoint() - drag["offset"])
+            event.accept()
+
+    def release(event) -> None:
+        drag["offset"] = None
+        event.accept()
+
+    header.mousePressEvent = press
+    header.mouseMoveEvent = move
+    header.mouseReleaseEvent = release
+
     body = QWidget(shell)
     body.setObjectName("DialogBody")
     body.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
