@@ -162,11 +162,32 @@ class _ValueSlider(QWidget):
         self.valueChanged.emit(self._value)
 
 
-def _polish_shell_close_button(dialog) -> None:
+def _polish_shell_close_button(dialog) -> bool:
+    found = False
     for button in dialog.findChildren(QPushButton):
         if button.text().strip() == "×":
             button.setStyleSheet(_CLOSE_STYLE)
             button.setCursor(Qt.CursorShape.ArrowCursor)
+            button.setFixedSize(28, 28)
+            button.show()
+            button.raise_()
+            found = True
+    return found
+
+
+def _ensure_close_button(dialog, body: QWidget, body_layout: QVBoxLayout) -> None:
+    if _polish_shell_close_button(dialog):
+        return
+    row = QHBoxLayout()
+    row.setContentsMargins(0, 0, 0, 0)
+    row.addStretch(1)
+    close = QPushButton("×", body)
+    close.setFixedSize(28, 28)
+    close.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+    close.setStyleSheet(_CLOSE_STYLE)
+    close.clicked.connect(dialog.reject)
+    row.addWidget(close)
+    body_layout.insertLayout(0, row)
 
 
 def _normal_hex(value: str | None) -> str:
@@ -182,7 +203,7 @@ def _make_spin(value: int, parent: QWidget, maximum: int = 255) -> QSpinBox:
     spin = QSpinBox(parent)
     spin.setRange(0, maximum)
     spin.setValue(max(0, min(maximum, int(value))))
-    spin.setFixedWidth(74)
+    spin.setFixedWidth(82)
     spin.setKeyboardTracking(True)
     spin.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
     try:
@@ -215,10 +236,10 @@ def get_custom_color(parent: QWidget | None, current: str = "#000000", title: st
 
     selected = {"color": QColor(_normal_hex(current))}
     custom_colors = ["#ffffff"] * 16
-    dialog, body, body_layout = ui_shell._dialog_shell(parent, title or "Add Custom Color", (660, 450))
-    _polish_shell_close_button(dialog)
+    dialog, body, body_layout = ui_shell._dialog_shell(parent, title or "Add Custom Color", (790, 500))
+    _ensure_close_button(dialog, body, body_layout)
     body.setStyleSheet("QWidget#DialogBody{background:qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #eef7ff,stop:1 #fff5dc);border-bottom-left-radius:16px;border-bottom-right-radius:16px;} QWidget{background:transparent;}")
-    body_layout.setContentsMargins(10, 10, 10, 10)
+    body_layout.setContentsMargins(12, 10, 12, 10)
     body_layout.setSpacing(7)
 
     main = QHBoxLayout()
@@ -227,6 +248,7 @@ def get_custom_color(parent: QWidget | None, current: str = "#000000", title: st
     body_layout.addLayout(main)
 
     left_group, left = _group(body, "Basic colors")
+    left_group.setMinimumWidth(240)
     main.addWidget(left_group)
     basic_grid = QGridLayout()
     basic_grid.setHorizontalSpacing(4)
@@ -234,6 +256,7 @@ def get_custom_color(parent: QWidget | None, current: str = "#000000", title: st
     left.addLayout(basic_grid)
 
     center_group, center = _group(body, "Color spectrum")
+    center_group.setMinimumWidth(258)
     main.addWidget(center_group)
     plane_row = QHBoxLayout()
     plane_row.setContentsMargins(0, 0, 0, 0)
@@ -248,6 +271,7 @@ def get_custom_color(parent: QWidget | None, current: str = "#000000", title: st
     center.addWidget(preview, alignment=Qt.AlignmentFlag.AlignLeft)
 
     right_group, right = _group(body, "Color values")
+    right_group.setMinimumWidth(238)
     main.addWidget(right_group)
 
     hue_spin = _make_spin(216, right_group, 359)
@@ -312,6 +336,7 @@ def get_custom_color(parent: QWidget | None, current: str = "#000000", title: st
         row.setContentsMargins(0, 0, 0, 0)
         row.setSpacing(6)
         label = QLabel(label_text, right_group)
+        label.setFixedWidth(48)
         _style_label(label)
         row.addWidget(label)
         row.addWidget(spin)
@@ -326,9 +351,10 @@ def get_custom_color(parent: QWidget | None, current: str = "#000000", title: st
     html_row = QHBoxLayout()
     html_row.setSpacing(6)
     html_label = QLabel("HTML:", right_group)
+    html_label.setFixedWidth(48)
     _style_label(html_label)
     html_edit = QLineEdit(right_group)
-    html_edit.setFixedWidth(150)
+    html_edit.setFixedWidth(168)
     html_edit.setStyleSheet("QLineEdit{background:#ffffff;border:1px solid #9fb1c7;border-radius:6px;color:#173454;font-family:'Times New Roman';font-size:12px;font-weight:900;font-style:normal;padding:2px 5px;}")
     html_row.addWidget(html_label)
     html_row.addWidget(html_edit)
@@ -389,4 +415,5 @@ def get_custom_color(parent: QWidget | None, current: str = "#000000", title: st
 
     if hasattr(ui_shell, "_prepare_dialog_masks"):
         ui_shell._prepare_dialog_masks(dialog)
+    _polish_shell_close_button(dialog)
     return selected["color"].name(QColor.NameFormat.HexRgb) if dialog.exec() == dialog.DialogCode.Accepted else None
