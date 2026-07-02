@@ -7,11 +7,11 @@ import re
 import tempfile
 from pathlib import Path
 
-from PySide6.QtCore import QObject, QEvent, QPointF, QRectF, QTimer, Qt, QUrl
-from PySide6.QtGui import QColor, QFont, QFontMetricsF, QImage, QKeySequence, QPainter, QPixmap, QPolygonF, QTextBlockFormat, QTextCharFormat, QTextCursor, QTextDocument, QTextImageFormat
+from PySide6.QtCore import QBuffer, QEvent, QIODevice, QObject, QPointF, QRectF, QTimer, Qt, QUrl
+from PySide6.QtGui import QColor, QFont, QFontMetricsF, QImage, QKeySequence, QPainter, QPen, QPixmap, QPolygonF, QTextBlockFormat, QTextCharFormat, QTextCursor, QTextDocument, QTextImageFormat
 from PySide6.QtWidgets import QApplication, QCheckBox, QComboBox, QDialog, QDoubleSpinBox, QHBoxLayout, QPushButton, QSpinBox, QTextEdit, QVBoxLayout, QWidget
 
-PATCH_VERSION = "engineering-text-toolbar-final-event-safety-2026-07-02-q"
+PATCH_VERSION = "engineering-text-toolbar-final-event-safety-2026-07-02-r"
 _ARROW_CACHE: dict[str, str] = {}
 _MATH_TOKEN_RE = re.compile(r"([A-Za-z0-9]+)([\^_/])([A-Za-z0-9]+)$")
 LTR_ISOLATE = "\u2066"
@@ -154,7 +154,11 @@ def _fraction_image_format(editor: QTextEdit, top: str, bottom: str, base: QText
     painter.drawLine(QPointF(3, line_y), QPointF(image.width() - 3, line_y))
     painter.drawText(QRectF(0, line_y + 2, image.width(), line_height), Qt.AlignmentFlag.AlignCenter, bottom)
     painter.end()
-    name = f"engineering-inline-fraction-{id(editor)}-{editor.textCursor().position()}-{top}-{bottom}"
+    buffer = QBuffer()
+    buffer.open(QIODevice.OpenModeFlag.WriteOnly)
+    image.save(buffer, "PNG")
+    encoded = bytes(buffer.data().toBase64()).decode("ascii")
+    name = f"data:image/png;base64,{encoded}"
     url = QUrl(name)
     editor.document().addResource(QTextDocument.ResourceType.ImageResource, url, image)
     fmt = QTextImageFormat()
@@ -235,10 +239,11 @@ def _handle_editor_event(editor: QTextEdit, event) -> bool:
         editor.paste(); _save_editor(editor); event.accept(); return True
     if _matches(event, QKeySequence.StandardKey.SelectAll):
         editor.selectAll(); event.accept(); return True
-    if event.key() == Qt.Key.Key_Backspace:
-        _delete_previous_char(editor); event.accept(); return True
-    if event.key() == Qt.Key.Key_Delete:
-        _delete_next_char(editor); event.accept(); return True
+    if event.key() in (Qt.Key.Key_Backspace, Qt.Key.Key_Delete):
+        QTextEdit.keyPressEvent(editor, event)
+        _save_editor(editor)
+        event.accept()
+        return True
     if event.key() == Qt.Key.Key_Space:
         QTextEdit.keyPressEvent(editor, event)
         _auto_convert_math_token(editor)
@@ -290,7 +295,7 @@ def _arrow_url(direction: str) -> str:
     points = [QPointF(9, 4), QPointF(14, 12), QPointF(4, 12)] if direction == "up" else [QPointF(4, 6), QPointF(14, 6), QPointF(9, 14)]
     painter.drawPolygon(QPolygonF(points))
     painter.end()
-    path = Path(tempfile.gettempdir()) / f"engineering_arrow_{direction}_20260702q.png"
+    path = Path(tempfile.gettempdir()) / f"engineering_arrow_{direction}_20260702r.png"
     pixmap.save(path.as_posix(), "PNG")
     _ARROW_CACHE[direction] = path.as_posix()
     return path.as_posix()
@@ -388,6 +393,87 @@ def _polish_textbar_controls(root: QWidget | None) -> None:
         for spin in bar.findChildren(QDoubleSpinBox):
             _style_toolbar_spin(spin)
     _reset_style_buttons(root)
+
+
+def _patch_canvas_text_edit_class() -> None:
+    try:
+        from . import ui_text_tool_final_patch as text_final
+    except Exception:
+        return
+    cls = getattr(text_final, "_CanvasTextEdit", None)
+    if cls is None:
+        return
+    text_final._handle_editor_key = _handle_editor_event
+    if getattr(cls, "_final_native_text_key_patch", "") == PATCH_VERSION:
+        return
+
+    def editor_event(self, event) -> bool:
+        if event.type() == QEvent.Type.ShortcutOverride:
+            if event.key() in (Qt.Key.Key_C, Qt.Key.Key_X, Qt.Key.Key_V, Qt.Key.Key_A, Qt.Key.Key_Delete, Qt.Key.Key_Backspace, Qt.Key.Key_Space):
+                event.accept()
+                return True
+        return QTextEdit.event(self, event)
+
+    def key_press(self, event) -> None:
+        if _handle_editor_event(self, event):
+            return
+        QTextEdit.keyPressEvent(self, event)
+        _save_editor(self)
+
+    cls.event = editor_event
+    cls.keyPressEvent = key_press
+    cls._final_native_text_key_patch = PATCH_VERSION
+
+
+def _patch_rich_text_canvas_paint(edw) -> None:
+    canvas_cls = getattr(edw, "EngineeringCanvas", None)
+    if canvas_cls is None or getattr(canvas_cls, "_final_rich_text_canvas_paint_patch", "") == PATCH_VERSION:
+        return
+    old_paint_object = canvas_cls._paint_object
+
+    def paint_object(self, painter: QPainter, obj) -> None:
+        if not getattr(obj, "is_text_box", False):
+            old_paint_object(self, painter, obj)
+            return
+        rect = obj.rect
+        painter.save()
+        painter.translate(rect.center())
+        painter.rotate(float(getattr(obj, "rotation", 0.0) or 0.0))
+        local = QRectF(-rect.width() / 2, -rect.height() / 2, rect.width(), rect.height())
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, True)
+        painter.setPen(QPen(QColor("#2f7df6"), 1.1, Qt.PenStyle.DashLine))
+        painter.setBrush(QColor(255, 255, 255, 210))
+        painter.drawRoundedRect(local, 4, 4)
+
+        content = local.adjusted(8, 7, -8, -7)
+        font = QFont(str(getattr(obj, "text_font", "Times New Roman")), int(getattr(obj, "text_size", 12)))
+        font.setBold(bool(getattr(obj, "text_bold", False)))
+        font.setItalic(bool(getattr(obj, "text_italic", False)))
+        doc = QTextDocument()
+        doc.setDocumentMargin(0)
+        doc.setDefaultFont(font)
+        option = doc.defaultTextOption()
+        option.setTextDirection(Qt.LayoutDirection.RightToLeft if bool(getattr(obj, "text_rtl", False)) else Qt.LayoutDirection.LeftToRight)
+        align_name = str(getattr(obj, "text_align", "right" if bool(getattr(obj, "text_rtl", False)) else "left"))
+        option.setAlignment({
+            "right": Qt.AlignmentFlag.AlignRight,
+            "center": Qt.AlignmentFlag.AlignHCenter,
+            "justify": Qt.AlignmentFlag.AlignJustify,
+        }.get(align_name, Qt.AlignmentFlag.AlignLeft))
+        doc.setDefaultTextOption(option)
+        html = str(getattr(obj, "text_html", "") or "")
+        if html.strip():
+            doc.setHtml(html)
+        else:
+            doc.setPlainText(str(getattr(obj, "text", "")) or "Text Box")
+        doc.setTextWidth(max(1.0, content.width()))
+        painter.translate(content.topLeft())
+        doc.drawContents(painter, QRectF(0, 0, content.width(), content.height()))
+        painter.restore()
+
+    canvas_cls._paint_object = paint_object
+    canvas_cls._final_rich_text_canvas_paint_patch = PATCH_VERSION
 
 
 def _patch_show_editor(module) -> None:
@@ -596,6 +682,8 @@ def apply_text_toolbar_final_event_safety_patch() -> None:
     _patch_line_spacing_dialog()
     _patch_line_module_controls()
     _patch_key_handlers()
+    _patch_canvas_text_edit_class()
+    _patch_rich_text_canvas_paint(edw)
     _patch_canvas_key_handler(edw)
     for module in modules:
         _patch_show_editor(module)
@@ -612,11 +700,13 @@ def apply_text_toolbar_final_event_safety_patch() -> None:
         _patch_line_spacing_dialog()
         _patch_line_module_controls()
         _patch_key_handlers()
+        _patch_canvas_text_edit_class()
+        _patch_rich_text_canvas_paint(edw)
         _patch_canvas_key_handler(edw)
         _install_existing_editors(self)
         _polish_textbar_controls(self)
         for delay in (0, 80, 250, 700, 1400):
-            QTimer.singleShot(delay, lambda root=self: (_patch_key_handlers(), _install_existing_editors(root), _polish_textbar_controls(root), _patch_text_popup_menu_style(), _patch_line_spacing_dialog(), _patch_line_module_controls()))
+            QTimer.singleShot(delay, lambda root=self: (_patch_key_handlers(), _patch_canvas_text_edit_class(), _install_existing_editors(root), _polish_textbar_controls(root), _patch_text_popup_menu_style(), _patch_line_spacing_dialog(), _patch_line_module_controls()))
 
     edw.EngineeringDesignWorkspace.__init__ = workspace_init
     edw.EngineeringDesignWorkspace._engineering_text_toolbar_final_event_safety_patch = PATCH_VERSION
