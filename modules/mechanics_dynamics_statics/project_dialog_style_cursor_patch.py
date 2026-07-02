@@ -13,13 +13,14 @@ import re
 import tempfile
 from pathlib import Path
 
-from PySide6.QtCore import QPointF, QTimer, Qt
+from PySide6.QtCore import QEvent, QObject, QPointF, QTimer, Qt
 from PySide6.QtGui import QColor, QFont, QPainter, QPixmap, QPolygonF, QTextCharFormat, QTextCursor
-from PySide6.QtWidgets import QComboBox, QDoubleSpinBox, QLineEdit, QListWidget, QPushButton, QSpinBox, QTextEdit, QWidget
+from PySide6.QtWidgets import QApplication, QComboBox, QDoubleSpinBox, QLineEdit, QListWidget, QPushButton, QSpinBox, QTextEdit, QWidget
 
-PATCH_VERSION = "engineering-project-dialog-style-cursor-2026-07-02-g"
+PATCH_VERSION = "engineering-project-dialog-style-cursor-2026-07-02-h"
 _ARROW_CACHE: dict[str, str] = {}
 _PREFIX_RE = re.compile(r"^\s*(?:\d+[\.)]|[ivxlcdmIVXLCDM]+[\.)]|[A-Za-z]+[\.)]|[●○■◆➤✓•])\s+")
+_MATH_TOKEN_RE = re.compile(r"([A-Za-z0-9]+)([\^_/])([A-Za-z0-9]+)$")
 FONT_CHOICES = ("Times New Roman", "B Zar", "B Nazanin", "B Mitra", "B Lotus", "B Titr", "B Yekan", "B Koodak", "B Traffic")
 
 
@@ -44,7 +45,7 @@ def _arrow_path(direction: str = "down") -> str:
         points = [QPointF(13, 9), QPointF(5, 4), QPointF(5, 14)]
     painter.drawPolygon(QPolygonF(points))
     painter.end()
-    path = Path(tempfile.gettempdir()) / f"engineering_shared_arrow_{direction}_20260702g.png"
+    path = Path(tempfile.gettempdir()) / f"engineering_shared_arrow_{direction}_20260702h.png"
     pixmap.save(path.as_posix(), "PNG")
     _ARROW_CACHE[direction] = path.as_posix()
     return path.as_posix()
@@ -358,9 +359,50 @@ def _install_text_list_none_behavior() -> None:
     line_patch._project_none_behavior_patch = PATCH_VERSION
 
 
+def _escape_html(text: str) -> str:
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def _math_html(left: str, operator: str, right: str) -> str | None:
+    left_html = _escape_html(left)
+    right_html = _escape_html(right)
+    if operator == "^":
+        return f"{left_html}<sup>{right_html}</sup>"
+    if operator == "_":
+        return f"{left_html}<sub>{right_html}</sub>"
+    if operator == "/":
+        return f"{left_html}&divide;{right_html}"
+    return None
+
+
+def _auto_convert_math_token(editor: QTextEdit) -> bool:
+    cursor = editor.textCursor()
+    block = cursor.block()
+    block_start = block.position()
+    rel_pos = max(0, cursor.position() - block_start)
+    text = block.text()
+    prefix = text[:rel_pos].rstrip()
+    match = _MATH_TOKEN_RE.search(prefix)
+    if match is None:
+        return False
+    html = _math_html(match.group(1), match.group(2), match.group(3))
+    if not html:
+        return False
+    start = block_start + match.start()
+    end = block_start + match.end()
+    replace = editor.textCursor()
+    replace.setPosition(start)
+    replace.setPosition(end, QTextCursor.MoveMode.KeepAnchor)
+    replace.insertHtml(html)
+    editor.setTextCursor(replace)
+    return True
+
+
 def _install_text_backspace_behavior() -> None:
     try:
+        from . import final_focus_editing_icons_patch as focus_patch
         from . import text_toolbar_final_event_safety_patch as final_event
+        from . import ui_text_tool_final_patch as text_final
     except Exception:
         return
     if getattr(final_event, "_project_backspace_behavior_patch", "") == PATCH_VERSION:
@@ -384,9 +426,105 @@ def _install_text_backspace_behavior() -> None:
         editor.setTextCursor(cursor)
         final_event._save_editor(editor)
 
+    original_handler = final_event._handle_editor_event
+
+    def final_text_key_handler(editor: QTextEdit, event) -> bool:
+        if event.type() == QEvent.Type.KeyPress and event.key() == Qt.Key.Key_Space:
+            QTextEdit.keyPressEvent(editor, event)
+            _auto_convert_math_token(editor)
+            final_event._save_editor(editor)
+            event.accept()
+            return True
+        if event.type() == QEvent.Type.KeyPress and event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+            if original_handler(editor, event):
+                return True
+            _auto_convert_math_token(editor)
+            QTextEdit.keyPressEvent(editor, event)
+            final_event._save_editor(editor)
+            event.accept()
+            return True
+        return original_handler(editor, event)
+
     final_event._delete_previous_char = delete_previous_char
     final_event._delete_next_char = delete_next_char
+    final_event._handle_editor_event = final_text_key_handler
+    text_final._handle_editor_key = final_text_key_handler
+    focus_patch._handle_editor_key = final_text_key_handler
     final_event._project_backspace_behavior_patch = PATCH_VERSION
+    _install_application_text_filter(final_event)
+
+
+class _ProjectTextKeyFilter(QObject):
+    def __init__(self, final_event, parent=None) -> None:
+        super().__init__(parent)
+        self._final_event = final_event
+
+    def eventFilter(self, watched, event) -> bool:  # noqa: N802
+        if isinstance(watched, QTextEdit) and self._final_event._handle_editor_event(watched, event):
+            return True
+        return super().eventFilter(watched, event)
+
+
+def _install_application_text_filter(final_event=None) -> None:
+    app = QApplication.instance()
+    if app is None:
+        return
+    if final_event is None:
+        try:
+            from . import text_toolbar_final_event_safety_patch as final_event
+        except Exception:
+            return
+    old_filter = getattr(app, "_engineering_project_text_key_filter", None)
+    if old_filter is not None and getattr(old_filter, "_project_version", "") == PATCH_VERSION:
+        return
+    if old_filter is not None:
+        try:
+            app.removeEventFilter(old_filter)
+        except Exception:
+            pass
+    filter_obj = _ProjectTextKeyFilter(final_event, app)
+    filter_obj._project_version = PATCH_VERSION
+    app.installEventFilter(filter_obj)
+    app._engineering_project_text_key_filter = filter_obj
+
+
+def _install_shortcut_policy() -> None:
+    try:
+        from . import text_line_math_symbols_patch as line_patch
+        from . import workspace as edw
+        from src.engineers_tools.app import engineering_properties_patch as epp
+    except Exception:
+        return
+    if getattr(epp, "_project_text_shortcut_policy", "") == PATCH_VERSION:
+        return
+
+    cleaned = []
+    has_math = False
+    for key, label, default, method in epp.SHORTCUT_SPECS:
+        if key == "delete_alt" and default.strip().lower() == "backspace":
+            default = ""
+        if key == "convert_selected_math":
+            has_math = True
+        cleaned.append((key, label, default, method))
+    if not has_math:
+        cleaned.append(("convert_selected_math", "Convert Selected Text To Math", "Ctrl+M", "_convert_selected_text_to_math"))
+    epp.SHORTCUT_SPECS = tuple(cleaned)
+    epp.DEFAULT_SHORTCUTS = {key: sequence for key, _label, sequence, _method in epp.SHORTCUT_SPECS}
+
+    old_install = epp._install_shortcuts
+
+    def install_shortcuts(workspace, shortcuts: dict[str, str]) -> None:
+        filtered = dict(shortcuts or {})
+        if str(filtered.get("delete_alt", "")).strip().lower() == "backspace":
+            filtered["delete_alt"] = ""
+        old_install(workspace, filtered)
+
+    def convert_selected_text_to_math(self) -> None:
+        line_patch._convert_selection_to_math(self)
+
+    epp._install_shortcuts = install_shortcuts
+    edw.EngineeringDesignWorkspace._convert_selected_text_to_math = convert_selected_text_to_math
+    epp._project_text_shortcut_policy = PATCH_VERSION
 
 
 def _install_shared_arrow_styles() -> None:
@@ -403,6 +541,7 @@ def _install_shared_arrow_styles() -> None:
         line_patch._spin_style = _style_numeric_spin
     except Exception:
         pass
+    _install_shortcut_policy()
     _install_text_list_none_behavior()
     _install_text_backspace_behavior()
 
@@ -460,9 +599,10 @@ def _patch_workspace_text_controls() -> None:
     def workspace_init(self, module) -> None:
         old_init(self, module)
         _install_shared_arrow_styles()
+        _install_application_text_filter()
         _wire_text_controls(self)
         for delay in (0, 120, 350, 900):
-            QTimer.singleShot(delay, lambda root=self: (_install_shared_arrow_styles(), _wire_text_controls(root)))
+            QTimer.singleShot(delay, lambda root=self: (_install_shared_arrow_styles(), _install_application_text_filter(), _wire_text_controls(root)))
 
     edw.EngineeringDesignWorkspace.__init__ = workspace_init
     edw.EngineeringDesignWorkspace._engineering_project_text_controls_patch = PATCH_VERSION
@@ -470,5 +610,6 @@ def _patch_workspace_text_controls() -> None:
 
 def apply_project_dialog_style_cursor_patch() -> None:
     _install_shared_arrow_styles()
+    _install_application_text_filter()
     _patch_known_dialogs()
     _patch_workspace_text_controls()
