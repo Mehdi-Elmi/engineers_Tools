@@ -8,7 +8,7 @@ blue/orange visual language for Text controls.
 
 from __future__ import annotations
 
-PATCH_VERSION = "engineering-ui-text-runtime-guard-2026-07-02-c"
+PATCH_VERSION = "engineering-ui-text-runtime-guard-2026-07-02-d"
 
 FONT_CHOICES = (
     "Times New Roman",
@@ -20,12 +20,6 @@ FONT_CHOICES = (
     "B Yekan",
     "B Koodak",
     "B Traffic",
-    "Arial",
-    "Calibri",
-    "Cambria",
-    "Cambria Math",
-    "Consolas",
-    "Symbol",
 )
 
 POLISHED_TEXTBAR_STYLE = (
