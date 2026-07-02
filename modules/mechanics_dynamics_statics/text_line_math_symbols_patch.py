@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 
 from PySide6.QtCore import QTimer, Qt
-from PySide6.QtGui import QColor, QFont, QTextCharFormat
+from PySide6.QtGui import QColor, QFont, QTextBlockFormat, QTextCharFormat
 from PySide6.QtWidgets import (
     QColorDialog,
     QComboBox,
@@ -38,6 +38,8 @@ COLOR_NAMES = {
 GREEK = ("α", "β", "γ", "δ", "ε", "ζ", "η", "θ", "λ", "μ", "π", "ρ", "σ", "τ", "φ", "ω", "Γ", "Δ", "Θ", "Λ", "Π", "Σ", "Φ", "Ω")
 OPERATORS = ("±", "×", "÷", "=", "≠", "≤", "≥", "≈", "≡", "∞", "√", "∛", "∑", "∏", "∫", "∂", "∇", "∈", "∉", "∩", "∪", "⊂", "⊆")
 ARROWS = ("←", "→", "↑", "↓", "↔", "↕", "↦", "⇒", "⇐", "⇔", "↗", "↘", "↙", "↖")
+BULLETS = ("●", "○", "■", "◆", "➤", "✓")
+NUMBERING = ("1.", "1)", "I.", "A.", "a.", "i.")
 
 
 def _font(widget: QWidget, size: int = 10, *, bold: bool = True, symbol: bool = False) -> None:
@@ -108,9 +110,14 @@ def _root_editor(root: QWidget | None):
 
 
 def _save(root: QWidget | None) -> None:
-    canvas, _editor = _root_editor(root)
+    canvas, editor = _root_editor(root)
     if canvas is None:
         return
+    try:
+        from . import ui_text_tool_final_patch as text_final
+        text_final._save_editor_text(canvas, editor)
+    except Exception:
+        pass
     try:
         from . import text_toolbar_word_behavior_patch as word
         word._save_active_editor(canvas)
@@ -134,11 +141,16 @@ def _insert_symbol(root: QWidget | None, symbol: str) -> None:
 
 
 def _apply_line_spacing(root: QWidget | None, value: float) -> None:
-    try:
-        from . import text_toolbar_word_behavior_patch as word
-        word._apply_line_spacing(root, value)
-    except Exception:
-        pass
+    _canvas, editor = _root_editor(root)
+    if editor is None:
+        return
+    cursor = editor.textCursor()
+    block = QTextBlockFormat(cursor.blockFormat())
+    block.setLineHeight(int(value * 100), QTextBlockFormat.LineHeightTypes.ProportionalHeight.value)
+    cursor.mergeBlockFormat(block)
+    editor.setTextCursor(cursor)
+    editor.setFocus()
+    _save(root)
 
 
 def _buttons(root: QWidget | None) -> dict:
@@ -157,6 +169,85 @@ def _add_symbol_section(menu: QMenu, title: str, symbols: tuple[str, ...], root:
         action_font.setItalic(False)
         action.setFont(action_font)
         action.triggered.connect(lambda checked=False, s=symbol, w=root: _insert_symbol(w, s))
+
+
+def _insert_list_prefix(root: QWidget | None, prefix: str) -> None:
+    _canvas, editor = _root_editor(root)
+    if editor is None:
+        return
+    cursor = editor.textCursor()
+    cursor.insertText(f"{prefix} ")
+    editor.setTextCursor(cursor)
+    editor.setFocus()
+    _save(root)
+
+
+def _open_line_spacing_settings(root: QWidget | None) -> None:
+    dialog = QDialog(root)
+    dialog.setWindowTitle("Line and Paragraph Settings")
+    dialog.setModal(True)
+    dialog.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.FramelessWindowHint)
+    dialog.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+    dialog.setMinimumSize(360, 190)
+    dialog.setStyleSheet(
+        "QDialog{background:transparent;}"
+        "QWidget#DialogRoot{background:#ffffff;border:1px solid #95aac5;border-radius:16px;}"
+        "QWidget#DialogHeader{background:#102238;border-top-left-radius:16px;border-top-right-radius:16px;}"
+        "QWidget#DialogBody{background:#ffffff;border-bottom-left-radius:16px;border-bottom-right-radius:16px;}"
+        "QLabel{color:#173454;font-family:'Times New Roman';font-weight:900;font-style:normal;}"
+    )
+    outer = QVBoxLayout(dialog)
+    outer.setContentsMargins(0, 0, 0, 0)
+    shell = QWidget(dialog)
+    shell.setObjectName("DialogRoot")
+    outer.addWidget(shell)
+    root_layout = QVBoxLayout(shell)
+    root_layout.setContentsMargins(0, 0, 0, 0)
+    root_layout.setSpacing(0)
+    header = QWidget(shell)
+    header.setObjectName("DialogHeader")
+    header.setFixedHeight(42)
+    header_row = QHBoxLayout(header)
+    header_row.setContentsMargins(12, 4, 10, 4)
+    logo = QLabel("A", header)
+    logo.setFixedSize(28, 28)
+    logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    logo.setStyleSheet("QLabel{background:#ffffff;border:1px solid #7fa6ca;border-radius:5px;color:#123d6f;font-size:16px;font-weight:900;}")
+    title = QLabel("Line and Paragraph Settings", header)
+    _font(title, 12)
+    title.setStyleSheet("QLabel{color:#ffffff;font-style:italic;font-weight:900;}")
+    header_row.addWidget(logo)
+    header_row.addWidget(title, 1)
+    root_layout.addWidget(header)
+    body = QWidget(shell)
+    body.setObjectName("DialogBody")
+    body_layout = QVBoxLayout(body)
+    body_layout.setContentsMargins(16, 14, 16, 14)
+    body_layout.setSpacing(10)
+    root_layout.addWidget(body, 1)
+    form = QFormLayout()
+    value = QDoubleSpinBox()
+    value.setRange(0.5, 6.0)
+    value.setDecimals(2)
+    value.setSingleStep(0.05)
+    value.setValue(1.15)
+    _spin_style(value)
+    form.addRow("Line spacing", value)
+    body_layout.addLayout(form)
+    actions = QHBoxLayout()
+    actions.addStretch(1)
+    ok = QPushButton("OK")
+    cancel = QPushButton("Cancel")
+    for button in (ok, cancel):
+        button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        button.setStyleSheet(_button_style("QPushButton"))
+    ok.clicked.connect(dialog.accept)
+    cancel.clicked.connect(dialog.reject)
+    actions.addWidget(ok)
+    actions.addWidget(cancel)
+    body_layout.addLayout(actions)
+    if dialog.exec() == QDialog.DialogCode.Accepted:
+        _apply_line_spacing(root, value.value())
 
 
 def _open_list_settings(root: QWidget | None, mode: str) -> None:
@@ -215,8 +306,7 @@ def _open_list_settings(root: QWidget | None, mode: str) -> None:
     form = QFormLayout()
     form.setHorizontalSpacing(10)
     form.setVerticalSpacing(7)
-    style = QComboBox(); style.addItems(["●", "○", "■", "◆", "➤", "✓"] if mode == "bullet" else ["1.", "1)", "I.", "A.", "a.", "i."])
-    _combo_style(style)
+    style = QComboBox(); style.addItems(list(BULLETS if mode == "bullet" else NUMBERING)); _combo_style(style)
     size = QSpinBox(); size.setRange(4, 96); size.setValue(12); size.setSuffix(" pt"); _spin_style(size)
     start = QSpinBox(); start.setRange(1, 9999); start.setValue(1); _spin_style(start)
     indent = QDoubleSpinBox(); indent.setRange(0, 100); indent.setDecimals(2); indent.setValue(7.0); indent.setSuffix(" mm"); _spin_style(indent)
@@ -318,53 +408,72 @@ def _open_list_settings(root: QWidget | None, mode: str) -> None:
         })
 
 
+def _replace_menu(button: QPushButton, property_name: str) -> QMenu:
+    old = button.menu()
+    if old is not None:
+        old.deleteLater()
+    menu = QMenu(button)
+    _prepare_menu(menu)
+    button.setMenu(menu)
+    button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+    button.setProperty(property_name, PATCH_VERSION)
+    return menu
+
+
 def _apply_text_menus(root: QWidget | None) -> None:
     buttons = _buttons(root)
+
     line = buttons.get("Line spacing")
     if isinstance(line, QPushButton) and line.property("lineMenuVersion") != PATCH_VERSION:
-        menu = QMenu(line)
-        _prepare_menu(menu)
+        menu = _replace_menu(line, "lineMenuVersion")
         for label, value in (("1.0", 1.0), ("1.15", 1.15), ("1.5", 1.5), ("2.0", 2.0)):
             action = menu.addAction(label)
             action.triggered.connect(lambda checked=False, v=value, w=root: _apply_line_spacing(w, v))
         menu.addSeparator()
         action = menu.addAction("Line and paragraph settings...")
-        action.triggered.connect(lambda checked=False, w=root: _apply_line_spacing(w, 1.15))
-        line.setMenu(menu)
+        action.triggered.connect(lambda checked=False, w=root: _open_line_spacing_settings(w))
         line.setToolTip("Line spacing")
-        line.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        line.setProperty("lineMenuVersion", PATCH_VERSION)
 
     math = buttons.get("Math symbols")
     if isinstance(math, QPushButton) and math.property("mathMenuVersion") != PATCH_VERSION:
-        menu = QMenu(math)
+        menu = _replace_menu(math, "mathMenuVersion")
         _prepare_menu(menu, symbol=True)
         _add_symbol_section(menu, "Greek letters", GREEK, root)
         _add_symbol_section(menu, "Math operators", OPERATORS, root)
         _add_symbol_section(menu, "Arrows", ARROWS, root)
-        math.setMenu(menu)
         math.setToolTip("Math symbols")
-        math.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        math.setProperty("mathMenuVersion", PATCH_VERSION)
 
     bullet = buttons.get("Bullet")
-    if isinstance(bullet, QPushButton) and bullet.menu() is not None:
-        menu = bullet.menu()
-        _prepare_menu(menu)
-        if menu.property("lineMathCustomBulletVersion") != PATCH_VERSION:
-            menu.addSeparator()
-            action = menu.addAction("Custom bullet settings...")
-            action.triggered.connect(lambda checked=False, w=root: _open_list_settings(w, "bullet"))
-            menu.setProperty("lineMathCustomBulletVersion", PATCH_VERSION)
+    if isinstance(bullet, QPushButton) and bullet.property("bulletMenuVersion") != PATCH_VERSION:
+        menu = _replace_menu(bullet, "bulletMenuVersion")
+        none = menu.addAction("None")
+        none.triggered.connect(lambda checked=False, w=root: None)
+        for value in BULLETS:
+            action = menu.addAction(value)
+            action_font = QFont("Segoe UI Symbol", 11, QFont.Weight.Normal)
+            action_font.setItalic(False)
+            action.setFont(action_font)
+            action.triggered.connect(lambda checked=False, v=value, w=root: _insert_list_prefix(w, v))
+        menu.addSeparator()
+        action = menu.addAction("Custom bullet settings...")
+        action.triggered.connect(lambda checked=False, w=root: _open_list_settings(w, "bullet"))
+        bullet.setToolTip("Bullet")
+
     numbering = buttons.get("Numbering")
-    if isinstance(numbering, QPushButton) and numbering.menu() is not None:
-        menu = numbering.menu()
-        _prepare_menu(menu)
-        if menu.property("lineMathCustomNumberingVersion") != PATCH_VERSION:
-            menu.addSeparator()
-            action = menu.addAction("Custom numbering settings...")
-            action.triggered.connect(lambda checked=False, w=root: _open_list_settings(w, "numbering"))
-            menu.setProperty("lineMathCustomNumberingVersion", PATCH_VERSION)
+    if isinstance(numbering, QPushButton) and numbering.property("numberingMenuVersion") != PATCH_VERSION:
+        menu = _replace_menu(numbering, "numberingMenuVersion")
+        none = menu.addAction("None")
+        none.triggered.connect(lambda checked=False, w=root: None)
+        for value in NUMBERING:
+            action = menu.addAction(value)
+            action_font = QFont("Times New Roman", 10, QFont.Weight.Normal)
+            action_font.setItalic(False)
+            action.setFont(action_font)
+            action.triggered.connect(lambda checked=False, v=value, w=root: _insert_list_prefix(w, v))
+        menu.addSeparator()
+        action = menu.addAction("Custom numbering settings...")
+        action.triggered.connect(lambda checked=False, w=root: _open_list_settings(w, "numbering"))
+        numbering.setToolTip("Numbering")
 
 
 def apply_text_line_math_symbols_patch() -> None:
