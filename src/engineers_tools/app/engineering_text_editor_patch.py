@@ -8,24 +8,46 @@ from PySide6.QtCore import QEvent, QObject, QPoint, Qt
 from PySide6.QtGui import QTextCursor
 from PySide6.QtWidgets import QApplication, QInputDialog, QLineEdit, QMenu, QPlainTextEdit, QTextEdit, QWidget
 
+try:
+    from shiboken6 import isValid as _qt_is_valid
+except Exception:  # pragma: no cover - defensive fallback for unusual runtimes.
+    def _qt_is_valid(widget) -> bool:
+        return widget is not None
 
-VERSION = "text-editor-priority-2"
+
+VERSION = "text-editor-priority-3"
 _TEXT_FILTER: QObject | None = None
 _LAST_TEXT_EDITOR: QWidget | None = None
 _ORIGINAL_ACTIONS: dict[tuple[type, str], object] = {}
 
 
+def _safe_is_valid(widget) -> bool:
+    if widget is None:
+        return False
+    try:
+        return bool(_qt_is_valid(widget))
+    except RuntimeError:
+        return False
+    except Exception:
+        return False
+
+
 def _is_text_editor(widget) -> bool:
-    return isinstance(widget, (QTextEdit, QPlainTextEdit, QLineEdit))
+    return _safe_is_valid(widget) and isinstance(widget, (QTextEdit, QPlainTextEdit, QLineEdit))
 
 
 def _editor_from(widget) -> QWidget | None:
     current = widget
     depth = 0
     while isinstance(current, QWidget) and depth < 8:
+        if not _safe_is_valid(current):
+            return None
         if _is_text_editor(current):
             return current
-        current = current.parentWidget()
+        try:
+            current = current.parentWidget()
+        except RuntimeError:
+            return None
         depth += 1
     return None
 
@@ -35,11 +57,23 @@ def _active_editor() -> QWidget | None:
     app = QApplication.instance()
     focus = app.focusWidget() if app is not None else None
     editor = _editor_from(focus)
-    if editor is not None and editor.isVisible() and editor.isEnabled():
-        _LAST_TEXT_EDITOR = editor
-        return editor
-    if _LAST_TEXT_EDITOR is not None and _LAST_TEXT_EDITOR.isVisible() and _LAST_TEXT_EDITOR.isEnabled() and _LAST_TEXT_EDITOR.hasFocus():
-        return _LAST_TEXT_EDITOR
+    try:
+        if editor is not None and editor.isVisible() and editor.isEnabled():
+            _LAST_TEXT_EDITOR = editor
+            return editor
+    except RuntimeError:
+        editor = None
+    if not _safe_is_valid(_LAST_TEXT_EDITOR):
+        if _LAST_TEXT_EDITOR is not None:
+            logging.info("engineering_text_editor_patch: cleared deleted text editor reference")
+        _LAST_TEXT_EDITOR = None
+        return None
+    try:
+        if _LAST_TEXT_EDITOR.isVisible() and _LAST_TEXT_EDITOR.isEnabled() and _LAST_TEXT_EDITOR.hasFocus():
+            return _LAST_TEXT_EDITOR
+    except RuntimeError:
+        logging.info("engineering_text_editor_patch: cleared deleted text editor reference after RuntimeError")
+        _LAST_TEXT_EDITOR = None
     return None
 
 
@@ -146,6 +180,8 @@ class _TextEditorPriorityFilter(QObject):
             return _show_text_menu(editor, global_pos)
         if event.type() != QEvent.Type.KeyPress:
             return False
+        if isinstance(editor, (QTextEdit, QPlainTextEdit)):
+            return False
         modifiers = event.modifiers()
         ctrl = bool(modifiers & Qt.KeyboardModifier.ControlModifier)
         shift = bool(modifiers & Qt.KeyboardModifier.ShiftModifier)
@@ -172,19 +208,30 @@ class _TextEditorPriorityFilter(QObject):
 
 
 def _run_text_action(action: str) -> bool:
-    editor = _active_editor()
+    global _LAST_TEXT_EDITOR
+    try:
+        editor = _active_editor()
+    except RuntimeError:
+        logging.info("engineering_text_editor_patch: ignored text action %s because the editor was already deleted", action)
+        _LAST_TEXT_EDITOR = None
+        return False
     if editor is None:
         return False
-    if action == "copy":
-        return _copy_text(editor)
-    if action == "cut":
-        return _cut_text(editor)
-    if action == "paste":
-        return _paste_text(editor)
-    if action == "delete":
-        return _delete_text(editor, backwards=False)
-    if action == "select_all":
-        return _select_all_text(editor)
+    try:
+        if action == "copy":
+            return _copy_text(editor)
+        if action == "cut":
+            return _cut_text(editor)
+        if action == "paste":
+            return _paste_text(editor)
+        if action == "delete":
+            return _delete_text(editor, backwards=False)
+        if action == "select_all":
+            return _select_all_text(editor)
+    except RuntimeError:
+        logging.info("engineering_text_editor_patch: ignored text action %s after deleted editor RuntimeError", action)
+        _LAST_TEXT_EDITOR = None
+        return False
     return False
 
 
