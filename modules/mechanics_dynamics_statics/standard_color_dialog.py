@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QPoint, QRect, Signal, Qt
-from PySide6.QtGui import QColor, QCursor, QGuiApplication, QImage, QPainter, QPen
+import tempfile
+from pathlib import Path
+
+from PySide6.QtCore import QPoint, QPointF, QRect, Signal, Qt
+from PySide6.QtGui import QColor, QCursor, QGuiApplication, QImage, QPainter, QPen, QPixmap, QPolygonF
 from PySide6.QtWidgets import (
     QFrame,
     QGridLayout,
@@ -30,6 +33,7 @@ _BASIC_COLORS = [
     ("#2020ff", "Blue"), ("#ff40ff", "Magenta"), ("#8080ff", "Soft Blue"), ("#ff80ff", "Soft Pink"),
     ("#80ffff", "Light Cyan"), ("#c0ffff", "Pale Cyan"), ("#e6ffff", "Ice"), ("#ffffff", "White"),
 ]
+_ARROW_CACHE: dict[str, str] = {}
 
 _CLOSE_STYLE = (
     "QPushButton{background:#102238;border:1px solid #102238;border-radius:9px;color:#ffffff;"
@@ -53,15 +57,39 @@ _SWATCH_STYLE = (
     "QPushButton:hover{border:2px solid #ff8a35;}"
     "QPushButton:pressed{border:2px solid #173454;}"
 )
-_SPIN_STYLE = (
-    "QSpinBox{background:#fffefa;border:1px solid #b88718;border-radius:6px;color:#173454;"
-    "font-family:'Times New Roman';font-size:12px;font-weight:900;font-style:normal;padding:1px 20px 1px 6px;outline:0;}"
-    "QSpinBox::up-button{width:18px;border-left:1px solid #b88718;border-top-right-radius:5px;"
-    "background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #ffe8a8,stop:1 #f1b33d);}"
-    "QSpinBox::down-button{width:18px;border-left:1px solid #b88718;border-bottom-right-radius:5px;"
-    "background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #ffe8a8,stop:1 #f1b33d);}"
-)
 _GROUP_STYLE = "QFrame{background:#f7fbff;border:1px solid #9fb1c7;border-radius:10px;}"
+
+
+def _arrow_path(direction: str) -> str:
+    cached = _ARROW_CACHE.get(direction)
+    if cached:
+        return cached
+    pixmap = QPixmap(18, 18)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+    painter.setBrush(QColor("#173454"))
+    painter.setPen(Qt.PenStyle.NoPen)
+    points = [QPointF(9, 4), QPointF(14, 12), QPointF(4, 12)] if direction == "up" else [QPointF(4, 6), QPointF(14, 6), QPointF(9, 14)]
+    painter.drawPolygon(QPolygonF(points))
+    painter.end()
+    path = Path(tempfile.gettempdir()) / f"engineering_custom_color_arrow_{direction}_20260702.png"
+    pixmap.save(path.as_posix(), "PNG")
+    _ARROW_CACHE[direction] = path.as_posix()
+    return path.as_posix()
+
+
+def _spin_style() -> str:
+    return (
+        "QSpinBox{background:#fffefa;border:1px solid #b88718;border-radius:7px;color:#173454;"
+        "font-family:'Times New Roman';font-size:12px;font-weight:900;font-style:normal;padding:1px 24px 1px 6px;outline:0;}"
+        "QSpinBox::up-button{width:21px;border-left:1px solid #b88718;border-top-right-radius:6px;"
+        "background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #ffe8a8,stop:1 #f1b33d);}"
+        "QSpinBox::down-button{width:21px;border-left:1px solid #b88718;border-bottom-right-radius:6px;"
+        "background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #ffe8a8,stop:1 #f1b33d);}"
+        f"QSpinBox::up-arrow{{image:url({_arrow_path('up')});width:14px;height:14px;}}"
+        f"QSpinBox::down-arrow{{image:url({_arrow_path('down')});width:14px;height:14px;}}"
+    )
 
 
 class _ColorPlane(QWidget):
@@ -211,19 +239,20 @@ def _make_spin(value: int, parent: QWidget, maximum: int = 255) -> QSpinBox:
         spin.lineEdit().setFocusPolicy(Qt.FocusPolicy.StrongFocus)
     except Exception:
         pass
-    spin.setStyleSheet(_SPIN_STYLE)
+    spin.setStyleSheet(_spin_style())
     return spin
 
 
-def _group(parent: QWidget, title: str) -> tuple[QFrame, QVBoxLayout]:
+def _group(parent: QWidget, title: str | None = None) -> tuple[QFrame, QVBoxLayout]:
     frame = QFrame(parent)
     frame.setStyleSheet(_GROUP_STYLE)
     layout = QVBoxLayout(frame)
     layout.setContentsMargins(8, 7, 8, 8)
     layout.setSpacing(5)
-    label = QLabel(title, frame)
-    _style_label(label)
-    layout.addWidget(label)
+    if title:
+        label = QLabel(title, frame)
+        _style_label(label)
+        layout.addWidget(label)
     return frame, layout
 
 
@@ -236,10 +265,10 @@ def get_custom_color(parent: QWidget | None, current: str = "#000000", title: st
 
     selected = {"color": QColor(_normal_hex(current))}
     custom_colors = ["#ffffff"] * 16
-    dialog, body, body_layout = ui_shell._dialog_shell(parent, title or "Add Custom Color", (790, 500))
+    dialog, body, body_layout = ui_shell._dialog_shell(parent, title or "Add Custom Color", (650, 505))
     _ensure_close_button(dialog, body, body_layout)
     body.setStyleSheet("QWidget#DialogBody{background:qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #eef7ff,stop:1 #fff5dc);border-bottom-left-radius:16px;border-bottom-right-radius:16px;} QWidget{background:transparent;}")
-    body_layout.setContentsMargins(12, 10, 12, 10)
+    body_layout.setContentsMargins(10, 10, 10, 10)
     body_layout.setSpacing(7)
 
     main = QHBoxLayout()
@@ -247,39 +276,135 @@ def get_custom_color(parent: QWidget | None, current: str = "#000000", title: st
     main.setSpacing(10)
     body_layout.addLayout(main)
 
-    left_group, left = _group(body, "Basic colors")
-    left_group.setMinimumWidth(240)
-    main.addWidget(left_group)
+    left_column = QVBoxLayout()
+    left_column.setContentsMargins(0, 0, 0, 0)
+    left_column.setSpacing(7)
+    main.addLayout(left_column)
+
+    colors_group, colors_layout = _group(body, "Basic colors")
+    colors_group.setFixedWidth(252)
+    left_column.addWidget(colors_group)
     basic_grid = QGridLayout()
     basic_grid.setHorizontalSpacing(4)
     basic_grid.setVerticalSpacing(4)
-    left.addLayout(basic_grid)
+    colors_layout.addLayout(basic_grid)
 
-    center_group, center = _group(body, "Color spectrum")
-    center_group.setMinimumWidth(258)
-    main.addWidget(center_group)
+    for index, (hex_value, name) in enumerate(_BASIC_COLORS):
+        button = QPushButton("", colors_group)
+        button.setToolTip(name)
+        button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        button.setStyleSheet(_SWATCH_STYLE % hex_value)
+        button.clicked.connect(lambda checked=False, value=hex_value: set_color(QColor(value)))
+        basic_grid.addWidget(button, index // 8, index % 8)
+
+    pick_screen = QPushButton("Pick Screen Color", colors_group)
+    pick_screen.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+    pick_screen.setStyleSheet(_BUTTON_STYLE)
+    colors_layout.addWidget(pick_screen)
+
+    custom_label = QLabel("Custom colors", colors_group)
+    _style_label(custom_label)
+    colors_layout.addWidget(custom_label)
+    custom_grid = QGridLayout()
+    custom_grid.setHorizontalSpacing(4)
+    custom_grid.setVerticalSpacing(4)
+    colors_layout.addLayout(custom_grid)
+    custom_buttons: list[QPushButton] = []
+    for index in range(16):
+        button = QPushButton("", colors_group)
+        button.setToolTip("Custom Color")
+        button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        button.setStyleSheet(_SWATCH_STYLE % custom_colors[index])
+        button.clicked.connect(lambda checked=False, i=index: set_color(QColor(custom_colors[i])))
+        custom_buttons.append(button)
+        custom_grid.addWidget(button, index // 8, index % 8)
+    add_custom = QPushButton("Add to Custom Colors", colors_group)
+    add_custom.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+    add_custom.setStyleSheet(_BUTTON_STYLE)
+    colors_layout.addWidget(add_custom)
+
+    values_group, values_layout = _group(body, "Color values")
+    values_group.setFixedWidth(252)
+    left_column.addWidget(values_group)
+    value_grid = QGridLayout()
+    value_grid.setContentsMargins(0, 0, 0, 0)
+    value_grid.setHorizontalSpacing(6)
+    value_grid.setVerticalSpacing(4)
+    values_layout.addLayout(value_grid)
+
+    hue_spin = _make_spin(216, values_group, 359)
+    sat_spin = _make_spin(206, values_group)
+    val_spin = _make_spin(246, values_group)
+    red_spin = _make_spin(47, values_group)
+    green_spin = _make_spin(125, values_group)
+    blue_spin = _make_spin(246, values_group)
+
+    def add_value_cell(row: int, column: int, label_text: str, spin: QSpinBox) -> None:
+        holder = QWidget(values_group)
+        layout = QHBoxLayout(holder)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(3)
+        label = QLabel(label_text, holder)
+        label.setFixedWidth(34)
+        _style_label(label)
+        layout.addWidget(label)
+        layout.addWidget(spin)
+        value_grid.addWidget(holder, row, column)
+
+    add_value_cell(0, 0, "Hue:", hue_spin)
+    add_value_cell(1, 0, "Sat:", sat_spin)
+    add_value_cell(2, 0, "Val:", val_spin)
+    add_value_cell(0, 1, "Red:", red_spin)
+    add_value_cell(1, 1, "Green:", green_spin)
+    add_value_cell(2, 1, "Blue:", blue_spin)
+
+    html_row = QHBoxLayout()
+    html_row.setSpacing(5)
+    html_label = QLabel("HTML:", values_group)
+    html_label.setFixedWidth(38)
+    _style_label(html_label)
+    html_edit = QLineEdit(values_group)
+    html_edit.setFixedWidth(176)
+    html_edit.setStyleSheet("QLineEdit{background:#ffffff;border:1px solid #9fb1c7;border-radius:6px;color:#173454;font-family:'Times New Roman';font-size:12px;font-weight:900;font-style:normal;padding:2px 5px;}")
+    html_row.addWidget(html_label)
+    html_row.addWidget(html_edit)
+    values_layout.addLayout(html_row)
+    left_column.addStretch(1)
+
+    spectrum_group, spectrum_layout = _group(body, None)
+    spectrum_group.setFixedWidth(270)
+    main.addWidget(spectrum_group)
     plane_row = QHBoxLayout()
     plane_row.setContentsMargins(0, 0, 0, 0)
     plane_row.setSpacing(8)
-    plane = _ColorPlane(center_group)
-    value_slider = _ValueSlider(center_group)
+    plane = _ColorPlane(spectrum_group)
+    value_slider = _ValueSlider(spectrum_group)
     plane_row.addWidget(plane)
     plane_row.addWidget(value_slider)
-    center.addLayout(plane_row)
-    preview = QFrame(center_group)
-    preview.setFixedSize(58, 52)
-    center.addWidget(preview, alignment=Qt.AlignmentFlag.AlignLeft)
+    spectrum_layout.addLayout(plane_row)
 
-    right_group, right = _group(body, "Color values")
-    right_group.setMinimumWidth(238)
-    main.addWidget(right_group)
+    preview_row = QHBoxLayout()
+    preview_row.setContentsMargins(0, 0, 0, 0)
+    preview_row.setSpacing(8)
+    preview = QFrame(spectrum_group)
+    preview.setFixedSize(58, 48)
+    preview_row.addWidget(preview)
+    preview_row.addStretch(1)
+    spectrum_layout.addLayout(preview_row)
+    spectrum_layout.addStretch(1)
 
-    hue_spin = _make_spin(216, right_group, 359)
-    sat_spin = _make_spin(206, right_group)
-    val_spin = _make_spin(246, right_group)
-    red_spin = _make_spin(47, right_group)
-    green_spin = _make_spin(125, right_group)
-    blue_spin = _make_spin(246, right_group)
+    actions = QHBoxLayout()
+    actions.addStretch(1)
+    ok = QPushButton("OK", body)
+    cancel = QPushButton("Cancel", body)
+    for action_button in (ok, cancel):
+        action_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        action_button.setStyleSheet(_BUTTON_STYLE)
+    ok.clicked.connect(dialog.accept)
+    cancel.clicked.connect(dialog.reject)
+    actions.addWidget(ok)
+    actions.addWidget(cancel)
+    spectrum_layout.addLayout(actions)
 
     def set_color(color: QColor) -> None:
         if not color.isValid():
@@ -296,70 +421,6 @@ def get_custom_color(parent: QWidget | None, current: str = "#000000", title: st
             spin.blockSignals(False)
         html_edit.setText(selected["color"].name(QColor.NameFormat.HexRgb))
         preview.setStyleSheet("QFrame{background:%s;border:1px solid #173454;border-radius:7px;}" % selected["color"].name())
-
-    for index, (hex_value, name) in enumerate(_BASIC_COLORS):
-        button = QPushButton("", left_group)
-        button.setToolTip(name)
-        button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        button.setStyleSheet(_SWATCH_STYLE % hex_value)
-        button.clicked.connect(lambda checked=False, value=hex_value: set_color(QColor(value)))
-        basic_grid.addWidget(button, index // 8, index % 8)
-
-    pick_screen = QPushButton("Pick Screen Color", left_group)
-    pick_screen.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-    pick_screen.setStyleSheet(_BUTTON_STYLE)
-    left.addWidget(pick_screen)
-    custom_label = QLabel("Custom colors", left_group)
-    _style_label(custom_label)
-    left.addWidget(custom_label)
-    custom_grid = QGridLayout()
-    custom_grid.setHorizontalSpacing(4)
-    custom_grid.setVerticalSpacing(4)
-    left.addLayout(custom_grid)
-    custom_buttons: list[QPushButton] = []
-    for index in range(16):
-        button = QPushButton("", left_group)
-        button.setToolTip("Custom Color")
-        button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        button.setStyleSheet(_SWATCH_STYLE % custom_colors[index])
-        button.clicked.connect(lambda checked=False, i=index: set_color(QColor(custom_colors[i])))
-        custom_buttons.append(button)
-        custom_grid.addWidget(button, index // 8, index % 8)
-    add_custom = QPushButton("Add to Custom Colors", left_group)
-    add_custom.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-    add_custom.setStyleSheet(_BUTTON_STYLE)
-    left.addWidget(add_custom)
-    left.addStretch(1)
-
-    def add_spin_row(label_text: str, spin: QSpinBox) -> None:
-        row = QHBoxLayout()
-        row.setContentsMargins(0, 0, 0, 0)
-        row.setSpacing(6)
-        label = QLabel(label_text, right_group)
-        label.setFixedWidth(48)
-        _style_label(label)
-        row.addWidget(label)
-        row.addWidget(spin)
-        right.addLayout(row)
-
-    add_spin_row("Hue:", hue_spin)
-    add_spin_row("Sat:", sat_spin)
-    add_spin_row("Val:", val_spin)
-    add_spin_row("Red:", red_spin)
-    add_spin_row("Green:", green_spin)
-    add_spin_row("Blue:", blue_spin)
-    html_row = QHBoxLayout()
-    html_row.setSpacing(6)
-    html_label = QLabel("HTML:", right_group)
-    html_label.setFixedWidth(48)
-    _style_label(html_label)
-    html_edit = QLineEdit(right_group)
-    html_edit.setFixedWidth(168)
-    html_edit.setStyleSheet("QLineEdit{background:#ffffff;border:1px solid #9fb1c7;border-radius:6px;color:#173454;font-family:'Times New Roman';font-size:12px;font-weight:900;font-style:normal;padding:2px 5px;}")
-    html_row.addWidget(html_label)
-    html_row.addWidget(html_edit)
-    right.addLayout(html_row)
-    right.addStretch(1)
 
     def from_hsv() -> None:
         set_color(QColor.fromHsv(hue_spin.value(), sat_spin.value(), val_spin.value()))
@@ -399,19 +460,6 @@ def get_custom_color(parent: QWidget | None, current: str = "#000000", title: st
 
     add_custom.clicked.connect(add_to_custom)
     set_color(selected["color"])
-
-    actions = QHBoxLayout()
-    actions.addStretch(1)
-    ok = QPushButton("OK", body)
-    cancel = QPushButton("Cancel", body)
-    for button in (ok, cancel):
-        button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        button.setStyleSheet(_BUTTON_STYLE)
-    ok.clicked.connect(dialog.accept)
-    cancel.clicked.connect(dialog.reject)
-    actions.addWidget(ok)
-    actions.addWidget(cancel)
-    body_layout.addLayout(actions)
 
     if hasattr(ui_shell, "_prepare_dialog_masks"):
         ui_shell._prepare_dialog_masks(dialog)
