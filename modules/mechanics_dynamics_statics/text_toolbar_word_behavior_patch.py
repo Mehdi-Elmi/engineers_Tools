@@ -1,10 +1,10 @@
 """Word-like behavior layer for the Engineering Text toolbar.
 
-This patch runs last. It does not create a new toolbar; it normalizes the
-already-created InlineTextBar, removes focus rectangles, keeps Bold/Italic off by
-default, makes alignment and direction exclusive, forces text editors to save
-before closing, and prevents old canvas handlers from leaving hand cursors during
-Move/Rotate/Resize drags.
+This patch does not create a toolbar. It normalizes the existing InlineTextBar,
+keeps Bold/Italic off by default, makes alignment and direction exclusive, and
+saves active TextBox content without forcing the cursor to jump to the end after
+every edit. The no-jump behavior is required for normal Persian/English
+Backspace editing.
 """
 
 from __future__ import annotations
@@ -12,8 +12,8 @@ from __future__ import annotations
 import logging
 
 from PySide6.QtCore import QTimer, Qt
-from PySide6.QtGui import QFont, QTextBlockFormat, QTextCursor
-from PySide6.QtWidgets import QButtonGroup, QHBoxLayout, QMenu, QPushButton, QTextEdit, QWidget
+from PySide6.QtGui import QFont, QTextBlockFormat
+from PySide6.QtWidgets import QButtonGroup, QHBoxLayout, QPushButton, QTextEdit, QWidget
 
 PATCH_VERSION = "engineering-text-toolbar-word-behavior-2026-07-02-a"
 
@@ -30,18 +30,6 @@ _DIRECTION_TEXT = {
     "Right to left": "←¶",
 }
 _LINE_SPACING_TEXT = "↕"
-_ACTION_TO_CURSOR = {
-    "move": "move_drag",
-    "rotate": "rotate_drag",
-    "resize_n": "resize_n",
-    "resize_s": "resize_s",
-    "resize_e": "resize_e",
-    "resize_w": "resize_w",
-    "resize_ne": "resize_ne",
-    "resize_sw": "resize_sw",
-    "resize_nw": "resize_nw",
-    "resize_se": "resize_se",
-}
 
 
 def _controls(root: QWidget | None) -> dict:
@@ -66,6 +54,14 @@ def _active_editor(root: QWidget | None) -> QTextEdit | None:
     return editor if isinstance(editor, QTextEdit) else None
 
 
+def _line_height_type() -> int:
+    value = QTextBlockFormat.LineHeightTypes.ProportionalHeight
+    try:
+        return int(value.value)
+    except Exception:
+        return int(value)
+
+
 def _set_no_focus(button: QPushButton) -> None:
     button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
     button.setAutoDefault(False)
@@ -84,12 +80,6 @@ def _set_no_focus(button: QPushButton) -> None:
         button.pressed.connect(button.clearFocus)
         button.released.connect(button.clearFocus)
         button.setProperty("wordNoFocusClear", True)
-
-
-def _move_cursor_to_end(editor: QTextEdit) -> None:
-    cursor = editor.textCursor()
-    cursor.movePosition(QTextCursor.MoveOperation.End)
-    editor.setTextCursor(cursor)
 
 
 def _save_active_editor(canvas) -> None:
@@ -158,10 +148,9 @@ def _apply_line_spacing(root: QWidget | None, value: float) -> None:
         return
     cursor = editor.textCursor()
     block = cursor.blockFormat()
-    block.setLineHeight(float(value) * 100.0, QTextBlockFormat.LineHeightTypes.ProportionalHeight.value)
+    block.setLineHeight(int(float(value) * 100.0), _line_height_type())
     cursor.mergeBlockFormat(block)
     editor.setTextCursor(cursor)
-    _move_cursor_to_end(editor)
     canvas = _canvas(root)
     if canvas is not None:
         _save_active_editor(canvas)
@@ -178,7 +167,6 @@ def _apply_align(root: QWidget | None, value: str) -> None:
         "justify": Qt.AlignmentFlag.AlignJustify,
     }
     editor.setAlignment(mapping.get(value, Qt.AlignmentFlag.AlignLeft))
-    _move_cursor_to_end(editor)
     canvas = _canvas(root)
     if canvas is not None:
         _save_active_editor(canvas)
@@ -192,9 +180,7 @@ def _apply_direction(root: QWidget | None, value: str) -> None:
         direction = Qt.LayoutDirection.RightToLeft if rtl else Qt.LayoutDirection.LeftToRight
         editor.setLayoutDirection(direction)
         editor.viewport().setLayoutDirection(direction)
-        align = Qt.AlignmentFlag.AlignRight if rtl else Qt.AlignmentFlag.AlignLeft
-        editor.setAlignment(align)
-        _move_cursor_to_end(editor)
+        editor.setAlignment(Qt.AlignmentFlag.AlignRight if rtl else Qt.AlignmentFlag.AlignLeft)
     target = "Align right" if rtl else "Align left"
     for name in _ALIGN_TOOLTIPS:
         button = buttons.get(name)
@@ -205,20 +191,17 @@ def _apply_direction(root: QWidget | None, value: str) -> None:
         _save_active_editor(canvas)
 
 
-def _install_editor_tail_guard(root: QWidget | None, editor: QTextEdit) -> None:
-    if editor.property("wordTailGuard"):
+def _install_editor_save_guard(root: QWidget | None, editor: QTextEdit) -> None:
+    if editor.property("wordSaveGuard") == PATCH_VERSION:
         return
 
-    def keep_saved_and_at_end() -> None:
-        # This project currently expects typing to append at the visible end,
-        # especially for mixed Persian/English/math input.
-        _move_cursor_to_end(editor)
+    def keep_saved() -> None:
         canvas = _canvas(root)
         if canvas is not None:
             _save_active_editor(canvas)
 
-    editor.textChanged.connect(keep_saved_and_at_end)
-    editor.setProperty("wordTailGuard", True)
+    editor.textChanged.connect(keep_saved)
+    editor.setProperty("wordSaveGuard", PATCH_VERSION)
 
 
 def _normalize_editor(root: QWidget | None) -> None:
@@ -230,8 +213,7 @@ def _normalize_editor(root: QWidget | None) -> None:
     font.setBold(bool(buttons.get("Bold").isChecked()) if buttons.get("Bold") is not None else False)
     font.setItalic(bool(buttons.get("Italic").isChecked()) if buttons.get("Italic") is not None else False)
     editor.setCurrentFont(font)
-    direction = _selected_direction(root)
-    rtl = direction == "rtl"
+    rtl = _selected_direction(root) == "rtl"
     layout_direction = Qt.LayoutDirection.RightToLeft if rtl else Qt.LayoutDirection.LeftToRight
     editor.setLayoutDirection(layout_direction)
     editor.viewport().setLayoutDirection(layout_direction)
@@ -245,8 +227,7 @@ def _normalize_editor(root: QWidget | None) -> None:
         "justify": Qt.AlignmentFlag.AlignJustify,
     }
     editor.setAlignment(mapping.get(align, Qt.AlignmentFlag.AlignLeft))
-    _install_editor_tail_guard(root, editor)
-    _move_cursor_to_end(editor)
+    _install_editor_save_guard(root, editor)
     canvas = _canvas(root)
     if canvas is not None:
         _save_active_editor(canvas)
@@ -269,10 +250,6 @@ def _build_exclusive_group(bar: QWidget, root: QWidget | None, names: tuple[str,
     old = getattr(bar, attr, None)
     buttons = _buttons(root)
     if isinstance(old, QButtonGroup):
-        for name in names:
-            button = buttons.get(name)
-            if button is not None:
-                button.setChecked(name == default and not any(buttons.get(n) is not None and buttons[n].isChecked() for n in names))
         return
     group = QButtonGroup(bar)
     group.setExclusive(True)
@@ -288,81 +265,6 @@ def _build_exclusive_group(bar: QWidget, root: QWidget | None, names: tuple[str,
         group.addButton(button)
     group.buttonClicked.connect(lambda button, w=root: callback(w, button.toolTip()))
     setattr(bar, attr, group)
-
-
-def _menu_action(menu: QMenu, text: str, callback) -> None:
-    action = menu.addAction(text)
-    action.triggered.connect(lambda checked=False: callback())
-
-
-def _rebuild_text_menus(root: QWidget | None) -> None:
-    buttons = _buttons(root)
-    try:
-        from . import text_color_inline_palette_patch as list_settings
-    except Exception:
-        list_settings = None
-
-    bullet = buttons.get("Bullet")
-    if bullet is not None:
-        menu = QMenu(bullet)
-        _menu_action(menu, "None", lambda w=root: None)
-        for text, value in (("●", "filled"), ("○", "hollow"), ("■", "square"), ("◆", "diamond"), ("➤", "arrow"), ("✓", "check")):
-            _menu_action(menu, text, lambda w=root, v=value: _insert_prefix(w, "bullet", v))
-        menu.addSeparator()
-        _menu_action(menu, "Custom bullet settings...", lambda w=root: list_settings._open_settings(w, "bullet") if list_settings is not None else None)
-        bullet.setMenu(menu)
-        _set_no_focus(bullet)
-
-    numbering = buttons.get("Numbering")
-    if numbering is not None:
-        menu = QMenu(numbering)
-        _menu_action(menu, "None", lambda w=root: None)
-        for text, value in (("1. 2. 3.", "decimal_dot"), ("1) 2) 3)", "decimal_paren"), ("I. II. III.", "roman"), ("A. B. C.", "alpha_upper"), ("a. b. c.", "alpha_lower"), ("i. ii. iii.", "roman_lower")):
-            _menu_action(menu, text, lambda w=root, v=value: _insert_prefix(w, "numbering", v))
-        menu.addSeparator()
-        _menu_action(menu, "Custom numbering settings...", lambda w=root: list_settings._open_settings(w, "numbering") if list_settings is not None else None)
-        numbering.setMenu(menu)
-        _set_no_focus(numbering)
-
-    line = buttons.get("Line spacing")
-    if line is not None:
-        menu = QMenu(line)
-        for label, value in (("1.0", 1.0), ("1.15", 1.15), ("1.5", 1.5), ("2.0", 2.0)):
-            _menu_action(menu, label, lambda w=root, v=value: _apply_line_spacing(w, v))
-        menu.addSeparator()
-        _menu_action(menu, "Line and paragraph settings...", lambda w=root: _apply_line_spacing(w, 1.15))
-        line.setMenu(menu)
-        _set_no_focus(line)
-
-
-def _insert_prefix(root: QWidget | None, command: str, value: str) -> None:
-    editor = _active_editor(root)
-    if editor is None:
-        return
-    bullet_values = {
-        "filled": "• ",
-        "hollow": "○ ",
-        "square": "■ ",
-        "diamond": "◆ ",
-        "arrow": "➤ ",
-        "check": "✓ ",
-    }
-    numbering_values = {
-        "decimal_dot": "1. ",
-        "decimal_paren": "1) ",
-        "roman": "I. ",
-        "alpha_upper": "A. ",
-        "alpha_lower": "a. ",
-        "roman_lower": "i. ",
-    }
-    prefix = bullet_values.get(value, "") if command == "bullet" else numbering_values.get(value, "")
-    if not prefix:
-        return
-    editor.textCursor().insertText(prefix)
-    _move_cursor_to_end(editor)
-    canvas = _canvas(root)
-    if canvas is not None:
-        _save_active_editor(canvas)
 
 
 def _apply_word_toolbar(root: QWidget | None) -> None:
@@ -441,7 +343,6 @@ def _apply_word_toolbar(root: QWidget | None) -> None:
         "Left to right",
         lambda w, tooltip: _apply_direction(w, "rtl" if tooltip == "Right to left" else "ltr"),
     )
-    _rebuild_text_menus(root)
     _normalize_editor(root)
 
 
@@ -486,43 +387,8 @@ def _patch_editor_show_functions() -> None:
     runtime._word_behavior_editor_hooks = PATCH_VERSION
 
 
-def _set_project_cursor(canvas, svg, kind: str) -> None:
-    try:
-        setter = getattr(svg, "_set_cursor_kind", None)
-        if callable(setter):
-            setter(canvas, kind)
-            return
-        canvas.setCursor(svg.project_cursor(kind))
-    except Exception:
-        if kind.startswith("rotate"):
-            canvas.setCursor(Qt.CursorShape.CrossCursor)
-        elif kind.startswith("resize") or kind.startswith("move"):
-            canvas.setCursor(Qt.CursorShape.SizeAllCursor)
-        else:
-            canvas.setCursor(Qt.CursorShape.ArrowCursor)
-
-
-def _hover_kind(canvas, event) -> str | None:
-    try:
-        point = canvas._to_canvas_point(event.position())
-        _index, action = canvas._hit_test_object(point)
-    except Exception:
-        return None
-    return _ACTION_TO_CURSOR.get(str(action))
-
-
-def _apply_drag_cursor(canvas, svg, event=None) -> None:
-    action = getattr(canvas, "_drag_action", None)
-    kind = _ACTION_TO_CURSOR.get(str(action))
-    if kind is None and event is not None:
-        kind = _hover_kind(canvas, event)
-    if kind is not None:
-        _set_project_cursor(canvas, svg, kind)
-
-
 def _patch_canvas_interaction() -> None:
     try:
-        from . import svg_cursor_assets_activation_patch as svg
         from . import workspace as edw
     except Exception:
         return
@@ -530,36 +396,18 @@ def _patch_canvas_interaction() -> None:
         return
 
     old_press = edw.EngineeringCanvas.mousePressEvent
-    old_move = edw.EngineeringCanvas.mouseMoveEvent
     old_release = edw.EngineeringCanvas.mouseReleaseEvent
-    old_key = edw.EngineeringCanvas.keyPressEvent
 
     def mouse_press(self, event) -> None:
         _save_active_editor(self)
         old_press(self, event)
-        _apply_drag_cursor(self, svg, event)
-
-    def mouse_move(self, event) -> None:
-        old_move(self, event)
-        _apply_drag_cursor(self, svg, event)
 
     def mouse_release(self, event) -> None:
         old_release(self, event)
         _save_active_editor(self)
-        _apply_drag_cursor(self, svg, event)
-
-    def key_press(self, event) -> None:
-        editor = getattr(self, "_active_text_editor", None)
-        if isinstance(editor, QTextEdit) and editor.hasFocus():
-            editor.event(event)
-            _save_active_editor(self)
-            return
-        old_key(self, event)
 
     edw.EngineeringCanvas.mousePressEvent = mouse_press
-    edw.EngineeringCanvas.mouseMoveEvent = mouse_move
     edw.EngineeringCanvas.mouseReleaseEvent = mouse_release
-    edw.EngineeringCanvas.keyPressEvent = key_press
     edw.EngineeringCanvas._word_canvas_interaction_patch = PATCH_VERSION
 
 
