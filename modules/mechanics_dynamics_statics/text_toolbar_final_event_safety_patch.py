@@ -14,7 +14,7 @@ from PySide6.QtCore import QObject, QEvent, QTimer, Qt
 from PySide6.QtGui import QFont, QKeySequence, QTextBlockFormat
 from PySide6.QtWidgets import QButtonGroup, QPushButton, QTextEdit, QWidget
 
-PATCH_VERSION = "engineering-text-toolbar-final-event-safety-2026-07-02-e"
+PATCH_VERSION = "engineering-text-toolbar-final-event-safety-2026-07-02-f"
 
 
 class _FinalEditorEventFilter(QObject):
@@ -55,7 +55,9 @@ def _buttons(root: QWidget | None) -> dict:
 
 
 def _plain_font(editor: QTextEdit) -> None:
-    font = QFont("Times New Roman", max(1, editor.currentFont().pointSize() if editor.currentFont().pointSize() > 0 else 12))
+    current = editor.currentFont()
+    size = current.pointSize() if current.pointSize() > 0 else 12
+    font = QFont("Times New Roman", max(1, size))
     font.setBold(False)
     font.setItalic(False)
     editor.setFont(font)
@@ -66,10 +68,11 @@ def _reset_style_buttons(root: QWidget | None) -> None:
     buttons = _buttons(root)
     bold = buttons.get("Bold")
     italic = buttons.get("Italic")
-    if bold is not None:
+    if bold is not None and not bold.property("userChangedTextStyle"):
         bold.setChecked(False)
     if italic is not None:
-        italic.setChecked(False)
+        if not italic.property("userChangedTextStyle"):
+            italic.setChecked(False)
         font = italic.font()
         font.setItalic(True)
         italic.setFont(font)
@@ -185,10 +188,11 @@ def _handle_editor_event(editor: QTextEdit, event) -> bool:
         editor.paste(); _save_editor(editor); event.accept(); return True
     if _matches(event, QKeySequence.StandardKey.SelectAll):
         editor.selectAll(); event.accept(); return True
-    if event.key() == Qt.Key.Key_Backspace:
-        cursor = editor.textCursor(); cursor.deletePreviousChar(); editor.setTextCursor(cursor); _save_editor(editor); event.accept(); return True
-    if event.key() == Qt.Key.Key_Delete:
-        cursor = editor.textCursor(); cursor.deleteChar(); editor.setTextCursor(cursor); _save_editor(editor); event.accept(); return True
+    if event.key() in (Qt.Key.Key_Backspace, Qt.Key.Key_Delete):
+        QTextEdit.keyPressEvent(editor, event)
+        _save_editor(editor)
+        event.accept()
+        return True
     if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
         if _insert_active_list_after_enter(editor):
             event.accept(); return True
@@ -208,6 +212,12 @@ def _install_editor_filter(editor: QTextEdit | None) -> None:
         editor.setProperty("finalPlainDefaults", PATCH_VERSION)
     if editor.property("finalEventFilter") == PATCH_VERSION:
         return
+    old_filter = getattr(editor, "_final_event_filter", None)
+    if old_filter is not None:
+        try:
+            editor.removeEventFilter(old_filter)
+        except Exception:
+            pass
     filter_obj = _FinalEditorEventFilter(editor)
     editor.installEventFilter(filter_obj)
     editor._final_event_filter = filter_obj
