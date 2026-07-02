@@ -17,7 +17,7 @@ from PySide6.QtCore import QEvent, QObject, QPointF, QTimer, Qt
 from PySide6.QtGui import QColor, QFont, QKeySequence, QPainter, QPixmap, QPolygonF, QTextCharFormat, QTextCursor
 from PySide6.QtWidgets import QApplication, QComboBox, QDoubleSpinBox, QLineEdit, QListWidget, QPushButton, QSpinBox, QTextEdit, QWidget
 
-PATCH_VERSION = "engineering-project-dialog-style-cursor-2026-07-02-i"
+PATCH_VERSION = "engineering-project-dialog-style-cursor-2026-07-02-j"
 _ARROW_CACHE: dict[str, str] = {}
 _PREFIX_RE = re.compile(r"^\s*(?:\d+[\.)]|[ivxlcdmIVXLCDM]+[\.)]|[A-Za-z]+[\.)]|[●○■◆➤✓•])\s+")
 _MATH_TOKEN_RE = re.compile(r"([A-Za-z0-9]+)([\^_/])([A-Za-z0-9]+)$")
@@ -44,7 +44,7 @@ def _arrow_path(direction: str = "down") -> str:
         points = [QPointF(4, 6), QPointF(14, 6), QPointF(9, 14)]
     painter.drawPolygon(QPolygonF(points))
     painter.end()
-    path = Path(tempfile.gettempdir()) / f"engineering_shared_arrow_{direction}_20260702i.png"
+    path = Path(tempfile.gettempdir()) / f"engineering_shared_arrow_{direction}_20260702j.png"
     pixmap.save(path.as_posix(), "PNG")
     _ARROW_CACHE[direction] = path.as_posix()
     return path.as_posix()
@@ -339,16 +339,27 @@ def _escape_html(text: str) -> str:
     return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
-def _math_html(left: str, operator: str, right: str) -> str | None:
-    left_html = _escape_html(left)
-    right_html = _escape_html(right)
-    if operator == "^":
-        return f"{left_html}<sup>{right_html}</sup>"
-    if operator == "_":
-        return f"{left_html}<sub>{right_html}</sub>"
-    if operator == "/":
-        return f"{left_html}&divide;{right_html}"
-    return None
+def _normal_char_format(editor: QTextEdit) -> QTextCharFormat:
+    fmt = QTextCharFormat(editor.currentCharFormat())
+    fmt.setVerticalAlignment(QTextCharFormat.VerticalAlignment.AlignNormal)
+    return fmt
+
+
+def _reset_math_format(editor: QTextEdit, cursor: QTextCursor) -> None:
+    normal = _normal_char_format(editor)
+    normal.setVerticalAlignment(QTextCharFormat.VerticalAlignment.AlignNormal)
+    cursor.setCharFormat(normal)
+    editor.setCurrentCharFormat(normal)
+    editor.setTextCursor(cursor)
+
+
+def _fraction_html(top: str, bottom: str) -> str:
+    return (
+        "<table cellspacing='0' cellpadding='0' style='display:inline;vertical-align:middle;'>"
+        f"<tr><td align='center' style='padding:0 2px;'>{_escape_html(top)}</td></tr>"
+        f"<tr><td align='center' style='border-top:1px solid #132238;padding:0 2px;'>{_escape_html(bottom)}</td></tr>"
+        "</table>"
+    )
 
 
 def _auto_convert_math_token(editor: QTextEdit) -> bool:
@@ -360,14 +371,23 @@ def _auto_convert_math_token(editor: QTextEdit) -> bool:
     match = _MATH_TOKEN_RE.search(prefix)
     if match is None:
         return False
-    html = _math_html(match.group(1), match.group(2), match.group(3))
-    if not html:
-        return False
+    left, operator, right = match.group(1), match.group(2), match.group(3)
     replace = editor.textCursor()
     replace.setPosition(block_start + match.start())
     replace.setPosition(block_start + match.end(), QTextCursor.MoveMode.KeepAnchor)
-    replace.insertHtml(html)
-    editor.setTextCursor(replace)
+    normal = _normal_char_format(editor)
+    replace.removeSelectedText()
+    if operator == "/":
+        replace.insertHtml(_fraction_html(left, right))
+        _reset_math_format(editor, replace)
+        return True
+    elevated = QTextCharFormat(normal)
+    elevated.setVerticalAlignment(
+        QTextCharFormat.VerticalAlignment.AlignSuperScript if operator == "^" else QTextCharFormat.VerticalAlignment.AlignSubScript
+    )
+    replace.insertText(left, normal)
+    replace.insertText(right, elevated)
+    _reset_math_format(editor, replace)
     return True
 
 
@@ -515,6 +535,7 @@ def _install_text_backspace_behavior() -> None:
             module._handle_text_editor_key = _final_text_key_handler
             module._delete_previous_char = _delete_previous_char
             module._delete_next_char = _delete_next_char
+            module._auto_convert_math_token = _auto_convert_math_token
         except Exception:
             pass
     _install_application_text_filter()
