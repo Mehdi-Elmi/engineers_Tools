@@ -9,7 +9,7 @@ from __future__ import annotations
 import copy
 import logging
 
-from PySide6.QtCore import QTimer, Qt
+from PySide6.QtCore import QEvent, QObject, QTimer, Qt
 from PySide6.QtGui import QColor, QFont, QIcon, QKeySequence, QPainter, QPen, QPixmap, QTextCharFormat
 from PySide6.QtWidgets import (
     QApplication,
@@ -23,7 +23,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-PATCH_VERSION = "engineering-final-focus-editing-icons-2026-07-02-a"
+PATCH_VERSION = "engineering-final-focus-editing-icons-2026-07-02-b"
 
 _ALIGN_MODES = ("left", "center", "right", "justify")
 
@@ -33,6 +33,100 @@ class _NoFocusRectStyle(QProxyStyle):
         if element == QStyle.PrimitiveElement.PE_FrameFocusRect:
             return
         super().drawPrimitive(element, option, painter, widget)
+
+
+class _TextEditShortcutFilter(QObject):
+    def eventFilter(self, watched, event):  # noqa: N802
+        if not isinstance(watched, QTextEdit):
+            return False
+        if event.type() == QEvent.Type.ShortcutOverride and _is_text_shortcut(event):
+            event.accept()
+            return True
+        if event.type() == QEvent.Type.KeyPress and _handle_editor_key(watched, event):
+            return True
+        return False
+
+
+def _is_text_shortcut(event) -> bool:
+    if event.matches(QKeySequence.StandardKey.Copy):
+        return True
+    if event.matches(QKeySequence.StandardKey.Cut):
+        return True
+    if event.matches(QKeySequence.StandardKey.Paste):
+        return True
+    if event.matches(QKeySequence.StandardKey.SelectAll):
+        return True
+    return event.key() in {Qt.Key.Key_Delete, Qt.Key.Key_Backspace}
+
+
+def _canvas_for_editor(editor: QTextEdit):
+    parent = editor.parentWidget()
+    while parent is not None:
+        if hasattr(parent, "_active_text_editor") or parent.__class__.__name__ == "EngineeringCanvas":
+            return parent
+        parent = parent.parentWidget()
+    return None
+
+
+def _handle_editor_key(editor: QTextEdit, event) -> bool:
+    canvas = _canvas_for_editor(editor)
+    if event.matches(QKeySequence.StandardKey.Copy):
+        editor.copy(); event.accept(); return True
+    if event.matches(QKeySequence.StandardKey.Cut):
+        editor.cut();
+        if canvas is not None:
+            _save_editor(canvas)
+        event.accept(); return True
+    if event.matches(QKeySequence.StandardKey.Paste):
+        editor.paste();
+        if canvas is not None:
+            _save_editor(canvas)
+        event.accept(); return True
+    if event.matches(QKeySequence.StandardKey.SelectAll):
+        editor.selectAll(); event.accept(); return True
+    if event.key() == Qt.Key.Key_Delete:
+        _delete_editor_selection(editor)
+        if canvas is not None:
+            _save_editor(canvas)
+        event.accept(); return True
+    if event.key() == Qt.Key.Key_Backspace:
+        cursor = editor.textCursor()
+        if cursor.hasSelection():
+            cursor.removeSelectedText()
+        else:
+            cursor.deletePreviousChar()
+        editor.setTextCursor(cursor)
+        if canvas is not None:
+            _save_editor(canvas)
+        event.accept(); return True
+    return False
+
+
+def _install_text_shortcut_filter(root: QWidget | None = None) -> None:
+    app = QApplication.instance()
+    if app is None:
+        return
+    filter_obj = getattr(app, "_engineering_text_edit_shortcut_filter", None)
+    if filter_obj is None:
+        filter_obj = _TextEditShortcutFilter(app)
+        app._engineering_text_edit_shortcut_filter = filter_obj
+
+        def on_focus_changed(_old, now) -> None:
+            if isinstance(now, QTextEdit):
+                _install_filter_on_editor(now, filter_obj)
+
+        app.focusChanged.connect(on_focus_changed)
+    if root is not None:
+        for editor in root.findChildren(QTextEdit):
+            _install_filter_on_editor(editor, filter_obj)
+
+
+def _install_filter_on_editor(editor: QTextEdit, filter_obj: QObject) -> None:
+    if editor.property("engineeringTextShortcutFilter") == PATCH_VERSION:
+        return
+    editor.installEventFilter(filter_obj)
+    editor.setContextMenuPolicy(Qt.ContextMenuPolicy.DefaultContextMenu)
+    editor.setProperty("engineeringTextShortcutFilter", PATCH_VERSION)
 
 
 def _install_no_focus_style() -> None:
@@ -48,6 +142,7 @@ def _install_no_focus_style() -> None:
         + "\nQWidget{outline:0;}"
         + "\nQPushButton:focus,QToolButton:focus,QMenuBar:focus,QMenuBar::item:focus{outline:0;border:inherit;}"
     )
+    _install_text_shortcut_filter()
 
 
 def _remove_focus_from_widgets(root: QWidget | None) -> None:
@@ -66,6 +161,7 @@ def _remove_focus_from_widgets(root: QWidget | None) -> None:
     for menubar in root.findChildren(QMenuBar):
         menubar.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         menubar.setAttribute(Qt.WidgetAttribute.WA_MacShowFocusRect, False)
+    _install_text_shortcut_filter(root)
 
 
 def _align_icon(mode: str, *, selected: bool = False) -> QIcon:
@@ -250,16 +346,8 @@ def _patch_canvas_keys(edw) -> None:
     def key_press(self, event) -> None:
         editor = _active_editor(self)
         if editor is not None and editor.hasFocus():
-            if event.matches(QKeySequence.StandardKey.Copy):
-                editor.copy(); event.accept(); return
-            if event.matches(QKeySequence.StandardKey.Cut):
-                editor.cut(); _save_editor(self); event.accept(); return
-            if event.matches(QKeySequence.StandardKey.Paste):
-                editor.paste(); _save_editor(self); event.accept(); return
-            if event.matches(QKeySequence.StandardKey.SelectAll):
-                editor.selectAll(); event.accept(); return
-            if event.key() == Qt.Key.Key_Delete:
-                _delete_editor_selection(editor); _save_editor(self); event.accept(); return
+            if _handle_editor_key(editor, event):
+                return
             editor.keyPressEvent(event)
             _save_editor(self)
             return
@@ -311,12 +399,13 @@ def apply_final_focus_editing_icons_patch() -> None:
     def workspace_init(self, module) -> None:
         old_init(self, module)
         _install_no_focus_style()
+        _install_text_shortcut_filter(self)
         _patch_word_italic(word)
         _patch_canvas_keys(edw)
         _remove_focus_from_widgets(self)
         _apply_toolbar_icons(self)
-        for delay in (0, 150, 500):
-            QTimer.singleShot(delay, lambda root=self: (_remove_focus_from_widgets(root), _apply_toolbar_icons(root)))
+        for delay in (0, 150, 500, 1200):
+            QTimer.singleShot(delay, lambda root=self: (_remove_focus_from_widgets(root), _apply_toolbar_icons(root), _install_text_shortcut_filter(root)))
         logging.info("final_focus_editing_icons_patch: installed version=%s", PATCH_VERSION)
 
     edw.EngineeringDesignWorkspace.__init__ = workspace_init
