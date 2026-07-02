@@ -1,9 +1,9 @@
 """Focused Text Box copy and key handling fixes.
 
 This single patch owns the current Text Box stability subject:
-- text-editor shortcuts must operate inside the active editor only
-- canvas shortcuts must operate on the selected Text Box object only
-- copied Text Box objects must keep runtime text attributes and transparent view state
+- text-editor shortcuts operate inside the active editor only
+- canvas shortcuts operate on the selected Text Box object only
+- copied Text Box objects keep runtime text attributes and transparent view state
 """
 
 from __future__ import annotations
@@ -11,11 +11,11 @@ from __future__ import annotations
 import copy
 import logging
 
-from PySide6.QtCore import QEvent, Qt
+from PySide6.QtCore import QEvent, QPointF, Qt
 from PySide6.QtGui import QKeySequence, QTextCursor
 from PySide6.QtWidgets import QApplication, QTextEdit, QWidget
 
-PATCH_VERSION = "engineering-text-stability-guard-2026-07-02-g"
+PATCH_VERSION = "engineering-text-stability-guard-2026-07-02-h"
 
 _TEXT_ATTRS = (
     "is_text_box",
@@ -66,6 +66,13 @@ def _normalize_text_box(obj) -> None:
     for name, default in _TEXT_DEFAULTS.items():
         if not hasattr(obj, name):
             setattr(obj, name, _copy_value(default))
+
+
+def _normalize_canvas_objects(canvas) -> None:
+    for obj in getattr(canvas, "objects", []):
+        _normalize_text_box(obj)
+    for obj in getattr(canvas, "_clipboard", []):
+        _normalize_text_box(obj)
 
 
 def _text_editor_from_widget(widget) -> QTextEdit | None:
@@ -279,6 +286,53 @@ def _handle_text_key(editor: QTextEdit, event) -> bool:
     return False
 
 
+def _copy_canvas_selection(canvas) -> bool:
+    selected = list(canvas._selected_objects()) if hasattr(canvas, "_selected_objects") else []
+    if not selected:
+        return False
+    editor = getattr(canvas, "_active_text_editor", None)
+    if isinstance(editor, QTextEdit):
+        _save_editor(editor)
+    clones = []
+    for _index, obj in selected:
+        clone = obj.clone()
+        _normalize_text_box(clone)
+        clones.append(clone)
+    if not clones:
+        return False
+    canvas._clipboard = clones
+    canvas._last_action = "copy"
+    _normalize_canvas_objects(canvas)
+    return True
+
+
+def _cut_canvas_selection(canvas) -> bool:
+    if not _copy_canvas_selection(canvas):
+        return False
+    if hasattr(canvas, "_push_undo"):
+        canvas._push_undo()
+    if hasattr(canvas, "_delete_selected_objects"):
+        canvas._delete_selected_objects()
+    canvas._last_action = "cut"
+    _normalize_canvas_objects(canvas)
+    return True
+
+
+def _paste_canvas_clipboard(canvas) -> bool:
+    clipboard = list(getattr(canvas, "_clipboard", []) or [])
+    if not clipboard:
+        return False
+    for obj in clipboard:
+        _normalize_text_box(obj)
+    if hasattr(canvas, "_push_undo"):
+        canvas._push_undo()
+    if hasattr(canvas, "_paste_objects"):
+        canvas._paste_objects(clipboard, QPointF(24, 24), "paste")
+        _normalize_canvas_objects(canvas)
+        return True
+    return False
+
+
 def _patch_canvas_text_editor() -> None:
     try:
         from . import ui_text_tool_final_patch as text_final
@@ -378,7 +432,7 @@ def _patch_workspace_shortcuts(edw) -> None:
 
     def selected_canvas(self):
         canvas = getattr(self, "_canvas", None)
-        if isinstance(canvas, edw.EngineeringCanvas) and getattr(canvas, "selected_indices", None):
+        if isinstance(canvas, edw.EngineeringCanvas):
             return canvas
         return None
 
@@ -387,37 +441,37 @@ def _patch_workspace_shortcuts(edw) -> None:
             self._set_status("Copy text")
             return
         canvas = selected_canvas(self)
-        if canvas is not None and canvas.copy_selection():
+        if canvas is not None and _copy_canvas_selection(canvas):
             self._set_status("Copy")
             return
-        super(workspace_cls, self)._copy()
+        self._set_status("No selected object")
 
     def cut_action(self):
         if _run_strict_text_action("cut"):
             self._set_status("Cut text")
             return
         canvas = selected_canvas(self)
-        if canvas is not None and canvas.cut_selection():
+        if canvas is not None and _cut_canvas_selection(canvas):
             self._set_status("Cut")
             return
-        super(workspace_cls, self)._cut()
+        self._set_status("No selected object")
 
     def paste_action(self):
         if _run_strict_text_action("paste"):
             self._set_status("Paste text")
             return
-        canvas = getattr(self, "_canvas", None)
-        if isinstance(canvas, edw.EngineeringCanvas) and canvas.paste_selection():
+        canvas = selected_canvas(self)
+        if canvas is not None and _paste_canvas_clipboard(canvas):
             self._set_status("Paste")
             return
-        super(workspace_cls, self)._paste()
+        self._set_status("No copied object")
 
     def undo_action(self):
         if _run_strict_text_action("undo"):
             self._set_status("Undo text")
             return
-        canvas = getattr(self, "_canvas", None)
-        if isinstance(canvas, edw.EngineeringCanvas) and canvas.undo():
+        canvas = selected_canvas(self)
+        if canvas is not None and canvas.undo():
             self._set_status("Undo")
             return
         self._set_status("Nothing to undo")
@@ -426,8 +480,8 @@ def _patch_workspace_shortcuts(edw) -> None:
         if _run_strict_text_action("redo"):
             self._set_status("Redo text")
             return
-        canvas = getattr(self, "_canvas", None)
-        if isinstance(canvas, edw.EngineeringCanvas) and canvas.redo():
+        canvas = selected_canvas(self)
+        if canvas is not None and canvas.redo():
             self._set_status("Redo")
             return
         self._set_status("Nothing to redo")
@@ -438,6 +492,40 @@ def _patch_workspace_shortcuts(edw) -> None:
     workspace_cls._undo = undo_action
     workspace_cls._redo = redo_action
     workspace_cls._text_stability_workspace_shortcut_guard = PATCH_VERSION
+
+
+def _patch_canvas_shortcuts(edw) -> None:
+    canvas_cls = edw.EngineeringCanvas
+    if getattr(canvas_cls, "_text_stability_canvas_shortcut_guard", "") == PATCH_VERSION:
+        return
+    old_key_press = canvas_cls.keyPressEvent
+
+    def keyPressEvent(self, event) -> None:  # noqa: N802
+        if _focused_text_editor() is None and event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+            if event.key() == Qt.Key.Key_C:
+                if _copy_canvas_selection(self):
+                    event.accept()
+                    return
+            if event.key() == Qt.Key.Key_X:
+                if _cut_canvas_selection(self):
+                    event.accept()
+                    return
+            if event.key() == Qt.Key.Key_V:
+                if _paste_canvas_clipboard(self):
+                    event.accept()
+                    return
+            if event.key() == Qt.Key.Key_Z and not (event.modifiers() & Qt.KeyboardModifier.ShiftModifier):
+                if self.undo():
+                    event.accept()
+                    return
+            if event.key() == Qt.Key.Key_Y or (event.key() == Qt.Key.Key_Z and event.modifiers() & Qt.KeyboardModifier.ShiftModifier):
+                if self.redo():
+                    event.accept()
+                    return
+        old_key_press(self, event)
+
+    canvas_cls.keyPressEvent = keyPressEvent
+    canvas_cls._text_stability_canvas_shortcut_guard = PATCH_VERSION
 
 
 def _patch_clone(edw) -> None:
@@ -465,42 +553,10 @@ def _patch_canvas_copy(edw) -> None:
     canvas_cls = edw.EngineeringCanvas
     if getattr(canvas_cls, "_text_stability_copy_guard", "") == PATCH_VERSION:
         return
-    old_copy = canvas_cls.copy_selection
-    old_cut = canvas_cls.cut_selection
-    old_paste = canvas_cls.paste_selection
 
-    def sync(self) -> None:
-        editor = getattr(self, "_active_text_editor", None)
-        if isinstance(editor, QTextEdit):
-            _save_editor(editor)
-        for obj in getattr(self, "objects", []):
-            _normalize_text_box(obj)
-
-    def copy_selection(self) -> bool:
-        sync(self)
-        result = bool(old_copy(self))
-        for obj in getattr(self, "_clipboard", []):
-            _normalize_text_box(obj)
-        return result
-
-    def cut_selection(self) -> bool:
-        sync(self)
-        result = bool(old_cut(self))
-        for obj in getattr(self, "_clipboard", []):
-            _normalize_text_box(obj)
-        return result
-
-    def paste_selection(self) -> bool:
-        for obj in getattr(self, "_clipboard", []):
-            _normalize_text_box(obj)
-        result = bool(old_paste(self))
-        for obj in getattr(self, "objects", []):
-            _normalize_text_box(obj)
-        return result
-
-    canvas_cls.copy_selection = copy_selection
-    canvas_cls.cut_selection = cut_selection
-    canvas_cls.paste_selection = paste_selection
+    canvas_cls.copy_selection = _copy_canvas_selection
+    canvas_cls.cut_selection = _cut_canvas_selection
+    canvas_cls.paste_selection = _paste_canvas_clipboard
     canvas_cls._text_stability_copy_guard = PATCH_VERSION
 
 
@@ -513,6 +569,7 @@ def apply_text_stability_guard_patch() -> None:
     _patch_canvas_text_editor()
     _patch_app_text_filter()
     _patch_workspace_shortcuts(edw)
+    _patch_canvas_shortcuts(edw)
     _patch_clone(edw)
     _patch_canvas_copy(edw)
     logging.info("text_stability_guard: installed version=%s", PATCH_VERSION)
