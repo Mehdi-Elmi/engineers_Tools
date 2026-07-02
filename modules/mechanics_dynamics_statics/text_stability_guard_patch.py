@@ -14,7 +14,7 @@ from PySide6.QtCore import QEvent, Qt
 from PySide6.QtGui import QKeySequence
 from PySide6.QtWidgets import QApplication, QTextEdit, QWidget
 
-PATCH_VERSION = "engineering-text-stability-guard-2026-07-02-d"
+PATCH_VERSION = "engineering-text-stability-guard-2026-07-02-e"
 
 _TEXT_ATTRS = (
     "is_text_box",
@@ -67,6 +67,37 @@ def _normalize_text_box(obj) -> None:
             setattr(obj, name, _copy_value(default))
 
 
+def _text_editor_from_widget(widget) -> QTextEdit | None:
+    current = widget
+    depth = 0
+    while isinstance(current, QWidget) and depth < 10:
+        if isinstance(current, QTextEdit):
+            return current
+        current = current.parentWidget()
+        depth += 1
+    return None
+
+
+def _widget_inside(widget: QWidget | None, parent: QWidget | None) -> bool:
+    current = widget
+    depth = 0
+    while isinstance(current, QWidget) and depth < 12:
+        if current is parent:
+            return True
+        current = current.parentWidget()
+        depth += 1
+    return False
+
+
+def _focused_text_editor() -> QTextEdit | None:
+    app = QApplication.instance()
+    focus = app.focusWidget() if app is not None else None
+    editor = _text_editor_from_widget(focus)
+    if editor is not None and editor.isVisible() and editor.isEnabled() and _widget_inside(focus, editor):
+        return editor
+    return None
+
+
 def _canvas_from_editor(editor: QWidget | None):
     current = editor
     depth = 0
@@ -107,38 +138,68 @@ def _shortcut(event, standard) -> bool:
         return False
 
 
+def _explicit_shortcut(event, key, *, ctrl=False, shift=False) -> bool:
+    modifiers = event.modifiers()
+    has_ctrl = bool(modifiers & Qt.KeyboardModifier.ControlModifier)
+    has_shift = bool(modifiers & Qt.KeyboardModifier.ShiftModifier)
+    return event.key() == key and has_ctrl == ctrl and has_shift == shift
+
+
+def _delete_text(editor: QTextEdit, *, previous: bool) -> None:
+    cursor = editor.textCursor()
+    if cursor.hasSelection():
+        cursor.removeSelectedText()
+    elif previous:
+        cursor.deletePreviousChar()
+    else:
+        cursor.deleteChar()
+    editor.setTextCursor(cursor)
+    _save_editor(editor)
+
+
 def _handle_text_key(editor: QTextEdit, event) -> bool:
-    if _shortcut(event, QKeySequence.StandardKey.Undo):
+    if _shortcut(event, QKeySequence.StandardKey.Undo) or _explicit_shortcut(event, Qt.Key.Key_Z, ctrl=True):
         editor.undo()
         _save_editor(editor)
         event.accept()
         return True
-    if _shortcut(event, QKeySequence.StandardKey.Redo):
+    if _shortcut(event, QKeySequence.StandardKey.Redo) or _explicit_shortcut(event, Qt.Key.Key_Y, ctrl=True) or _explicit_shortcut(event, Qt.Key.Key_Z, ctrl=True, shift=True):
         editor.redo()
         _save_editor(editor)
         event.accept()
         return True
-    if _shortcut(event, QKeySequence.StandardKey.Copy):
+    if _shortcut(event, QKeySequence.StandardKey.Copy) or _explicit_shortcut(event, Qt.Key.Key_C, ctrl=True):
         editor.copy()
         event.accept()
         return True
-    if _shortcut(event, QKeySequence.StandardKey.Cut):
+    if _shortcut(event, QKeySequence.StandardKey.Cut) or _explicit_shortcut(event, Qt.Key.Key_X, ctrl=True):
         editor.cut()
         _save_editor(editor)
         event.accept()
         return True
-    if _shortcut(event, QKeySequence.StandardKey.Paste):
+    if _shortcut(event, QKeySequence.StandardKey.Paste) or _explicit_shortcut(event, Qt.Key.Key_V, ctrl=True):
         editor.paste()
         _save_editor(editor)
         event.accept()
         return True
-    if _shortcut(event, QKeySequence.StandardKey.SelectAll):
+    if _shortcut(event, QKeySequence.StandardKey.SelectAll) or _explicit_shortcut(event, Qt.Key.Key_A, ctrl=True):
         editor.selectAll()
         event.accept()
         return True
-    if event.key() in (Qt.Key.Key_Backspace, Qt.Key.Key_Delete):
-        QTextEdit.keyPressEvent(editor, event)
-        _save_editor(editor)
+    if event.key() == Qt.Key.Key_Backspace:
+        if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+            QTextEdit.keyPressEvent(editor, event)
+            _save_editor(editor)
+        else:
+            _delete_text(editor, previous=True)
+        event.accept()
+        return True
+    if event.key() == Qt.Key.Key_Delete:
+        if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+            QTextEdit.keyPressEvent(editor, event)
+            _save_editor(editor)
+        else:
+            _delete_text(editor, previous=False)
         event.accept()
         return True
     return False
@@ -155,7 +216,7 @@ def _is_text_shortcut(event) -> bool:
             QKeySequence.StandardKey.Paste,
             QKeySequence.StandardKey.SelectAll,
         )
-    ) or event.key() in (Qt.Key.Key_Backspace, Qt.Key.Key_Delete)
+    ) or event.key() in (Qt.Key.Key_Backspace, Qt.Key.Key_Delete, Qt.Key.Key_Z, Qt.Key.Key_Y)
 
 
 def _patch_canvas_text_editor() -> None:
@@ -190,26 +251,95 @@ def _patch_canvas_text_editor() -> None:
         pass
 
 
+def _run_strict_text_action(action: str) -> bool:
+    editor = _focused_text_editor()
+    if editor is None:
+        return False
+    if action == "copy":
+        editor.copy()
+        return True
+    if action == "cut":
+        editor.cut()
+        _save_editor(editor)
+        return True
+    if action == "paste":
+        editor.paste()
+        _save_editor(editor)
+        return True
+    if action == "delete":
+        _delete_text(editor, previous=False)
+        return True
+    if action == "select_all":
+        editor.selectAll()
+        return True
+    return False
+
+
 def _patch_app_text_filter() -> None:
     try:
         from src.engineers_tools.app import engineering_text_editor_patch as app_text
         filter_cls = app_text._TextEditorPriorityFilter
     except Exception:
         return
+
+    app_text._active_editor = _focused_text_editor
+    app_text._run_text_action = _run_strict_text_action
+
     if getattr(filter_cls, "_text_stability_filter_guard", "") == PATCH_VERSION:
         return
     old_event_filter = filter_cls.eventFilter
 
     def eventFilter(self, watched, event) -> bool:  # noqa: N802
-        if event.type() == QEvent.Type.KeyPress:
-            editor = watched if isinstance(watched, QTextEdit) else None
-            if editor is not None and editor.isVisible() and editor.isEnabled() and editor.hasFocus():
-                if _handle_text_key(editor, event):
+        if event.type() in (QEvent.Type.KeyPress, QEvent.Type.ShortcutOverride):
+            editor = _text_editor_from_widget(watched)
+            if editor is not None and editor.isVisible() and editor.isEnabled() and _widget_inside(QApplication.focusWidget(), editor):
+                if event.type() == QEvent.Type.ShortcutOverride and _is_text_shortcut(event):
+                    event.accept()
+                    return True
+                if event.type() == QEvent.Type.KeyPress and _handle_text_key(editor, event):
                     return True
         return old_event_filter(self, watched, event)
 
     filter_cls.eventFilter = eventFilter
     filter_cls._text_stability_filter_guard = PATCH_VERSION
+
+
+def _patch_workspace_shortcuts(edw) -> None:
+    workspace_cls = edw.EngineeringDesignWorkspace
+    if getattr(workspace_cls, "_text_stability_workspace_shortcut_guard", "") == PATCH_VERSION:
+        return
+
+    def selected_canvas(self):
+        canvas = getattr(self, "_canvas", None)
+        if isinstance(canvas, edw.EngineeringCanvas) and getattr(canvas, "selected_indices", None):
+            return canvas
+        return None
+
+    def copy_action(self):
+        canvas = selected_canvas(self)
+        if canvas is not None and canvas.copy_selection():
+            self._set_status("Copy")
+            return
+        super(workspace_cls, self)._copy()
+
+    def cut_action(self):
+        canvas = selected_canvas(self)
+        if canvas is not None and canvas.cut_selection():
+            self._set_status("Cut")
+            return
+        super(workspace_cls, self)._cut()
+
+    def paste_action(self):
+        canvas = getattr(self, "_canvas", None)
+        if isinstance(canvas, edw.EngineeringCanvas) and canvas.paste_selection():
+            self._set_status("Paste")
+            return
+        super(workspace_cls, self)._paste()
+
+    workspace_cls._copy = copy_action
+    workspace_cls._cut = cut_action
+    workspace_cls._paste = paste_action
+    workspace_cls._text_stability_workspace_shortcut_guard = PATCH_VERSION
 
 
 def _patch_clone(edw) -> None:
@@ -242,24 +372,27 @@ def _patch_canvas_copy(edw) -> None:
         for obj in getattr(self, "objects", []):
             _normalize_text_box(obj)
 
-    def copy_selection(self) -> None:
+    def copy_selection(self) -> bool:
         sync(self)
-        old_copy(self)
+        result = bool(old_copy(self))
         for obj in getattr(self, "_clipboard", []):
             _normalize_text_box(obj)
+        return result
 
-    def cut_selection(self) -> None:
+    def cut_selection(self) -> bool:
         sync(self)
-        old_cut(self)
+        result = bool(old_cut(self))
         for obj in getattr(self, "_clipboard", []):
             _normalize_text_box(obj)
+        return result
 
-    def paste_selection(self) -> None:
+    def paste_selection(self) -> bool:
         for obj in getattr(self, "_clipboard", []):
             _normalize_text_box(obj)
-        old_paste(self)
+        result = bool(old_paste(self))
         for obj in getattr(self, "objects", []):
             _normalize_text_box(obj)
+        return result
 
     canvas_cls.copy_selection = copy_selection
     canvas_cls.cut_selection = cut_selection
@@ -275,6 +408,7 @@ def apply_text_stability_guard_patch() -> None:
         return
     _patch_canvas_text_editor()
     _patch_app_text_filter()
+    _patch_workspace_shortcuts(edw)
     _patch_clone(edw)
     _patch_canvas_copy(edw)
     logging.info("text_stability_guard: installed version=%s", PATCH_VERSION)
