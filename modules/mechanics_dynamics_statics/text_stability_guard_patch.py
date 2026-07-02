@@ -11,10 +11,10 @@ import copy
 import logging
 
 from PySide6.QtCore import QEvent, Qt
-from PySide6.QtGui import QKeySequence
+from PySide6.QtGui import QKeySequence, QTextCursor
 from PySide6.QtWidgets import QApplication, QTextEdit, QWidget
 
-PATCH_VERSION = "engineering-text-stability-guard-2026-07-02-e"
+PATCH_VERSION = "engineering-text-stability-guard-2026-07-02-f"
 
 _TEXT_ATTRS = (
     "is_text_box",
@@ -145,16 +145,73 @@ def _explicit_shortcut(event, key, *, ctrl=False, shift=False) -> bool:
     return event.key() == key and has_ctrl == ctrl and has_shift == shift
 
 
+def _clipboard_text() -> str:
+    app = QApplication.instance()
+    clipboard = app.clipboard() if app is not None else QApplication.clipboard()
+    return clipboard.text() if clipboard is not None else ""
+
+
+def _set_clipboard_text(text: str) -> None:
+    app = QApplication.instance()
+    clipboard = app.clipboard() if app is not None else QApplication.clipboard()
+    if clipboard is not None:
+        clipboard.setText(text)
+
+
+def _selected_text(editor: QTextEdit) -> str:
+    text = editor.textCursor().selectedText()
+    return text.replace("\u2029", "\n").replace("\u2028", "\n")
+
+
+def _copy_text(editor: QTextEdit) -> None:
+    cursor = editor.textCursor()
+    if cursor.hasSelection():
+        _set_clipboard_text(_selected_text(editor))
+    else:
+        editor.copy()
+
+
+def _cut_text(editor: QTextEdit) -> None:
+    cursor = editor.textCursor()
+    if cursor.hasSelection():
+        _set_clipboard_text(_selected_text(editor))
+        cursor.removeSelectedText()
+        editor.setTextCursor(cursor)
+    else:
+        editor.cut()
+    _save_editor(editor)
+
+
+def _paste_text(editor: QTextEdit) -> None:
+    text = _clipboard_text()
+    if text:
+        cursor = editor.textCursor()
+        cursor.insertText(text)
+        editor.setTextCursor(cursor)
+    else:
+        editor.paste()
+    _save_editor(editor)
+
+
 def _delete_text(editor: QTextEdit, *, previous: bool) -> None:
     cursor = editor.textCursor()
     if cursor.hasSelection():
         cursor.removeSelectedText()
-    elif previous:
-        cursor.deletePreviousChar()
+        editor.setTextCursor(cursor)
+        _save_editor(editor)
+        return
+    if previous:
+        moved = cursor.movePosition(QTextCursor.MoveOperation.PreviousCharacter, QTextCursor.MoveMode.KeepAnchor)
+        if not moved:
+            moved = cursor.movePosition(QTextCursor.MoveOperation.NextCharacter, QTextCursor.MoveMode.KeepAnchor)
     else:
-        cursor.deleteChar()
-    editor.setTextCursor(cursor)
-    _save_editor(editor)
+        moved = cursor.movePosition(QTextCursor.MoveOperation.NextCharacter, QTextCursor.MoveMode.KeepAnchor)
+        if not moved:
+            moved = cursor.movePosition(QTextCursor.MoveOperation.PreviousCharacter, QTextCursor.MoveMode.KeepAnchor)
+    if moved and cursor.hasSelection():
+        cursor.removeSelectedText()
+        editor.setTextCursor(cursor)
+        _save_editor(editor)
 
 
 def _handle_text_key(editor: QTextEdit, event) -> bool:
@@ -169,17 +226,15 @@ def _handle_text_key(editor: QTextEdit, event) -> bool:
         event.accept()
         return True
     if _shortcut(event, QKeySequence.StandardKey.Copy) or _explicit_shortcut(event, Qt.Key.Key_C, ctrl=True):
-        editor.copy()
+        _copy_text(editor)
         event.accept()
         return True
     if _shortcut(event, QKeySequence.StandardKey.Cut) or _explicit_shortcut(event, Qt.Key.Key_X, ctrl=True):
-        editor.cut()
-        _save_editor(editor)
+        _cut_text(editor)
         event.accept()
         return True
     if _shortcut(event, QKeySequence.StandardKey.Paste) or _explicit_shortcut(event, Qt.Key.Key_V, ctrl=True):
-        editor.paste()
-        _save_editor(editor)
+        _paste_text(editor)
         event.accept()
         return True
     if _shortcut(event, QKeySequence.StandardKey.SelectAll) or _explicit_shortcut(event, Qt.Key.Key_A, ctrl=True):
@@ -216,7 +271,7 @@ def _is_text_shortcut(event) -> bool:
             QKeySequence.StandardKey.Paste,
             QKeySequence.StandardKey.SelectAll,
         )
-    ) or event.key() in (Qt.Key.Key_Backspace, Qt.Key.Key_Delete, Qt.Key.Key_Z, Qt.Key.Key_Y)
+    ) or event.key() in (Qt.Key.Key_Backspace, Qt.Key.Key_Delete, Qt.Key.Key_Z, Qt.Key.Key_Y, Qt.Key.Key_C, Qt.Key.Key_X, Qt.Key.Key_V)
 
 
 def _patch_canvas_text_editor() -> None:
@@ -232,10 +287,11 @@ def _patch_canvas_text_editor() -> None:
     def event(self, event) -> bool:
         if event.type() == QEvent.Type.ShortcutOverride and _is_text_shortcut(event):
             event.accept()
-            return True
+            return False
         return old_event(self, event)
 
     def keyPressEvent(self, event) -> None:  # noqa: N802
+        self.setUndoRedoEnabled(True)
         if _handle_text_key(self, event):
             return
         QTextEdit.keyPressEvent(self, event)
@@ -256,15 +312,13 @@ def _run_strict_text_action(action: str) -> bool:
     if editor is None:
         return False
     if action == "copy":
-        editor.copy()
+        _copy_text(editor)
         return True
     if action == "cut":
-        editor.cut()
-        _save_editor(editor)
+        _cut_text(editor)
         return True
     if action == "paste":
-        editor.paste()
-        _save_editor(editor)
+        _paste_text(editor)
         return True
     if action == "delete":
         _delete_text(editor, previous=False)
@@ -295,7 +349,7 @@ def _patch_app_text_filter() -> None:
             if editor is not None and editor.isVisible() and editor.isEnabled() and _widget_inside(QApplication.focusWidget(), editor):
                 if event.type() == QEvent.Type.ShortcutOverride and _is_text_shortcut(event):
                     event.accept()
-                    return True
+                    return False
                 if event.type() == QEvent.Type.KeyPress and _handle_text_key(editor, event):
                     return True
         return old_event_filter(self, watched, event)
