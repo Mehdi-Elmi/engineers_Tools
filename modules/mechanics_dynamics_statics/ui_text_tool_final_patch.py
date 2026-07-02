@@ -9,29 +9,29 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import QPointF, QRect, QRectF, QTimer, Qt
+from PySide6.QtCore import QEvent, QPointF, QRect, QRectF, QTimer, Qt
 from PySide6.QtGui import QColor, QFont, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QComboBox, QDoubleSpinBox, QFrame, QHBoxLayout, QPushButton, QSizePolicy, QSpinBox, QTextEdit, QWidget
 
 PATCH_VERSION = "engineering-ui-text-tool-final-2026-07-01-c"
-FONT_CHOICES = ("Times New Roman",)
+FONT_CHOICES = ("Times New Roman", "B Zar", "Zar", "B Nazanin", "Nazanin", "Arial")
 CURSOR_OVERRIDES = {
-    "rotate": ("rotate.svg", 18, 18, 36),
-    "rotate_drag": ("rotate.svg", 18, 18, 36),
-    "resize_n": ("resize_vertical.svg", 18, 18, 36),
-    "resize_s": ("resize_vertical.svg", 18, 18, 36),
-    "resize_e": ("resize_horizontal.svg", 18, 18, 36),
-    "resize_w": ("resize_horizontal.svg", 18, 18, 36),
-    "resize_ne": ("corner_resize_b.svg", 18, 18, 36),
-    "resize_sw": ("corner_resize_b.svg", 18, 18, 36),
-    "resize_nw": ("corner_resize_a.svg", 18, 18, 36),
-    "resize_se": ("corner_resize_a.svg", 18, 18, 36),
-    "resize_horizontal": ("resize_horizontal.svg", 18, 18, 36),
-    "resize_vertical": ("resize_vertical.svg", 18, 18, 36),
-    "resize_diag_f": ("corner_resize_a.svg", 18, 18, 36),
-    "resize_diag_b": ("corner_resize_b.svg", 18, 18, 36),
-    "resize_fdiag": ("corner_resize_a.svg", 18, 18, 36),
-    "resize_bdiag": ("corner_resize_b.svg", 18, 18, 36),
+    "rotate": ("rotate.svg", 14, 14, 28),
+    "rotate_drag": ("rotate.svg", 14, 14, 28),
+    "resize_n": ("resize_vertical.svg", 14, 14, 28),
+    "resize_s": ("resize_vertical.svg", 14, 14, 28),
+    "resize_e": ("resize_horizontal.svg", 14, 14, 28),
+    "resize_w": ("resize_horizontal.svg", 14, 14, 28),
+    "resize_ne": ("corner_resize_b.svg", 14, 14, 28),
+    "resize_sw": ("corner_resize_b.svg", 14, 14, 28),
+    "resize_nw": ("corner_resize_a.svg", 14, 14, 28),
+    "resize_se": ("corner_resize_a.svg", 14, 14, 28),
+    "resize_horizontal": ("resize_horizontal.svg", 14, 14, 28),
+    "resize_vertical": ("resize_vertical.svg", 14, 14, 28),
+    "resize_diag_f": ("corner_resize_a.svg", 14, 14, 28),
+    "resize_diag_b": ("corner_resize_b.svg", 14, 14, 28),
+    "resize_fdiag": ("corner_resize_a.svg", 14, 14, 28),
+    "resize_bdiag": ("corner_resize_b.svg", 14, 14, 28),
 }
 TEXT_BUTTONS = (
     ("B", "Bold", 34, True),
@@ -111,6 +111,103 @@ def _scene_rect_to_widget(canvas, rect: QRectF) -> QRect:
     return QRect(round(left), round(top), max(42, round(rect.width() * zoom)), max(34, round(rect.height() * zoom)))
 
 
+def _save_editor_text(canvas, editor: QTextEdit | None = None) -> None:
+    if canvas is None:
+        return
+    editor = editor or getattr(canvas, "_active_text_editor", None)
+    index = getattr(canvas, "_active_text_editor_index", None)
+    if editor is None or index is None or not (0 <= index < len(canvas.objects)):
+        return
+    obj = canvas.objects[index]
+    obj.text = editor.toPlainText()
+    obj.text_html = editor.toHtml()
+    font = editor.currentFont()
+    obj.text_font = font.family() or getattr(obj, "text_font", "Times New Roman")
+    obj.text_size = max(1, font.pointSize() if font.pointSize() > 0 else int(getattr(obj, "text_size", 12)))
+    obj.text_bold = font.bold()
+    obj.text_italic = font.italic()
+    canvas.update()
+
+
+def _text_key_is(event, key: Qt.Key, *, ctrl: bool = False) -> bool:
+    has_ctrl = bool(event.modifiers() & Qt.KeyboardModifier.ControlModifier)
+    return event.key() == key and has_ctrl == ctrl
+
+
+def _handle_editor_key(editor: QTextEdit, event) -> bool:
+    canvas = getattr(editor, "_canvas_owner", None)
+    if _text_key_is(event, Qt.Key.Key_C, ctrl=True):
+        editor.copy()
+        event.accept()
+        return True
+    if _text_key_is(event, Qt.Key.Key_X, ctrl=True):
+        editor.cut()
+        _save_editor_text(canvas, editor)
+        event.accept()
+        return True
+    if _text_key_is(event, Qt.Key.Key_V, ctrl=True):
+        editor.paste()
+        _save_editor_text(canvas, editor)
+        event.accept()
+        return True
+    if _text_key_is(event, Qt.Key.Key_A, ctrl=True):
+        editor.selectAll()
+        event.accept()
+        return True
+    if event.key() in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace):
+        cursor = editor.textCursor()
+        if cursor.hasSelection():
+            cursor.removeSelectedText()
+            editor.setTextCursor(cursor)
+        elif event.key() == Qt.Key.Key_Delete:
+            cursor.deleteChar()
+            editor.setTextCursor(cursor)
+        else:
+            cursor.deletePreviousChar()
+            editor.setTextCursor(cursor)
+        _save_editor_text(canvas, editor)
+        event.accept()
+        return True
+    return False
+
+
+class _CanvasTextEdit(QTextEdit):
+    def __init__(self, canvas) -> None:
+        super().__init__(canvas)
+        self._canvas_owner = canvas
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+
+    def event(self, event) -> bool:
+        if event.type() == QEvent.Type.ShortcutOverride:
+            if event.key() in (Qt.Key.Key_C, Qt.Key.Key_X, Qt.Key.Key_V, Qt.Key.Key_A, Qt.Key.Key_Delete, Qt.Key.Key_Backspace):
+                event.accept()
+                return True
+        return super().event(event)
+
+    def keyPressEvent(self, event) -> None:
+        if _handle_editor_key(self, event):
+            return
+        super().keyPressEvent(event)
+        _save_editor_text(self._canvas_owner, self)
+
+    def contextMenuEvent(self, event) -> None:
+        menu = self.createStandardContextMenu(event.pos())
+        if self.textCursor().hasSelection():
+            menu.addSeparator()
+            delete_action = menu.addAction("Delete Selection")
+            delete_action.triggered.connect(lambda: (_handle_editor_context_delete(self)))
+        menu.exec(event.globalPos())
+        menu.deleteLater()
+
+
+def _handle_editor_context_delete(editor: QTextEdit) -> None:
+    cursor = editor.textCursor()
+    if cursor.hasSelection():
+        cursor.removeSelectedText()
+        editor.setTextCursor(cursor)
+        _save_editor_text(getattr(editor, "_canvas_owner", None), editor)
+
+
 def _current_text_settings(window: QWidget | None) -> dict[str, object]:
     start_bar = getattr(window, "_start_bar_widget", None) if window is not None else None
     controls = getattr(start_bar, "_text_controls", {}) if start_bar is not None else {}
@@ -139,21 +236,24 @@ def _show_text_editor(canvas, index: int) -> None:
     if old_editor is not None:
         old_editor.hide()
         old_editor.deleteLater()
-    editor = QTextEdit(canvas)
+    editor = _CanvasTextEdit(canvas)
     editor.setObjectName("CanvasTextEditor")
-    editor.setAcceptRichText(False)
-    editor.setPlainText(str(getattr(obj, "text", "")))
+    editor.setAcceptRichText(True)
+    if getattr(obj, "text_html", ""):
+        editor.setHtml(str(getattr(obj, "text_html", "")))
+    else:
+        editor.setPlainText(str(getattr(obj, "text", "")))
     editor.setPlaceholderText("Type text...")
     editor.setGeometry(_scene_rect_to_widget(canvas, obj.rect).adjusted(3, 3, -3, -3))
     font = QFont(str(getattr(obj, "text_font", "Times New Roman")), int(getattr(obj, "text_size", 12)))
     font.setBold(bool(getattr(obj, "text_bold", False)))
     font.setItalic(bool(getattr(obj, "text_italic", False)))
     editor.setFont(font)
-    editor.setStyleSheet("QTextEdit#CanvasTextEditor{background:rgba(255,255,255,230);border:1px solid #ff8a35;border-radius:6px;color:#132238;padding:4px;font-family:'Times New Roman';}")
-    editor.textChanged.connect(lambda e=editor, o=obj, c=canvas: (setattr(o, "text", e.toPlainText()), c.update()))
+    editor.setStyleSheet("QTextEdit#CanvasTextEditor{background:rgba(255,255,255,230);border:1px solid #ff8a35;border-radius:6px;color:#132238;padding:4px;font-family:'Times New Roman';font-style:normal;font-weight:400;}")
+    editor.textChanged.connect(lambda e=editor, c=canvas: _save_editor_text(c, e))
     editor.show()
     editor.raise_()
-    editor.setFocus()
+    editor.setFocus(Qt.FocusReason.MouseFocusReason)
     canvas._active_text_editor = editor
     canvas._active_text_editor_index = index
 
@@ -161,6 +261,7 @@ def _show_text_editor(canvas, index: int) -> None:
 def _hide_text_editor(canvas) -> None:
     editor = getattr(canvas, "_active_text_editor", None)
     if editor is not None:
+        _save_editor_text(canvas, editor)
         editor.hide()
         editor.deleteLater()
     canvas._active_text_editor = None
@@ -191,10 +292,11 @@ def _text_button(label: str, tooltip: str, width: int, checkable: bool) -> QPush
     button.setFixedSize(width, 30)
     _font(button, 11)
     button.setStyleSheet(
-        "QPushButton{background:#fff;border:1px solid #9fb0c5;border-radius:9px;color:#132238;padding:0;}"
+        "QPushButton{background:#fff;border:1px solid #9fb0c5;border-radius:9px;color:#132238;padding:0;outline:0;}"
         "QPushButton:hover{background:#fff4cf;border-color:#ff8a35;}"
         "QPushButton:checked{background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #ffc35a,stop:1 #f18a2a);border-color:#7e5b10;color:#102238;padding-top:2px;}"
         "QPushButton:pressed{background:#d9e9f7;padding-top:2px;}"
+        "QPushButton:focus{outline:0;border:1px solid #9fb0c5;}"
     )
     return button
 
@@ -230,8 +332,8 @@ def _install_textbar(sb, svg) -> None:
         bar.setObjectName("InlineTextBar")
         bar.setProperty("phase", PATCH_VERSION)
         bar.setFixedHeight(38)
-        bar.setMinimumWidth(640)
-        bar.setMaximumWidth(790)
+        bar.setMinimumWidth(700)
+        bar.setMaximumWidth(860)
         bar.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         bar.setStyleSheet("QFrame#InlineTextBar{background:qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #fff,stop:.52 #eef8ff,stop:1 #fff1c8);border:1px solid #8fa2bb;border-radius:13px;}")
         row = QHBoxLayout(bar)
@@ -241,7 +343,7 @@ def _install_textbar(sb, svg) -> None:
         combo.setToolTip("Font family")
         combo.addItems(list(FONT_CHOICES))
         combo.setCurrentText("Times New Roman")
-        combo.setFixedSize(176, 30)
+        combo.setFixedSize(198, 30)
         _style_text_combo(svg, combo)
         row.addWidget(combo)
         size = QSpinBox()
@@ -249,7 +351,7 @@ def _install_textbar(sb, svg) -> None:
         size.setRange(1, 300)
         size.setValue(12)
         size.setSuffix(" pt")
-        size.setFixedSize(104, 30)
+        size.setFixedSize(110, 30)
         _style_text_spin(svg, size)
         row.addWidget(size)
         buttons: dict[str, QPushButton] = {}
@@ -257,6 +359,10 @@ def _install_textbar(sb, svg) -> None:
             button = _text_button(label, tooltip, width, checkable)
             buttons[tooltip] = button
             row.addWidget(button)
+        if "Bold" in buttons:
+            buttons["Bold"].setChecked(False)
+        if "Italic" in buttons:
+            buttons["Italic"].setChecked(False)
         self._text_controls = {"font": combo, "size": size, "buttons": buttons}
         command_bar.layout().insertWidget(max(0, command_bar.layout().count() - 1), bar, 0, Qt.AlignmentFlag.AlignVCenter)
         bar.show()
@@ -328,10 +434,11 @@ def _install_canvas_text_tool(edw) -> None:
         obj = edw.CanvasObject(path=Path("Text Box"), pixmap=QPixmap(), rect=box, name="Text Box")
         obj.is_text_box = True
         obj.text = ""
+        obj.text_html = ""
         obj.text_font = settings["font"]
         obj.text_size = settings["size"]
-        obj.text_bold = settings["bold"]
-        obj.text_italic = settings["italic"]
+        obj.text_bold = bool(settings["bold"])
+        obj.text_italic = bool(settings["italic"])
         obj.text_rtl = settings["rtl"]
         self.objects.append(obj)
         index = len(self.objects) - 1
