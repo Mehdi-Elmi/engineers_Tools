@@ -8,7 +8,7 @@ import tempfile
 from pathlib import Path
 
 from PySide6.QtCore import QObject, QEvent, QPointF, QTimer, Qt
-from PySide6.QtGui import QColor, QFont, QKeySequence, QPainter, QPixmap, QPolygonF, QTextBlockFormat, QTextCursor
+from PySide6.QtGui import QColor, QFont, QKeySequence, QPainter, QPixmap, QPolygonF, QTextCursor
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-PATCH_VERSION = "engineering-text-toolbar-final-event-safety-2026-07-02-g"
+PATCH_VERSION = "engineering-text-toolbar-final-event-safety-2026-07-02-h"
 _ARROW_CACHE: dict[str, str] = {}
 
 
@@ -45,7 +45,8 @@ def _workspace_from_editor(editor: QTextEdit) -> QWidget | None:
         root = _workspace_from_widget(view)
         if root is not None:
             return root
-    return None
+    owner = getattr(editor, "_canvas_owner", None)
+    return _workspace_from_widget(owner) if owner is not None else None
 
 
 def _buttons(root: QWidget | None) -> dict:
@@ -138,19 +139,18 @@ def _alpha_to_int(text: str) -> int | None:
 
 def _next_number_from_line(settings: dict, text: str) -> int | None:
     style = str(settings.get("style", "1."))
-    stripped = text or ""
     if style in {"1.", "1)"}:
-        match = re.match(r"^\s*(\d+)\s*[\.)]\s*", stripped)
+        match = re.match(r"^\s*(\d+)\s*[\.)]\s*", text or "")
         return int(match.group(1)) + 1 if match else None
     if style in {"I.", "i."}:
-        match = re.match(r"^\s*([ivxlcdmIVXLCDM]+)\s*[\.)]\s*", stripped)
+        match = re.match(r"^\s*([ivxlcdmIVXLCDM]+)\s*[\.)]\s*", text or "")
         value = _roman_to_int(match.group(1)) if match else None
         return value + 1 if value is not None else None
     if style in {"A.", "a."}:
-        match = re.match(r"^\s*([A-Za-z]+)\s*[\.)]\s*", stripped)
+        match = re.match(r"^\s*([A-Za-z]+)\s*[\.)]\s*", text or "")
         value = _alpha_to_int(match.group(1)) if match else None
         return value + 1 if value is not None else None
-    match = re.match(r"^\s*(\d+)\s*[\.)]\s*", stripped)
+    match = re.match(r"^\s*(\d+)\s*[\.)]\s*", text or "")
     return int(match.group(1)) + 1 if match else None
 
 
@@ -214,6 +214,17 @@ def _delete_next_char(editor: QTextEdit) -> None:
 
 
 def _handle_editor_event(editor: QTextEdit, event) -> bool:
+    if event.type() == QEvent.Type.ShortcutOverride and any(
+        _matches(event, key)
+        for key in (
+            QKeySequence.StandardKey.Copy,
+            QKeySequence.StandardKey.Cut,
+            QKeySequence.StandardKey.Paste,
+            QKeySequence.StandardKey.SelectAll,
+        )
+    ):
+        event.accept()
+        return True
     if event.type() != QEvent.Type.KeyPress:
         return False
     if _matches(event, QKeySequence.StandardKey.Copy):
@@ -276,13 +287,11 @@ def _arrow_url(direction: str) -> str:
     painter.setPen(Qt.PenStyle.NoPen)
     if direction == "up":
         points = [QPointF(9, 4), QPointF(14, 12), QPointF(4, 12)]
-    elif direction == "down":
-        points = [QPointF(4, 6), QPointF(14, 6), QPointF(9, 14)]
     else:
-        points = [QPointF(5, 5), QPointF(13, 9), QPointF(5, 13)]
+        points = [QPointF(4, 6), QPointF(14, 6), QPointF(9, 14)]
     painter.drawPolygon(QPolygonF(points))
     painter.end()
-    path = Path(tempfile.gettempdir()) / f"engineering_arrow_{direction}_20260702g.png"
+    path = Path(tempfile.gettempdir()) / f"engineering_arrow_{direction}_20260702h.png"
     pixmap.save(path.as_posix(), "PNG")
     _ARROW_CACHE[direction] = path.as_posix()
     return path.as_posix()
@@ -294,7 +303,6 @@ def _style_toolbar_combo(combo: QComboBox) -> None:
         "QComboBox{background:#fffefa;border:1px solid #b88718;border-radius:8px;color:#173454;"
         "font-family:'Times New Roman';font-size:12px;font-weight:900;font-style:normal;padding:2px 28px 2px 8px;outline:0;}"
         "QComboBox:hover{border-color:#173454;background:#ffffff;}"
-        "QComboBox:focus{outline:0;border:1px solid #b88718;}"
         "QComboBox::drop-down{subcontrol-origin:padding;subcontrol-position:top right;width:24px;"
         "border-left:1px solid #b88718;border-top-right-radius:7px;border-bottom-right-radius:7px;"
         "background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #ffe8a8,stop:1 #f1b33d);}"
@@ -303,18 +311,14 @@ def _style_toolbar_combo(combo: QComboBox) -> None:
 
 
 def _style_toolbar_spin(spin: QSpinBox | QDoubleSpinBox) -> None:
-    spin.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
     spin.setButtonSymbols(QSpinBox.ButtonSymbols.UpDownArrows)
     spin.setStyleSheet(
         "QSpinBox,QDoubleSpinBox{background:#fffefa;border:1px solid #b88718;border-radius:8px;color:#173454;"
         "font-family:'Times New Roman';font-size:12px;font-weight:900;font-style:normal;padding:2px 26px 2px 8px;outline:0;}"
-        "QSpinBox:focus,QDoubleSpinBox:focus{border:1px solid #173454;outline:0;}"
         "QSpinBox::up-button,QDoubleSpinBox::up-button{subcontrol-origin:border;subcontrol-position:top right;width:23px;"
-        "border-left:1px solid #b88718;border-top-right-radius:7px;"
-        "background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #ffe8a8,stop:1 #f1b33d);}"
+        "border-left:1px solid #b88718;border-top-right-radius:7px;background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #ffe8a8,stop:1 #f1b33d);}"
         "QSpinBox::down-button,QDoubleSpinBox::down-button{subcontrol-origin:border;subcontrol-position:bottom right;width:23px;"
-        "border-left:1px solid #b88718;border-bottom-right-radius:7px;"
-        "background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #ffe8a8,stop:1 #f1b33d);}"
+        "border-left:1px solid #b88718;border-bottom-right-radius:7px;background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #ffe8a8,stop:1 #f1b33d);}"
         f"QSpinBox::up-arrow,QDoubleSpinBox::up-arrow{{image:url({_arrow_url('up')});width:14px;height:14px;}}"
         f"QSpinBox::down-arrow,QDoubleSpinBox::down-arrow{{image:url({_arrow_url('down')});width:14px;height:14px;}}"
     )
@@ -323,8 +327,7 @@ def _style_toolbar_spin(spin: QSpinBox | QDoubleSpinBox) -> None:
 def _polish_textbar_controls(root: QWidget | None) -> None:
     if root is None:
         return
-    bars = root.findChildren(QWidget, "InlineTextBar")
-    for bar in bars:
+    for bar in root.findChildren(QWidget, "InlineTextBar"):
         bar.setMinimumHeight(max(bar.minimumHeight(), 44))
         for combo in bar.findChildren(QComboBox):
             _style_toolbar_combo(combo)
@@ -360,8 +363,9 @@ def _patch_color_dialog() -> None:
     except Exception:
         return
 
-    def open_standard_color_dialog(parent, current="#000000"):
-        return standard_color_dialog.get_custom_color(parent, current, "Add Custom Color")
+    def open_standard_color_dialog(parent=None, current="#000000", *args, **kwargs):
+        title = kwargs.get("title") or (args[0] if args else "Add Custom Color")
+        return standard_color_dialog.get_custom_color(parent, current, title)
 
     for module_name in ("text_lag_final_patch", "text_line_math_symbols_patch"):
         try:
@@ -411,13 +415,9 @@ def _patch_line_spacing_dialog() -> None:
         row.addWidget(value)
         row.addStretch(1)
         body_layout.addLayout(row)
-
         hint = QLabel("Custom line spacing uses the active Unit setting.", body)
-        hint.setStyleSheet(
-            "QLabel{font-family:'Times New Roman';font-size:11px;font-weight:900;font-style:italic;color:#173454;}"
-        )
+        hint.setStyleSheet("QLabel{font-family:'Times New Roman';font-size:11px;font-weight:900;font-style:italic;color:#173454;}")
         body_layout.addWidget(hint)
-
         buttons = QHBoxLayout()
         buttons.addStretch(1)
         ok = QPushButton("OK", body)
@@ -448,15 +448,33 @@ def _install_existing_editors(root: QWidget | None) -> None:
         _install_editor_filter(editor)
 
 
+def _patch_canvas_key_handler(edw) -> None:
+    canvas_cls = getattr(edw, "EngineeringCanvas", None)
+    if canvas_cls is None or getattr(canvas_cls, "_text_toolbar_final_event_safety_key_patch", "") == PATCH_VERSION:
+        return
+    old_key = canvas_cls.keyPressEvent
+
+    def key_press(self, event) -> None:
+        editor = getattr(self, "_active_text_editor", None)
+        if isinstance(editor, QTextEdit):
+            if getattr(editor, "_canvas_owner", None) is None:
+                editor._canvas_owner = self
+            _install_editor_filter(editor)
+            if editor.hasFocus() and _handle_editor_event(editor, event):
+                return
+        old_key(self, event)
+
+    canvas_cls.keyPressEvent = key_press
+    canvas_cls._text_toolbar_final_event_safety_key_patch = PATCH_VERSION
+
+
 def apply_text_toolbar_final_event_safety_patch() -> None:
-    try:
-        from . import text_lag_final_patch
-    except Exception:
-        text_lag_final_patch = None
-    try:
-        from . import ui_text_tool_final_patch
-    except Exception:
-        ui_text_tool_final_patch = None
+    modules = []
+    for module_name in ("text_lag_final_patch", "ui_text_tool_final_patch", "ui_text_tool_runtime_fix_patch"):
+        try:
+            modules.append(__import__(f"modules.mechanics_dynamics_statics.{module_name}", fromlist=[module_name]))
+        except Exception:
+            pass
     from . import workspace as edw
 
     if getattr(edw.EngineeringDesignWorkspace, "_engineering_text_toolbar_final_event_safety_patch", "") == PATCH_VERSION:
@@ -464,9 +482,9 @@ def apply_text_toolbar_final_event_safety_patch() -> None:
 
     _patch_color_dialog()
     _patch_line_spacing_dialog()
-    for module in (text_lag_final_patch, ui_text_tool_final_patch):
-        if module is not None:
-            _patch_show_editor(module)
+    _patch_canvas_key_handler(edw)
+    for module in modules:
+        _patch_show_editor(module)
 
     old_init = edw.EngineeringDesignWorkspace.__init__
 
@@ -474,6 +492,7 @@ def apply_text_toolbar_final_event_safety_patch() -> None:
         old_init(self, module)
         _patch_color_dialog()
         _patch_line_spacing_dialog()
+        _patch_canvas_key_handler(edw)
         _install_existing_editors(self)
         _polish_textbar_controls(self)
         for delay in (0, 80, 250, 700, 1400):
