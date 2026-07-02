@@ -13,7 +13,7 @@ from PySide6.QtCore import QEvent, QPointF, QRect, QRectF, QTimer, Qt
 from PySide6.QtGui import QColor, QFont, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QComboBox, QDoubleSpinBox, QFrame, QHBoxLayout, QPushButton, QSizePolicy, QSpinBox, QTextEdit, QWidget
 
-PATCH_VERSION = "engineering-ui-text-tool-final-2026-07-01-c"
+PATCH_VERSION = "engineering-ui-text-tool-final-2026-07-02-d"
 FONT_CHOICES = ("Times New Roman", "B Zar", "Zar", "B Nazanin", "Nazanin", "Arial")
 CURSOR_OVERRIDES = {
     "rotate": ("rotate.svg", 14, 14, 28),
@@ -63,25 +63,24 @@ def _font(widget: QWidget, size: int = 11) -> None:
 
 
 def _style_text_spin(svg, spin: QSpinBox | QDoubleSpinBox) -> None:
-    up = _asset_url(svg, "spin_up.svg")
-    down = _asset_url(svg, "spin_down.svg")
     spin.setFixedHeight(30)
     spin.setStyleSheet(
-        "QSpinBox,QDoubleSpinBox{background:#fffdf6;border:1px solid #c29122;border-radius:9px;color:#132238;font-family:'Times New Roman';font-size:11px;font-weight:800;font-style:normal;padding:1px 34px 1px 8px;}"
-        "QSpinBox::up-button,QDoubleSpinBox::up-button{width:31px;border:0;subcontrol-origin:border;subcontrol-position:top right;background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #fffef9,stop:.55 #fff0a8,stop:1 #ffc95c);border-top-right-radius:8px;}"
-        "QSpinBox::down-button,QDoubleSpinBox::down-button{width:31px;border:0;subcontrol-origin:border;subcontrol-position:bottom right;background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #fffef9,stop:.55 #fff0a8,stop:1 #ffc95c);border-bottom-right-radius:8px;}"
-        f"QSpinBox::up-arrow,QDoubleSpinBox::up-arrow{{image:url({up});width:20px;height:12px;}}"
-        f"QSpinBox::down-arrow,QDoubleSpinBox::down-arrow{{image:url({down});width:20px;height:12px;}}"
+        "QSpinBox,QDoubleSpinBox{background:#fffdf6;border:1px solid #c29122;border-radius:9px;color:#132238;font-family:'Times New Roman';font-size:11px;font-weight:800;font-style:normal;padding:1px 28px 1px 8px;}"
+        "QSpinBox::up-button,QDoubleSpinBox::up-button{width:26px;border:0;subcontrol-origin:border;subcontrol-position:top right;background:transparent;border-top-right-radius:8px;}"
+        "QSpinBox::down-button,QDoubleSpinBox::down-button{width:26px;border:0;subcontrol-origin:border;subcontrol-position:bottom right;background:transparent;border-bottom-right-radius:8px;}"
+        "QSpinBox::up-arrow,QDoubleSpinBox::up-arrow{width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-bottom:7px solid #102238;}"
+        "QSpinBox::down-arrow,QDoubleSpinBox::down-arrow{width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid #102238;}"
+        "QSpinBox:focus,QDoubleSpinBox:focus{border:1px solid #ff8a35;}"
     )
 
 
 def _style_text_combo(svg, combo: QComboBox) -> None:
-    arrow = _asset_url(svg, "combo_down.svg")
     combo.setFixedHeight(30)
     combo.setStyleSheet(
-        "QComboBox{background:#ffffff;border:1px solid #9fb0c5;border-radius:9px;color:#132238;font-family:'Times New Roman';font-size:11px;font-weight:800;font-style:normal;padding:1px 35px 1px 9px;}"
-        "QComboBox::drop-down{width:32px;border:0;subcontrol-origin:border;subcontrol-position:center right;background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #fffef9,stop:.55 #fff0a8,stop:1 #ffc95c);border-top-right-radius:8px;border-bottom-right-radius:8px;}"
-        f"QComboBox::down-arrow{{image:url({arrow});width:20px;height:12px;}}"
+        "QComboBox{background:#ffffff;border:1px solid #9fb0c5;border-radius:9px;color:#132238;font-family:'Times New Roman';font-size:11px;font-weight:800;font-style:normal;padding:1px 28px 1px 9px;}"
+        "QComboBox::drop-down{width:26px;border:0;subcontrol-origin:border;subcontrol-position:center right;background:transparent;border-top-right-radius:8px;border-bottom-right-radius:8px;}"
+        "QComboBox::down-arrow{width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid #102238;}"
+        "QComboBox:focus{border:1px solid #ff8a35;}"
     )
 
 
@@ -155,19 +154,7 @@ def _handle_editor_key(editor: QTextEdit, event) -> bool:
         event.accept()
         return True
     if event.key() in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace):
-        cursor = editor.textCursor()
-        if cursor.hasSelection():
-            cursor.removeSelectedText()
-            editor.setTextCursor(cursor)
-        elif event.key() == Qt.Key.Key_Delete:
-            cursor.deleteChar()
-            editor.setTextCursor(cursor)
-        else:
-            cursor.deletePreviousChar()
-            editor.setTextCursor(cursor)
-        _save_editor_text(canvas, editor)
-        event.accept()
-        return True
+        return False
     return False
 
 
@@ -179,7 +166,7 @@ class _CanvasTextEdit(QTextEdit):
 
     def event(self, event) -> bool:
         if event.type() == QEvent.Type.ShortcutOverride:
-            if event.key() in (Qt.Key.Key_C, Qt.Key.Key_X, Qt.Key.Key_V, Qt.Key.Key_A, Qt.Key.Key_Delete, Qt.Key.Key_Backspace):
+            if event.key() in (Qt.Key.Key_C, Qt.Key.Key_X, Qt.Key.Key_V, Qt.Key.Key_A):
                 event.accept()
                 return True
         return super().event(event)
