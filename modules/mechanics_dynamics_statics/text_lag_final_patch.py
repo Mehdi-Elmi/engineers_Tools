@@ -1,8 +1,9 @@
-"""Final lag reduction and Text color toolbar patch.
+"""Final lag reduction, Text color toolbar, and editor key ownership patch.
 
 This patch intentionally runs last. It makes the Text toolbar normalization
-idempotent, creates the color swatch strip only when missing, and prevents old
-repeated timers from doing expensive work during maximize/minimize.
+idempotent, creates the color swatch strip only when missing, prevents old
+repeated timers from doing expensive work during maximize/minimize, and owns the
+final QTextEdit key behavior so text editing is never routed to object actions.
 """
 
 from __future__ import annotations
@@ -10,10 +11,10 @@ from __future__ import annotations
 import logging
 
 from PySide6.QtCore import QTimer, Qt
-from PySide6.QtGui import QColor, QTextCharFormat
-from PySide6.QtWidgets import QColorDialog, QGridLayout, QHBoxLayout, QPushButton, QSizePolicy, QWidget
+from PySide6.QtGui import QColor, QKeySequence, QTextCharFormat
+from PySide6.QtWidgets import QColorDialog, QGridLayout, QHBoxLayout, QPushButton, QSizePolicy, QTextEdit, QWidget
 
-PATCH_VERSION = "engineering-text-lag-final-2026-07-02-a"
+PATCH_VERSION = "engineering-text-lag-final-2026-07-02-b"
 
 _COLOR_NAMES = {
     "#132238": "Navy",
@@ -37,6 +38,125 @@ def _buttons(root: QWidget | None) -> dict[str, QPushButton]:
 def _active_editor(root: QWidget | None):
     canvas = getattr(root, "_canvas", None) if root is not None else None
     return getattr(canvas, "_active_text_editor", None) if canvas is not None else None
+
+
+def _text_window_from_editor(editor: QTextEdit | None) -> QWidget | None:
+    canvas = getattr(editor, "_canvas_owner", None) if editor is not None else None
+    return canvas.window() if canvas is not None and hasattr(canvas, "window") else None
+
+
+def _save_editor(editor: QTextEdit | None) -> None:
+    canvas = getattr(editor, "_canvas_owner", None) if editor is not None else None
+    if canvas is None:
+        return
+    try:
+        from . import ui_text_tool_final_patch as text_final
+        text_final._save_editor_text(canvas, editor)
+    except Exception:
+        pass
+    try:
+        from . import text_toolbar_word_behavior_patch as word
+        word._save_active_editor(canvas)
+    except Exception:
+        pass
+
+
+def _matches(event, standard) -> bool:
+    try:
+        return bool(event.matches(standard))
+    except Exception:
+        return False
+
+
+def _insert_active_list_after_enter(editor: QTextEdit) -> bool:
+    root = _text_window_from_editor(editor)
+    try:
+        from . import text_line_math_symbols_patch as line_patch
+    except Exception:
+        return False
+    settings = line_patch._text_settings_for_active_list(root)
+    if settings is None:
+        return False
+    cursor = editor.textCursor()
+    cursor.insertBlock()
+    line_patch._insert_list_prefix_with_cursor(root, cursor, settings, advance_number=True)
+    editor.setTextCursor(cursor)
+    _save_editor(editor)
+    return True
+
+
+def _handle_text_editor_key(editor: QTextEdit, event) -> bool:
+    if _matches(event, QKeySequence.StandardKey.Copy):
+        editor.copy()
+        event.accept()
+        return True
+    if _matches(event, QKeySequence.StandardKey.Cut):
+        editor.cut()
+        _save_editor(editor)
+        event.accept()
+        return True
+    if _matches(event, QKeySequence.StandardKey.Paste):
+        editor.paste()
+        _save_editor(editor)
+        event.accept()
+        return True
+    if _matches(event, QKeySequence.StandardKey.SelectAll):
+        editor.selectAll()
+        event.accept()
+        return True
+    if event.key() in (Qt.Key.Key_Backspace, Qt.Key.Key_Delete):
+        QTextEdit.keyPressEvent(editor, event)
+        _save_editor(editor)
+        event.accept()
+        return True
+    if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+        if _insert_active_list_after_enter(editor):
+            event.accept()
+            return True
+    return False
+
+
+def _is_text_shortcut(event) -> bool:
+    return any(
+        _matches(event, standard)
+        for standard in (
+            QKeySequence.StandardKey.Copy,
+            QKeySequence.StandardKey.Cut,
+            QKeySequence.StandardKey.Paste,
+            QKeySequence.StandardKey.SelectAll,
+        )
+    ) or event.key() in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace)
+
+
+def _patch_text_key_ownership(edw) -> None:
+    try:
+        from . import ui_text_tool_final_patch as text_final
+        text_final._handle_editor_key = _handle_text_editor_key
+    except Exception:
+        pass
+    try:
+        from . import final_focus_editing_icons_patch as focus_patch
+        focus_patch._handle_editor_key = _handle_text_editor_key
+        focus_patch._is_text_shortcut = _is_text_shortcut
+    except Exception:
+        pass
+
+    if getattr(edw.EngineeringCanvas, "_lag_final_text_key_owner", "") == PATCH_VERSION:
+        return
+    old_key = edw.EngineeringCanvas.keyPressEvent
+
+    def key_press(self, event) -> None:
+        editor = getattr(self, "_active_text_editor", None)
+        if isinstance(editor, QTextEdit) and editor.hasFocus():
+            if _handle_text_editor_key(editor, event):
+                return
+            QTextEdit.keyPressEvent(editor, event)
+            _save_editor(editor)
+            return
+        old_key(self, event)
+
+    edw.EngineeringCanvas.keyPressEvent = key_press
+    edw.EngineeringCanvas._lag_final_text_key_owner = PATCH_VERSION
 
 
 def _apply_text_color(root: QWidget | None, value: str) -> None:
@@ -304,6 +424,7 @@ def apply_text_lag_final_patch() -> None:
     _patch_runtime_style(runtime)
     _patch_word_apply_toolbar(word)
     _patch_canvas_defaults(edw)
+    _patch_text_key_ownership(edw)
 
     old_init = edw.EngineeringDesignWorkspace.__init__
 
@@ -313,6 +434,7 @@ def apply_text_lag_final_patch() -> None:
         _patch_runtime_style(runtime)
         _patch_word_apply_toolbar(word)
         _patch_canvas_defaults(edw)
+        _patch_text_key_ownership(edw)
         root = self
         start_bar = getattr(root, "_start_bar_widget", None)
         if start_bar is not None:
@@ -322,6 +444,7 @@ def apply_text_lag_final_patch() -> None:
                 _ensure_color_strip(bar, root)
         _reset_text_defaults(root)
         QTimer.singleShot(0, lambda r=root: word._apply_word_toolbar(r))
+        QTimer.singleShot(0, lambda: _patch_text_key_ownership(edw))
         logging.info("text_lag_final_patch: installed version=%s", PATCH_VERSION)
 
     edw.EngineeringDesignWorkspace.__init__ = workspace_init
