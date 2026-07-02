@@ -343,7 +343,7 @@ def _open_custom_color_dialog(parent: QWidget | None, initial: str) -> str | Non
 
 
 def _open_line_spacing_settings(root: QWidget | None) -> None:
-    dialog, _body, body_layout = _dialog_shell(root, "Line and Paragraph Settings", (360, 190))
+    dialog, _body, body_layout = _dialog_shell(root, "Line and Paragraph Settings", (420, 250))
     form = QFormLayout()
     value = QDoubleSpinBox()
     value.setRange(0.5, 6.0)
@@ -353,6 +353,14 @@ def _open_line_spacing_settings(root: QWidget | None) -> None:
     _spin_style(value)
     form.addRow("Line spacing", value)
     body_layout.addLayout(form)
+    quick = QHBoxLayout()
+    for label, spacing in (("1.0", 1.0), ("1.15", 1.15), ("1.5", 1.5), ("2.0", 2.0)):
+        button = QPushButton(label)
+        button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        button.setStyleSheet(_button_style("QPushButton"))
+        button.clicked.connect(lambda checked=False, v=spacing: value.setValue(v))
+        quick.addWidget(button)
+    body_layout.addLayout(quick)
     actions = QHBoxLayout()
     actions.addStretch(1)
     ok = QPushButton("OK")
@@ -369,6 +377,46 @@ def _open_line_spacing_settings(root: QWidget | None) -> None:
         _apply_line_spacing(root, value.value())
 
 
+def _open_math_symbols_dialog(root: QWidget | None) -> None:
+    dialog, body, body_layout = _dialog_shell(root, "Math Symbols", (560, 420))
+
+    def add_section(title: str, symbols: tuple[str, ...]) -> None:
+        label = QLabel(title, body)
+        _font(label, 11, italic=True)
+        body_layout.addWidget(label)
+        grid_widget = QWidget(body)
+        grid = QGridLayout(grid_widget)
+        grid.setContentsMargins(0, 0, 0, 0)
+        grid.setHorizontalSpacing(3)
+        grid.setVerticalSpacing(3)
+        for index, symbol in enumerate(symbols):
+            button = QPushButton(symbol, grid_widget)
+            button.setFixedSize(32, 28)
+            button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+            _font(button, 12, bold=False, symbol=True, italic=False)
+            button.setStyleSheet("QPushButton{background:#ffffff;border:1px solid #9fb4cd;border-radius:6px;color:#132238;font-style:normal;} QPushButton:hover{background:#dcecff;border-color:#ff8a35;} QPushButton:pressed{background:#f18a2a;color:#ffffff;}")
+            button.clicked.connect(lambda checked=False, s=symbol: _insert_symbol(root, s))
+            grid.addWidget(button, index // 12, index % 12)
+        body_layout.addWidget(grid_widget)
+
+    add_section("Greek letters", GREEK)
+    add_section("Math operators", OPERATORS)
+    add_section("Arrows", ARROWS)
+    actions = QHBoxLayout()
+    convert = QPushButton("Convert Selected To Math")
+    close = QPushButton("Close")
+    for button in (convert, close):
+        button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        button.setStyleSheet(_button_style("QPushButton"))
+    convert.clicked.connect(lambda checked=False: _convert_selection_to_math(root))
+    close.clicked.connect(dialog.accept)
+    actions.addStretch(1)
+    actions.addWidget(convert)
+    actions.addWidget(close)
+    body_layout.addLayout(actions)
+    dialog.exec()
+
+
 def _open_list_settings(root: QWidget | None, mode: str) -> None:
     try:
         from . import ui_text_runtime_guard_patch as guard
@@ -378,7 +426,6 @@ def _open_list_settings(root: QWidget | None, mode: str) -> None:
 
     title = "Custom Bullet Settings" if mode == "bullet" else "Custom Numbering Settings"
     dialog, body, body_layout = _dialog_shell(root, title, (500, 410))
-
     form = QFormLayout()
     form.setHorizontalSpacing(10)
     form.setVerticalSpacing(7)
@@ -467,7 +514,6 @@ def _open_list_settings(root: QWidget | None, mode: str) -> None:
     update_preview()
     rebuild_colors()
     body_layout.addWidget(color_holder)
-
     actions = QHBoxLayout()
     actions.addStretch(1)
     ok = QPushButton("OK")
@@ -480,7 +526,6 @@ def _open_list_settings(root: QWidget | None, mode: str) -> None:
     actions.addWidget(ok)
     actions.addWidget(cancel)
     body_layout.addLayout(actions)
-
     if dialog.exec() == QDialog.DialogCode.Accepted and root is not None:
         settings = {
             "mode": mode,
@@ -508,30 +553,29 @@ def _replace_menu(button: QPushButton, property_name: str) -> QMenu:
     return menu
 
 
+def _wire_dialog_button(button: QPushButton, property_name: str, callback) -> None:
+    old = button.menu()
+    if old is not None:
+        old.deleteLater()
+        button.setMenu(None)
+    button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+    if button.property(property_name) == PATCH_VERSION:
+        return
+    button.clicked.connect(lambda checked=False: callback())
+    button.setProperty(property_name, PATCH_VERSION)
+
+
 def _apply_text_menus(root: QWidget | None) -> None:
     buttons = _buttons(root)
 
     line = buttons.get("Line spacing")
-    if isinstance(line, QPushButton) and line.property("lineMenuVersion") != PATCH_VERSION:
-        menu = _replace_menu(line, "lineMenuVersion")
-        for label, value in (("1.0", 1.0), ("1.15", 1.15), ("1.5", 1.5), ("2.0", 2.0)):
-            action = menu.addAction(label)
-            action.triggered.connect(lambda checked=False, v=value, w=root: _apply_line_spacing(w, v))
-        menu.addSeparator()
-        action = menu.addAction("Line and paragraph settings...")
-        action.triggered.connect(lambda checked=False, w=root: _open_line_spacing_settings(w))
+    if isinstance(line, QPushButton):
+        _wire_dialog_button(line, "lineDialogVersion", lambda w=root: _open_line_spacing_settings(w))
         line.setToolTip("Line spacing")
 
     math = buttons.get("Math symbols")
-    if isinstance(math, QPushButton) and math.property("mathMenuVersion") != PATCH_VERSION:
-        menu = _replace_menu(math, "mathMenuVersion")
-        _prepare_menu(menu, title_italic=True)
-        _add_symbol_section(menu, "Greek letters", GREEK, root)
-        _add_symbol_section(menu, "Math operators", OPERATORS, root)
-        _add_symbol_section(menu, "Arrows", ARROWS, root)
-        menu.addSeparator()
-        convert = menu.addAction("Convert selected text to math")
-        convert.triggered.connect(lambda checked=False, w=root: _convert_selection_to_math(w))
+    if isinstance(math, QPushButton):
+        _wire_dialog_button(math, "mathDialogVersion", lambda w=root: _open_math_symbols_dialog(w))
         math.setToolTip("Math symbols")
 
     bullet = buttons.get("Bullet")
