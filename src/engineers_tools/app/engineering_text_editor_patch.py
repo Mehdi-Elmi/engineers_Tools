@@ -6,10 +6,10 @@ import logging
 
 from PySide6.QtCore import QEvent, QObject, QPoint, Qt
 from PySide6.QtGui import QTextCursor
-from PySide6.QtWidgets import QApplication, QLineEdit, QMenu, QPlainTextEdit, QTextEdit, QWidget
+from PySide6.QtWidgets import QApplication, QInputDialog, QLineEdit, QMenu, QPlainTextEdit, QTextEdit, QWidget
 
 
-VERSION = "text-editor-priority-1"
+VERSION = "text-editor-priority-2"
 _TEXT_FILTER: QObject | None = None
 _LAST_TEXT_EDITOR: QWidget | None = None
 _ORIGINAL_ACTIONS: dict[tuple[type, str], object] = {}
@@ -227,6 +227,52 @@ def _insert_text_symbol(self, symbol: str) -> None:
             editor.setTextCursor(cursor)
 
 
+def _build_math_menu(self) -> QMenu:
+    menu = QMenu(getattr(self, "_text_toolbar", None) or self)
+    _style_text_menu(menu)
+    symbols = (
+        ("π", "π"), ("θ", "θ"), ("α", "α"), ("β", "β"), ("γ", "γ"), ("Δ", "Δ"),
+        ("√", "√"), ("Σ", "∑"), ("∫", "∫"), ("∞", "∞"), ("±", "±"),
+        ("×", "×"), ("÷", "÷"), ("≤", "≤"), ("≥", "≥"), ("≠", "≠"), ("≈", "≈"),
+        ("Degree °", "°"), ("Power ²", "²"), ("Power ³", "³"), ("Sub ₁", "₁"), ("Sub ₂", "₂"),
+    )
+    for label, symbol in symbols:
+        action = menu.addAction(label)
+        action.triggered.connect(lambda checked=False, value=symbol: self._insert_text_symbol(value))
+    return menu
+
+
+def _set_custom_line_spacing(self) -> None:
+    current = 1.0
+    settings = getattr(self, "_text_settings", None)
+    if isinstance(settings, dict):
+        try:
+            current = float(settings.get("line_spacing", 1.0))
+        except Exception:
+            current = 1.0
+    value, accepted = QInputDialog.getDouble(self, "Line Paragraph Setting", "Line spacing", current, 0.1, 20.0, 2)
+    if not accepted:
+        return
+    setter = getattr(self, "_set_text_option", None)
+    if callable(setter):
+        setter("line_spacing", value)
+
+
+def _build_list_menu(self, mode: str) -> QMenu:
+    menu = QMenu(getattr(self, "_text_toolbar", None) or self)
+    _style_text_menu(menu)
+    if mode == "numbering":
+        entries = (("1.  ", "1. "), ("1)  ", "1) "), ("01. ", "01. "), ("A.  ", "A. "), ("a.  ", "a. "))
+    else:
+        entries = (("•  ", "• "), ("◦  ", "◦ "), ("▪  ", "▪ "), ("–  ", "– "), ("→  ", "→ "))
+    for label, prefix in entries:
+        action = menu.addAction(label)
+        action.triggered.connect(lambda checked=False, value=prefix: self._insert_text_symbol(value))
+    custom = menu.addAction("Custom Setting")
+    custom.triggered.connect(lambda checked=False: self._insert_text_symbol(entries[0][1]))
+    return menu
+
+
 def _install_workspace_wrappers() -> None:
     try:
         from modules.mechanics_dynamics_statics import workspace as edw
@@ -247,6 +293,9 @@ def _install_workspace_wrappers() -> None:
     ):
         _wrap_workspace_action(workspace_cls, name, action)
     workspace_cls._insert_text_symbol = _insert_text_symbol
+    workspace_cls._build_math_menu = _build_math_menu
+    workspace_cls._set_custom_line_spacing = _set_custom_line_spacing
+    workspace_cls._build_list_menu = _build_list_menu
 
 
 def apply_engineering_text_editor_patch() -> None:
