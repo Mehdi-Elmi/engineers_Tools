@@ -10,6 +10,7 @@ from pathlib import Path
 from PySide6.QtCore import QObject, QEvent, QPointF, QTimer, Qt
 from PySide6.QtGui import QColor, QFont, QKeySequence, QPainter, QPixmap, QPolygonF, QTextCursor
 from PySide6.QtWidgets import (
+    QApplication,
     QCheckBox,
     QComboBox,
     QDoubleSpinBox,
@@ -21,7 +22,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-PATCH_VERSION = "engineering-text-toolbar-final-event-safety-2026-07-02-j"
+PATCH_VERSION = "engineering-text-toolbar-final-event-safety-2026-07-02-k"
 _ARROW_CACHE: dict[str, str] = {}
 
 
@@ -38,6 +39,10 @@ def _workspace_from_editor(editor: QTextEdit) -> QWidget | None:
     root = _workspace_from_widget(editor)
     if root is not None:
         return root
+    owner = getattr(editor, "_canvas_owner", None)
+    root = _workspace_from_widget(owner) if owner is not None else None
+    if root is not None:
+        return root
     item = getattr(editor, "_engineering_text_item", None) or getattr(editor, "_text_item", None)
     scene = item.scene() if item is not None and hasattr(item, "scene") else None
     views = scene.views() if scene is not None and hasattr(scene, "views") else []
@@ -45,8 +50,15 @@ def _workspace_from_editor(editor: QTextEdit) -> QWidget | None:
         root = _workspace_from_widget(view)
         if root is not None:
             return root
-    owner = getattr(editor, "_canvas_owner", None)
-    return _workspace_from_widget(owner) if owner is not None else None
+    app = QApplication.instance()
+    if app is not None:
+        for widget in app.topLevelWidgets():
+            root = _workspace_from_widget(widget)
+            canvas = getattr(root, "_canvas", None) if root is not None else None
+            if getattr(canvas, "_active_text_editor", None) is editor:
+                editor._canvas_owner = canvas
+                return root
+    return None
 
 
 def _buttons(root: QWidget | None) -> dict:
@@ -182,24 +194,22 @@ def _activate_list_mode(root: QWidget | None, mode: str, style: str | None = Non
     except Exception:
         return
     _patch_line_module_controls()
-    try:
-        line_patch._activate_list_style(root, mode, style)
-    except Exception:
-        settings = dict(line_patch._default_list_settings(mode, style))
-        settings.update({"mode": mode, "style": style or settings.get("style")})
-        settings["bold"] = True
-        settings["italic"] = False
-        if mode == "numbering":
-            try:
-                setattr(root, "_text_numbering_next", int(settings.get("start_numbering", 1)))
-            except Exception:
-                setattr(root, "_text_numbering_next", 1)
-        setattr(root, "_last_text_list_settings", settings)
+    settings = dict(getattr(root, "_last_text_list_settings", {}) or line_patch._default_list_settings(mode, style))
+    if settings.get("mode") != mode:
+        settings = line_patch._default_list_settings(mode, style)
+    settings.update({"mode": mode, "style": style or settings.get("style")})
+    settings["bold"] = bool(settings.get("bold", True))
+    settings["italic"] = bool(settings.get("italic", False))
+    if mode == "numbering":
         try:
-            line_patch._set_list_button_state(root, mode)
-            line_patch._apply_custom_list_style(root, settings)
+            setattr(root, "_text_numbering_next", int(settings.get("start_numbering", 1)))
         except Exception:
-            logging.exception("text final safety: fallback list activation failed")
+            setattr(root, "_text_numbering_next", 1)
+    setattr(root, "_last_text_list_settings", settings)
+    try:
+        line_patch._set_list_button_state(root, mode)
+    except Exception:
+        pass
 
 
 def _wire_list_buttons(root: QWidget | None) -> None:
@@ -209,6 +219,9 @@ def _wire_list_buttons(root: QWidget | None) -> None:
         if button is None:
             continue
         button.setCheckable(True)
+        # The popup menu owns style insertion. This fallback only marks active mode when no menu patch is present.
+        if button.property("lineMenuVersion") or button.property("bulletMenuVersion") or button.property("numberingMenuVersion"):
+            continue
         if button.property("finalEventListWire") == PATCH_VERSION:
             continue
         try:
@@ -339,7 +352,7 @@ def _arrow_url(direction: str) -> str:
     points = [QPointF(9, 4), QPointF(14, 12), QPointF(4, 12)] if direction == "up" else [QPointF(4, 6), QPointF(14, 6), QPointF(9, 14)]
     painter.drawPolygon(QPolygonF(points))
     painter.end()
-    path = Path(tempfile.gettempdir()) / f"engineering_arrow_{direction}_20260702j.png"
+    path = Path(tempfile.gettempdir()) / f"engineering_arrow_{direction}_20260702k.png"
     pixmap.save(path.as_posix(), "PNG")
     _ARROW_CACHE[direction] = path.as_posix()
     return path.as_posix()
@@ -420,6 +433,7 @@ def _patch_color_dialog() -> None:
         try:
             module = __import__(f"modules.mechanics_dynamics_statics.{module_name}", fromlist=[module_name])
             module._open_custom_color_dialog = open_standard_color_dialog
+            module._open_standard_color_dialog = open_standard_color_dialog
         except Exception:
             logging.exception("text final safety: color dialog patch failed for %s", module_name)
 
@@ -513,11 +527,28 @@ def _patch_line_spacing_dialog() -> None:
     line_patch._open_line_spacing_settings = open_line_spacing_settings
 
 
+def _patch_key_handlers() -> None:
+    for module_name in ("text_lag_final_patch", "text_line_math_symbols_patch", "ui_text_tool_final_patch", "final_focus_editing_icons_patch"):
+        try:
+            module = __import__(f"modules.mechanics_dynamics_statics.{module_name}", fromlist=[module_name])
+            module._handle_text_editor_key = _handle_editor_event
+            module._handle_editor_key = _handle_editor_event
+        except Exception:
+            pass
+
+
 def _install_existing_editors(root: QWidget | None) -> None:
     if root is None:
         return
+    canvas = getattr(root, "_canvas", None)
+    editor = getattr(canvas, "_active_text_editor", None) if canvas is not None else None
+    if isinstance(editor, QTextEdit):
+        editor._canvas_owner = canvas
+        _install_editor_filter(editor)
     _wire_list_buttons(root)
     for editor in root.findChildren(QTextEdit):
+        if getattr(editor, "_canvas_owner", None) is None and canvas is not None:
+            editor._canvas_owner = canvas
         _install_editor_filter(editor)
 
 
@@ -530,8 +561,7 @@ def _patch_canvas_key_handler(edw) -> None:
     def key_press(self, event) -> None:
         editor = getattr(self, "_active_text_editor", None)
         if isinstance(editor, QTextEdit):
-            if getattr(editor, "_canvas_owner", None) is None:
-                editor._canvas_owner = self
+            editor._canvas_owner = self
             _install_editor_filter(editor)
             if editor.hasFocus() and _handle_editor_event(editor, event):
                 return
@@ -556,6 +586,7 @@ def apply_text_toolbar_final_event_safety_patch() -> None:
     _patch_color_dialog()
     _patch_line_spacing_dialog()
     _patch_line_module_controls()
+    _patch_key_handlers()
     _patch_canvas_key_handler(edw)
     for module in modules:
         _patch_show_editor(module)
@@ -567,12 +598,13 @@ def apply_text_toolbar_final_event_safety_patch() -> None:
         _patch_color_dialog()
         _patch_line_spacing_dialog()
         _patch_line_module_controls()
+        _patch_key_handlers()
         _patch_canvas_key_handler(edw)
         _install_existing_editors(self)
         _polish_textbar_controls(self)
         _wire_list_buttons(self)
         for delay in (0, 80, 250, 700, 1400):
-            QTimer.singleShot(delay, lambda root=self: (_install_existing_editors(root), _polish_textbar_controls(root), _patch_line_module_controls(), _wire_list_buttons(root)))
+            QTimer.singleShot(delay, lambda root=self: (_patch_key_handlers(), _install_existing_editors(root), _polish_textbar_controls(root), _patch_line_module_controls(), _wire_list_buttons(root)))
 
     edw.EngineeringDesignWorkspace.__init__ = workspace_init
     edw.EngineeringDesignWorkspace._engineering_text_toolbar_final_event_safety_patch = PATCH_VERSION
