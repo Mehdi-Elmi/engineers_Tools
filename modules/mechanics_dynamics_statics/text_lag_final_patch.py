@@ -12,11 +12,12 @@ import logging
 
 from PySide6.QtCore import QTimer, Qt
 from PySide6.QtGui import QColor, QKeySequence, QTextCharFormat
-from PySide6.QtWidgets import QColorDialog, QGridLayout, QHBoxLayout, QPushButton, QSizePolicy, QTextEdit, QWidget
+from PySide6.QtWidgets import QGridLayout, QHBoxLayout, QPushButton, QSizePolicy, QTextEdit, QWidget
 
-PATCH_VERSION = "engineering-text-lag-final-2026-07-02-b"
+PATCH_VERSION = "engineering-text-lag-final-2026-07-02-c"
 
 _COLOR_NAMES = {
+    "#000000": "Black",
     "#132238": "Navy",
     "#2f7df6": "Blue",
     "#0f2a44": "Dark blue",
@@ -26,6 +27,15 @@ _COLOR_NAMES = {
     "#6e4ad6": "Purple",
     "#536271": "Gray",
 }
+
+
+def _workspace_from_canvas(canvas) -> QWidget | None:
+    current = canvas
+    while current is not None:
+        if hasattr(current, "_start_bar_widget") and hasattr(current, "_canvas"):
+            return current
+        current = current.parentWidget() if hasattr(current, "parentWidget") else None
+    return canvas.window() if canvas is not None and hasattr(canvas, "window") else None
 
 
 def _buttons(root: QWidget | None) -> dict[str, QPushButton]:
@@ -40,9 +50,9 @@ def _active_editor(root: QWidget | None):
     return getattr(canvas, "_active_text_editor", None) if canvas is not None else None
 
 
-def _text_window_from_editor(editor: QTextEdit | None) -> QWidget | None:
+def _text_root_from_editor(editor: QTextEdit | None) -> QWidget | None:
     canvas = getattr(editor, "_canvas_owner", None) if editor is not None else None
-    return canvas.window() if canvas is not None and hasattr(canvas, "window") else None
+    return _workspace_from_canvas(canvas) if canvas is not None else None
 
 
 def _save_editor(editor: QTextEdit | None) -> None:
@@ -68,8 +78,18 @@ def _matches(event, standard) -> bool:
         return False
 
 
+def _delete_text_character(editor: QTextEdit, *, previous: bool) -> None:
+    cursor = editor.textCursor()
+    if previous:
+        cursor.deletePreviousChar()
+    else:
+        cursor.deleteChar()
+    editor.setTextCursor(cursor)
+    _save_editor(editor)
+
+
 def _insert_active_list_after_enter(editor: QTextEdit) -> bool:
-    root = _text_window_from_editor(editor)
+    root = _text_root_from_editor(editor)
     try:
         from . import text_line_math_symbols_patch as line_patch
     except Exception:
@@ -104,9 +124,12 @@ def _handle_text_editor_key(editor: QTextEdit, event) -> bool:
         editor.selectAll()
         event.accept()
         return True
-    if event.key() in (Qt.Key.Key_Backspace, Qt.Key.Key_Delete):
-        QTextEdit.keyPressEvent(editor, event)
-        _save_editor(editor)
+    if event.key() == Qt.Key.Key_Backspace:
+        _delete_text_character(editor, previous=True)
+        event.accept()
+        return True
+    if event.key() == Qt.Key.Key_Delete:
+        _delete_text_character(editor, previous=False)
         event.accept()
         return True
     if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
@@ -177,6 +200,14 @@ def _swatch_style(color: str) -> str:
     )
 
 
+def _open_standard_color_dialog(parent: QWidget, current: str) -> str | None:
+    try:
+        from . import text_line_math_symbols_patch as line_patch
+        return line_patch._open_custom_color_dialog(parent, current)
+    except Exception:
+        return None
+
+
 def _make_swatch(parent: QWidget, root: QWidget | None, color: str) -> QPushButton:
     button = QPushButton(parent)
     button.setObjectName("RuntimeTextColorSwatch")
@@ -188,10 +219,8 @@ def _make_swatch(parent: QWidget, root: QWidget | None, color: str) -> QPushButt
     button.setStyleSheet(_swatch_style(color))
 
     def choose_custom() -> None:
-        current = QColor(str(button.property("colorValue") or color))
-        picked = QColorDialog.getColor(current, button, "Custom Color")
-        if picked.isValid():
-            value = picked.name()
+        value = _open_standard_color_dialog(button, str(button.property("colorValue") or color))
+        if value:
             button.setProperty("colorValue", value)
             button.setToolTip(_COLOR_NAMES.get(value.lower(), value))
             button.setStyleSheet(_swatch_style(value))
@@ -217,20 +246,18 @@ def _ensure_color_strip(bar: QWidget | None, root: QWidget | None) -> None:
     if bar is None:
         return
     holder = bar.findChild(QWidget, "RuntimeTextColorPaletteHolder")
-    if holder is not None:
+    if holder is not None and holder.property("lagColorVersion") == PATCH_VERSION:
         holder.show()
         return
+    if holder is not None:
+        holder.hide()
+        holder.setParent(None)
+        holder.deleteLater()
 
-    try:
-        from . import ui_text_tool_runtime_fix_patch as runtime
-        base_colors = list(getattr(runtime, "_TEXT_COLOR_PALETTE", ()))
-    except Exception:
-        base_colors = []
-    if not base_colors:
-        base_colors = list(_COLOR_NAMES.keys())
+    base_colors = ["#000000", "#132238", "#2f7df6", "#36a9e1", "#f18a2a", "#ffbf36", "#c9342b", "#168a50"]
     colors = base_colors + _custom_colors(root)
     swatch = 16
-    gap = 2
+    gap = 1
     columns = max(4, (len(colors) + 1) // 2)
     palette_width = columns * swatch + max(0, columns - 1) * gap
     palette_height = 2 * swatch + gap
@@ -261,19 +288,18 @@ def _ensure_color_strip(bar: QWidget | None, root: QWidget | None) -> None:
     )
 
     def add_color() -> None:
-        picked = QColorDialog.getColor(QColor("#2f7df6"), add, "Add Custom Color")
-        if not picked.isValid():
+        value = _open_standard_color_dialog(add, "#2f7df6")
+        if not value:
             return
-        value = picked.name()
         values = _custom_colors(root)
         if value not in values and len(values) < 20:
             values.append(value)
         _apply_text_color(root, value)
-        holder = bar.findChild(QWidget, "RuntimeTextColorPaletteHolder")
-        if holder is not None:
-            holder.hide()
-            holder.setParent(None)
-            holder.deleteLater()
+        current = bar.findChild(QWidget, "RuntimeTextColorPaletteHolder")
+        if current is not None:
+            current.hide()
+            current.setParent(None)
+            current.deleteLater()
         _ensure_color_strip(bar, root)
 
     add.clicked.connect(add_color)
@@ -281,6 +307,7 @@ def _ensure_color_strip(bar: QWidget | None, root: QWidget | None) -> None:
     holder = QWidget(bar)
     holder.setObjectName("RuntimeTextColorPaletteHolder")
     holder.setProperty("runtimeTextColorControl", True)
+    holder.setProperty("lagColorVersion", PATCH_VERSION)
     holder.setFixedSize(palette_width + 20, palette_height)
     row = QHBoxLayout(holder)
     row.setContentsMargins(0, 0, 0, 0)
@@ -391,7 +418,7 @@ def _patch_canvas_defaults(edw) -> None:
 
     def mouse_release(self, event) -> None:
         old_release(self, event)
-        root = self.window() if hasattr(self, "window") else None
+        root = _workspace_from_canvas(self)
         _reset_text_defaults(root)
         index = getattr(self, "_active_text_editor_index", None)
         if isinstance(index, int) and 0 <= index < len(getattr(self, "objects", [])):
