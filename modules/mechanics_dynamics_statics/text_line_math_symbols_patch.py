@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
 
 from PySide6.QtCore import QTimer, Qt
-from PySide6.QtGui import QColor, QFont, QIcon, QPixmap, QTextBlockFormat, QTextCharFormat
+from PySide6.QtGui import QColor, QFont, QPixmap, QTextBlockFormat, QTextCharFormat
 from PySide6.QtWidgets import (
     QColorDialog,
     QComboBox,
@@ -54,12 +55,12 @@ def _font(widget: QWidget, size: int = 10, *, bold: bool = True, symbol: bool = 
 
 def _button_style(selector: str = "QPushButton") -> str:
     return (
-        f"{selector}{{background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #ffffff,stop:.55 #fff6d6,stop:1 #ffc969);"
+        selector + "{background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #ffffff,stop:.55 #fff6d6,stop:1 #ffc969);"
         "border:1px solid #b98920;border-radius:8px;color:#132238;font-family:'Times New Roman';"
         "font-weight:900;font-style:normal;padding:4px 12px;outline:0;}"
-        f"{selector}:hover{{background:#fff4cf;border-color:#ff8a35;}}"
-        f"{selector}:pressed{{background:#f18a2a;color:#ffffff;padding-top:5px;}}"
-        f"{selector}:focus{{outline:0;border:1px solid #b98920;}}"
+        + selector + ":hover{background:#fff4cf;border-color:#ff8a35;}"
+        + selector + ":pressed{background:#f18a2a;color:#ffffff;padding-top:5px;}"
+        + selector + ":focus{outline:0;border:1px solid #b98920;}"
     )
 
 
@@ -104,7 +105,7 @@ def _menu_style(*, title_italic: bool = False) -> str:
     italic = "italic" if title_italic else "normal"
     return (
         "QMenu{background:#ffffff;border:1px solid #9fb4cd;border-radius:10px;color:#071b31;"
-        f"font-family:'Times New Roman';font-weight:800;font-style:{italic};padding:5px;}"
+        "font-family:'Times New Roman';font-weight:800;font-style:" + italic + ";padding:5px;}"
         "QMenu::item{min-height:22px;padding:4px 18px 4px 12px;border-radius:7px;}"
         "QMenu::item:selected{background:#dcecff;color:#071b31;}"
         "QMenu::separator{height:1px;background:#c7d6e8;margin:5px 6px;}"
@@ -120,8 +121,7 @@ def _prepare_menu(menu: QMenu, *, symbol: bool = False, title_italic: bool = Fal
 
 def _logo_pixmap() -> QPixmap:
     names = {"logo.png", "app_logo.png", "atlas_logo.png", "engineer_tools_logo.png", "icon.png"}
-    roots = list(Path(__file__).resolve().parents[:5])
-    for root in roots:
+    for root in list(Path(__file__).resolve().parents[:5]):
         for candidate in (root / "assets", root / "icons", root / "src" / "engineers_tools" / "assets"):
             if not candidate.exists():
                 continue
@@ -193,7 +193,6 @@ def _convert_selection_to_math(root: QWidget | None) -> None:
     if not text:
         return
     html = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-    import re
     html = re.sub(r"_([A-Za-z0-9]+)", r"<sub>\1</sub>", html)
     html = re.sub(r"\^([A-Za-z0-9]+)", r"<sup>\1</sup>", html)
     html = html.replace("+-", "±").replace("!=", "≠").replace("<=", "≤").replace(">=", "≥")
@@ -201,14 +200,18 @@ def _convert_selection_to_math(root: QWidget | None) -> None:
         cursor.insertHtml(html)
     else:
         editor.selectAll()
-        editor.textCursor().insertHtml(html)
+        cursor = editor.textCursor()
+        cursor.insertHtml(html)
     editor.setFocus()
     _save(root)
 
 
 def _line_height_type() -> int:
     value = QTextBlockFormat.LineHeightTypes.ProportionalHeight
-    return int(getattr(value, "value", value))
+    try:
+        return int(value.value)
+    except Exception:
+        return int(value)
 
 
 def _apply_line_spacing(root: QWidget | None, value: float) -> None:
@@ -250,7 +253,7 @@ def _insert_list_prefix(root: QWidget | None, prefix: str) -> None:
     if editor is None:
         return
     cursor = editor.textCursor()
-    cursor.insertText(f"{prefix} ")
+    cursor.insertText(prefix + " ")
     editor.setTextCursor(cursor)
     editor.setFocus()
     _save(root)
@@ -260,7 +263,6 @@ def _apply_custom_list_style(root: QWidget | None, settings: dict[str, object]) 
     _canvas, editor = _root_editor(root)
     if editor is None:
         return
-    prefix = str(settings.get("style", "•"))
     cursor = editor.textCursor()
     fmt = QTextCharFormat(editor.currentCharFormat())
     fmt.setFontFamily(str(settings.get("font", "Times New Roman")))
@@ -268,7 +270,7 @@ def _apply_custom_list_style(root: QWidget | None, settings: dict[str, object]) 
     fmt.setForeground(QColor(str(settings.get("color", "#132238"))))
     fmt.setFontItalic(False)
     fmt.setFontWeight(QFont.Weight.Normal)
-    cursor.insertText(f"{prefix} ", fmt)
+    cursor.insertText(str(settings.get("style", "•")) + " ", fmt)
     editor.setTextCursor(cursor)
     editor.setFocus()
     _save(root)
@@ -390,15 +392,13 @@ def _open_list_settings(root: QWidget | None, mode: str) -> None:
     preview = QLabel(body)
     preview.setFixedHeight(32)
     preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
-    preview.setStyleSheet("QLabel{background:#f6fbff;border:1px solid #b7c9dc;border-radius:8px;color:#132238;font-family:'Times New Roman';font-weight:900;font-style:normal;}")
 
     def update_preview() -> None:
-        text = style.currentText() + "  Sample text"
-        preview.setText(text)
+        preview.setText(style.currentText() + "  Sample text")
         preview_font = QFont(font_box.currentText() or "Times New Roman", size.value(), QFont.Weight.Normal)
         preview_font.setItalic(False)
         preview.setFont(preview_font)
-        preview.setStyleSheet(f"QLabel{{background:#f6fbff;border:1px solid #b7c9dc;border-radius:8px;color:{selected['color']};font-style:normal;}}")
+        preview.setStyleSheet("QLabel{background:#f6fbff;border:1px solid #b7c9dc;border-radius:8px;color:" + selected["color"] + ";font-style:normal;}")
 
     def choose(value: str) -> None:
         selected["color"] = value
@@ -439,10 +439,8 @@ def _open_list_settings(root: QWidget | None, mode: str) -> None:
             swatch.setFixedSize(18, 18)
             swatch.setFocusPolicy(Qt.FocusPolicy.NoFocus)
             swatch.setToolTip(COLOR_NAMES.get(color.lower(), color))
-            swatch.setStyleSheet(f"QPushButton{{background:{color};border:1px solid #243d58;border-radius:2px;padding:0;margin:0;}} QPushButton:hover{{border:2px solid #ff8a35;}}")
+            swatch.setStyleSheet("QPushButton{background:" + color + ";border:1px solid #243d58;border-radius:2px;padding:0;margin:0;} QPushButton:hover{border:2px solid #ff8a35;}")
             swatch.clicked.connect(lambda checked=False, c=color: choose(c))
-            swatch.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-            swatch.customContextMenuRequested.connect(lambda _pos, c=color: choose(c))
             grid.addWidget(swatch, index % 2, index // 2)
         add = QPushButton("＋", color_holder)
         add.setFixedSize(20, 36)
