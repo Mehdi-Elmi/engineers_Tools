@@ -28,7 +28,6 @@ from .svg_cursor_assets_activation_patch import apply_svg_cursor_assets_activati
 from .text_color_inline_palette_patch import apply_text_color_inline_palette_patch
 from .text_color_swatch_patch import apply_text_color_swatch_patch
 from .text_lag_final_patch import apply_text_lag_final_patch
-from .text_line_math_no_duplicate_patch import apply_text_line_math_no_duplicate_patch
 from .text_line_math_symbols_patch import apply_text_line_math_symbols_patch
 from .text_list_settings_final_patch import apply_text_list_settings_final_patch
 from .text_list_settings_patch import apply_text_list_settings_patch
@@ -82,5 +81,4 @@ def create_window(module: LauncherModule) -> ModuleWindow:
     apply_text_lag_final_patch()
     apply_final_focus_editing_icons_patch()
     apply_text_line_math_symbols_patch()
-    apply_text_line_math_no_duplicate_patch()
     return EngineeringDesignWorkspace(module)
