@@ -81,4 +81,5 @@ def create_window(module: LauncherModule) -> ModuleWindow:
     apply_text_line_math_symbols_patch()
     apply_text_lag_final_patch()
     apply_text_toolbar_final_event_safety_patch()
+    apply_project_dialog_style_cursor_patch()
     return EngineeringDesignWorkspace(module)
