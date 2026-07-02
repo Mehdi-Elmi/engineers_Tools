@@ -9,15 +9,17 @@ Windows runtime.
 from __future__ import annotations
 
 import importlib
+import re
 import tempfile
 from pathlib import Path
 
 from PySide6.QtCore import QPointF, QTimer, Qt
-from PySide6.QtGui import QColor, QPainter, QPixmap, QPolygonF
-from PySide6.QtWidgets import QComboBox, QDoubleSpinBox, QLineEdit, QListWidget, QPushButton, QSpinBox, QWidget
+from PySide6.QtGui import QColor, QFont, QPainter, QPixmap, QPolygonF, QTextCharFormat, QTextCursor
+from PySide6.QtWidgets import QComboBox, QDoubleSpinBox, QLineEdit, QListWidget, QPushButton, QSpinBox, QTextEdit, QWidget
 
-PATCH_VERSION = "engineering-project-dialog-style-cursor-2026-07-02-e"
+PATCH_VERSION = "engineering-project-dialog-style-cursor-2026-07-02-f"
 _ARROW_CACHE: dict[str, str] = {}
+_PREFIX_RE = re.compile(r"^\s*(?:\d+[\.)]|[ivxlcdmIVXLCDM]+[\.)]|[A-Za-z]+[\.)]|[●○■◆➤✓•])\s+")
 
 
 def _arrow_path(direction: str = "down") -> str:
@@ -41,7 +43,7 @@ def _arrow_path(direction: str = "down") -> str:
         points = [QPointF(13, 9), QPointF(5, 4), QPointF(5, 14)]
     painter.drawPolygon(QPolygonF(points))
     painter.end()
-    path = Path(tempfile.gettempdir()) / f"engineering_shared_arrow_{direction}_20260702e.png"
+    path = Path(tempfile.gettempdir()) / f"engineering_shared_arrow_{direction}_20260702f.png"
     pixmap.save(path.as_posix(), "PNG")
     _ARROW_CACHE[direction] = path.as_posix()
     return path.as_posix()
@@ -119,6 +121,131 @@ def _polish_dialog(root: QWidget | None) -> None:
         button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
 
 
+def _active_text_editor(root: QWidget | None) -> QTextEdit | None:
+    canvas = getattr(root, "_canvas", None) if root is not None else None
+    editor = getattr(canvas, "_active_text_editor", None) if canvas is not None else None
+    return editor if isinstance(editor, QTextEdit) else None
+
+
+def _save_active_text_editor(root: QWidget | None) -> None:
+    canvas = getattr(root, "_canvas", None) if root is not None else None
+    editor = _active_text_editor(root)
+    if canvas is None or editor is None:
+        return
+    try:
+        from . import ui_text_tool_final_patch as text_final
+        text_final._save_editor_text(canvas, editor)
+    except Exception:
+        pass
+
+
+def _merge_text_format(root: QWidget | None, fmt: QTextCharFormat) -> None:
+    editor = _active_text_editor(root)
+    if editor is None:
+        return
+    cursor = editor.textCursor()
+    if cursor.hasSelection():
+        cursor.mergeCharFormat(fmt)
+    editor.mergeCurrentCharFormat(fmt)
+    editor.setTextCursor(cursor)
+    editor.setFocus()
+    _save_active_text_editor(root)
+
+
+def _apply_text_font(root: QWidget | None, family: str) -> None:
+    fmt = QTextCharFormat()
+    fmt.setFontFamily(family or "Times New Roman")
+    _merge_text_format(root, fmt)
+
+
+def _apply_text_size(root: QWidget | None, size: int | float) -> None:
+    try:
+        point_size = max(1.0, float(size))
+    except Exception:
+        point_size = 12.0
+    fmt = QTextCharFormat()
+    fmt.setFontPointSize(point_size)
+    _merge_text_format(root, fmt)
+
+
+def _apply_text_bold(root: QWidget | None, checked: bool) -> None:
+    fmt = QTextCharFormat()
+    fmt.setFontWeight(QFont.Weight.Bold if checked else QFont.Weight.Normal)
+    _merge_text_format(root, fmt)
+
+
+def _apply_text_italic(root: QWidget | None, checked: bool) -> None:
+    fmt = QTextCharFormat()
+    fmt.setFontItalic(bool(checked))
+    _merge_text_format(root, fmt)
+
+
+def _wire_text_controls(root: QWidget | None) -> None:
+    start_bar = getattr(root, "_start_bar_widget", None) if root is not None else None
+    controls = getattr(start_bar, "_text_controls", {}) if start_bar is not None else {}
+    if not isinstance(controls, dict):
+        return
+    combo = controls.get("font")
+    size = controls.get("size")
+    buttons = controls.get("buttons", {}) if isinstance(controls.get("buttons", {}), dict) else {}
+    if isinstance(combo, QComboBox) and combo.property("finalFontApplyWire") != PATCH_VERSION:
+        combo.currentTextChanged.connect(lambda value, w=root: _apply_text_font(w, value))
+        combo.setProperty("finalFontApplyWire", PATCH_VERSION)
+    if isinstance(size, (QSpinBox, QDoubleSpinBox)) and size.property("finalSizeApplyWire") != PATCH_VERSION:
+        size.valueChanged.connect(lambda value, w=root: _apply_text_size(w, value))
+        size.setProperty("finalSizeApplyWire", PATCH_VERSION)
+    bold = buttons.get("Bold")
+    italic = buttons.get("Italic")
+    if isinstance(bold, QPushButton) and bold.property("finalBoldApplyWire") != PATCH_VERSION:
+        bold.toggled.connect(lambda checked, w=root: _apply_text_bold(w, checked))
+        bold.setProperty("finalBoldApplyWire", PATCH_VERSION)
+    if isinstance(italic, QPushButton) and italic.property("finalItalicApplyWire") != PATCH_VERSION:
+        italic.toggled.connect(lambda checked, w=root: _apply_text_italic(w, checked))
+        italic.setProperty("finalItalicApplyWire", PATCH_VERSION)
+        font = italic.font()
+        font.setItalic(True)
+        italic.setFont(font)
+        italic.setText("I")
+
+
+def _remove_current_list_prefix(root: QWidget | None) -> None:
+    editor = _active_text_editor(root)
+    if editor is None:
+        return
+    cursor = editor.textCursor()
+    block = cursor.block()
+    match = _PREFIX_RE.match(block.text() or "")
+    if match is None:
+        return
+    cursor.setPosition(block.position())
+    cursor.setPosition(block.position() + match.end(), QTextCursor.MoveMode.KeepAnchor)
+    cursor.removeSelectedText()
+    editor.setTextCursor(cursor)
+    _save_active_text_editor(root)
+
+
+def _install_text_list_none_behavior() -> None:
+    try:
+        from . import text_line_math_symbols_patch as line_patch
+    except Exception:
+        return
+    if getattr(line_patch, "_project_none_behavior_patch", "") == PATCH_VERSION:
+        return
+
+    def deactivate_list_style(root: QWidget | None) -> None:
+        try:
+            line_patch._set_list_button_state(root, None)
+        except Exception:
+            pass
+        if root is not None:
+            setattr(root, "_last_text_list_settings", {})
+            setattr(root, "_text_numbering_next", 1)
+        _remove_current_list_prefix(root)
+
+    line_patch._deactivate_list_style = deactivate_list_style
+    line_patch._project_none_behavior_patch = PATCH_VERSION
+
+
 def _install_shared_arrow_styles() -> None:
     try:
         from src.engineers_tools.app import interaction_ui_patch as interaction
@@ -133,6 +260,7 @@ def _install_shared_arrow_styles() -> None:
         line_patch._spin_style = _style_numeric_spin
     except Exception:
         pass
+    _install_text_list_none_behavior()
 
 
 def _patch_dialog_class(cls) -> None:
@@ -176,6 +304,27 @@ def _patch_known_dialogs() -> None:
                 _patch_dialog_class(cls)
 
 
+def _patch_workspace_text_controls() -> None:
+    try:
+        from . import workspace as edw
+    except Exception:
+        return
+    if getattr(edw.EngineeringDesignWorkspace, "_engineering_project_text_controls_patch", "") == PATCH_VERSION:
+        return
+    old_init = edw.EngineeringDesignWorkspace.__init__
+
+    def workspace_init(self, module) -> None:
+        old_init(self, module)
+        _install_shared_arrow_styles()
+        _wire_text_controls(self)
+        for delay in (0, 120, 350, 900):
+            QTimer.singleShot(delay, lambda root=self: (_install_shared_arrow_styles(), _wire_text_controls(root)))
+
+    edw.EngineeringDesignWorkspace.__init__ = workspace_init
+    edw.EngineeringDesignWorkspace._engineering_project_text_controls_patch = PATCH_VERSION
+
+
 def apply_project_dialog_style_cursor_patch() -> None:
     _install_shared_arrow_styles()
     _patch_known_dialogs()
+    _patch_workspace_text_controls()
