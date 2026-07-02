@@ -8,7 +8,7 @@ import tempfile
 from pathlib import Path
 
 from PySide6.QtCore import QObject, QEvent, QPointF, QTimer, Qt
-from PySide6.QtGui import QColor, QFont, QKeySequence, QPainter, QPixmap, QPolygonF, QTextCursor
+from PySide6.QtGui import QColor, QFont, QKeySequence, QPainter, QPixmap, QPolygonF, QTextBlockFormat, QTextCursor
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -22,7 +22,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-PATCH_VERSION = "engineering-text-toolbar-final-event-safety-2026-07-02-k"
+PATCH_VERSION = "engineering-text-toolbar-final-event-safety-2026-07-02-l"
 _ARROW_CACHE: dict[str, str] = {}
 
 
@@ -219,7 +219,6 @@ def _wire_list_buttons(root: QWidget | None) -> None:
         if button is None:
             continue
         button.setCheckable(True)
-        # The popup menu owns style insertion. This fallback only marks active mode when no menu patch is present.
         if button.property("lineMenuVersion") or button.property("bulletMenuVersion") or button.property("numberingMenuVersion"):
             continue
         if button.property("finalEventListWire") == PATCH_VERSION:
@@ -256,10 +255,7 @@ def _delete_previous_char(editor: QTextEdit) -> None:
     if cursor.hasSelection():
         cursor.removeSelectedText()
     else:
-        position = cursor.position()
-        if position > 0:
-            cursor.setPosition(position - 1, QTextCursor.MoveMode.KeepAnchor)
-            cursor.removeSelectedText()
+        cursor.deletePreviousChar()
     editor.setTextCursor(cursor)
     _save_editor(editor)
 
@@ -269,9 +265,7 @@ def _delete_next_char(editor: QTextEdit) -> None:
     if cursor.hasSelection():
         cursor.removeSelectedText()
     else:
-        position = cursor.position()
-        cursor.setPosition(position + 1, QTextCursor.MoveMode.KeepAnchor)
-        cursor.removeSelectedText()
+        cursor.deleteChar()
     editor.setTextCursor(cursor)
     _save_editor(editor)
 
@@ -352,7 +346,7 @@ def _arrow_url(direction: str) -> str:
     points = [QPointF(9, 4), QPointF(14, 12), QPointF(4, 12)] if direction == "up" else [QPointF(4, 6), QPointF(14, 6), QPointF(9, 14)]
     painter.drawPolygon(QPolygonF(points))
     painter.end()
-    path = Path(tempfile.gettempdir()) / f"engineering_arrow_{direction}_20260702k.png"
+    path = Path(tempfile.gettempdir()) / f"engineering_arrow_{direction}_20260702l.png"
     pixmap.save(path.as_posix(), "PNG")
     _ARROW_CACHE[direction] = path.as_posix()
     return path.as_posix()
@@ -448,6 +442,47 @@ def _current_unit(root: QWidget | None) -> str:
     return "mm"
 
 
+def _unit_to_points(value: float, unit: str) -> float:
+    normalized = (unit or "mm").strip().lower()
+    if normalized in {"cm", "centimeter", "centimeters"}:
+        return value * 72.0 / 2.54
+    if normalized in {"in", "inch", "inches"}:
+        return value * 72.0
+    if normalized in {"pt", "point", "points"}:
+        return value
+    return value * 72.0 / 25.4
+
+
+def _fixed_line_height_type() -> int:
+    value = QTextBlockFormat.LineHeightTypes.FixedHeight
+    try:
+        return int(value.value)
+    except Exception:
+        return int(value)
+
+
+def _apply_custom_line_spacing(root: QWidget | None, value: float, unit: str) -> None:
+    try:
+        from . import text_line_math_symbols_patch as line_patch
+    except Exception:
+        return
+    _canvas, editor = line_patch._root_editor(root)
+    if editor is None:
+        return
+    cursor = editor.textCursor()
+    block = QTextBlockFormat(cursor.blockFormat())
+    block.setLineHeight(max(1, int(round(_unit_to_points(value, unit)))), _fixed_line_height_type())
+    cursor.mergeBlockFormat(block)
+    editor.setTextCursor(cursor)
+    editor.setFocus()
+    setattr(root, "_text_line_spacing", float(value))
+    setattr(root, "_text_line_spacing_unit", unit)
+    try:
+        line_patch._save(root)
+    except Exception:
+        pass
+
+
 def _patch_line_module_controls() -> None:
     try:
         from . import text_line_math_symbols_patch as line_patch
@@ -477,54 +512,44 @@ def _patch_line_spacing_dialog() -> None:
         return
     _patch_line_module_controls()
 
-    def open_line_spacing_settings(root: QWidget | None) -> None:
-        dialog, body, body_layout = line_patch._dialog_shell(root, "Line and Paragraph Settings", (380, 210))
-        body.setStyleSheet("QWidget{background:#ffffff;border:0;}")
-        unit = _current_unit(root)
-        row = QHBoxLayout()
-        row.setContentsMargins(4, 4, 4, 4)
-        row.setSpacing(8)
-        custom = QCheckBox("Custom", body)
-        custom.setChecked(True)
+    def show_line_popup(root: QWidget | None, anchor: QPushButton) -> None:
+        popup, _shell, layout = line_patch._popup_shell(anchor, 236)
+        for label, value in (("1.0", 1.0), ("1.15", 1.15), ("1.5", 1.5), ("2.0", 2.0)):
+            line_patch._add_menu_row(layout, label, lambda checked=False, v=value, p=popup, w=root: (p.accept(), line_patch._apply_line_spacing(w, v)))
+
+        custom_holder = QWidget(popup)
+        row = QHBoxLayout(custom_holder)
+        row.setContentsMargins(4, 3, 4, 3)
+        row.setSpacing(6)
+        custom = QCheckBox("Custom", custom_holder)
         custom.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        if hasattr(line_patch, "_choice_toggle_style"):
-            custom.setStyleSheet(line_patch._choice_toggle_style())
-        value = QDoubleSpinBox(body)
+        custom.setStyleSheet(line_patch._choice_toggle_style())
+        unit = _current_unit(root)
+        value = QDoubleSpinBox(custom_holder)
         value.setRange(0.1, 500.0)
         value.setDecimals(2)
         value.setSingleStep(0.5)
-        value.setValue(float(getattr(root, "_text_line_spacing", 1.0) or 1.0))
+        value.setValue(float(getattr(root, "_text_line_spacing", 4.0) or 4.0))
         value.setSuffix(f" {unit}")
-        value.setMinimumWidth(138)
+        value.setFixedWidth(118)
         _style_toolbar_spin(value)
+        apply = QPushButton("Apply", custom_holder)
+        apply.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        apply.setStyleSheet(line_patch._button_style("QPushButton"))
+        apply.setFixedHeight(28)
+        value.setEnabled(False)
+        apply.setEnabled(False)
+        custom.toggled.connect(lambda checked: (value.setEnabled(checked), apply.setEnabled(checked)))
+        apply.clicked.connect(lambda checked=False, p=popup, w=root, v=value, u=unit: (p.accept(), _apply_custom_line_spacing(w, float(v.value()), u)))
         row.addWidget(custom)
         row.addWidget(value)
+        row.addWidget(apply)
         row.addStretch(1)
-        body_layout.addLayout(row)
-        hint = QLabel("Custom line spacing uses the active Unit setting.", body)
-        hint.setStyleSheet("QLabel{font-family:'Times New Roman';font-size:11px;font-weight:900;font-style:italic;color:#173454;}")
-        body_layout.addWidget(hint)
-        buttons = QHBoxLayout()
-        buttons.addStretch(1)
-        ok = QPushButton("OK", body)
-        cancel = QPushButton("Cancel", body)
-        for button in (ok, cancel):
-            button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-            button.setStyleSheet(line_patch._button_style("QPushButton"))
-        ok.clicked.connect(dialog.accept)
-        cancel.clicked.connect(dialog.reject)
-        buttons.addWidget(ok)
-        buttons.addWidget(cancel)
-        body_layout.addLayout(buttons)
-        if hasattr(line_patch, "_prepare_dialog_masks"):
-            line_patch._prepare_dialog_masks(dialog)
-        if dialog.exec() == dialog.DialogCode.Accepted and custom.isChecked():
-            try:
-                line_patch._apply_line_spacing(root, float(value.value()))
-            except Exception:
-                setattr(root, "_text_line_spacing", float(value.value()))
+        layout.addWidget(custom_holder)
+        line_patch._show_popup_near(root, anchor, popup)
 
-    line_patch._open_line_spacing_settings = open_line_spacing_settings
+    line_patch._show_line_popup = show_line_popup
+    line_patch._open_line_spacing_settings = lambda root: None
 
 
 def _patch_key_handlers() -> None:
@@ -604,7 +629,7 @@ def apply_text_toolbar_final_event_safety_patch() -> None:
         _polish_textbar_controls(self)
         _wire_list_buttons(self)
         for delay in (0, 80, 250, 700, 1400):
-            QTimer.singleShot(delay, lambda root=self: (_patch_key_handlers(), _install_existing_editors(root), _polish_textbar_controls(root), _patch_line_module_controls(), _wire_list_buttons(root)))
+            QTimer.singleShot(delay, lambda root=self: (_patch_key_handlers(), _install_existing_editors(root), _polish_textbar_controls(root), _patch_line_spacing_dialog(), _patch_line_module_controls(), _wire_list_buttons(root)))
 
     edw.EngineeringDesignWorkspace.__init__ = workspace_init
     edw.EngineeringDesignWorkspace._engineering_text_toolbar_final_event_safety_patch = PATCH_VERSION
