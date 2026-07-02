@@ -1,44 +1,42 @@
-2026-07-02 19:59:38,032 | INFO | root | Runtime log started.
-2026-07-02 19:59:38,032 | INFO | root | Runtime log path: C:\Users\ATLAS\AppData\Local\EngineerTools\logs\runtime.log
-2026-07-02 19:59:38,032 | INFO | root | Engineer Tools startup requested.
-2026-07-02 19:59:38,033 | INFO | root | Python executable: C:\Users\ATLAS\AppData\Local\EngineerTools\.venv\Scripts\pythonw.exe
-2026-07-02 19:59:38,033 | INFO | root | Python argv: ['C:\\Users\\ATLAS\\AppData\\Local\\EngineerTools\\src\\engineers_tools\\main.py']
-2026-07-02 19:59:38,916 | INFO | root | interaction_ui_patch: shared icon and control patches installed
-2026-07-02 19:59:38,969 | INFO | root | interaction_ui_patch: engineering workspace patches installed
-2026-07-02 19:59:38,970 | INFO | root | engineering_export_patch: installed
-2026-07-02 19:59:38,970 | INFO | root | engineering_workspace_finalize_patch: installed
-2026-07-02 19:59:38,970 | INFO | root | engineering_zoom_print_patch: installed
-2026-07-02 19:59:38,971 | INFO | root | engineering_print_setup_hotfix: shared yellow arrow styles installed
-2026-07-02 19:59:38,971 | INFO | root | engineering_print_setup_hotfix: installed version=direct-print-14
-2026-07-02 19:59:38,971 | INFO | root | engineering_print_setup_final_patch: installed version=direct-print-final-2
-2026-07-02 19:59:38,971 | INFO | root | engineering_properties_patch: print setup Apply button disabled
-2026-07-02 19:59:38,971 | INFO | root | engineering_properties_patch: installed version=properties-settings-1
-2026-07-02 19:59:38,971 | INFO | root | engineering_ui_small_fixes_patch: unified grid/render pipeline installed version=ui-small-fixes-4
-2026-07-02 19:59:38,972 | INFO | root | engineering_ui_small_fixes_patch: compact cursor and startbar pointer installed version=ui-small-fixes-4
-2026-07-02 19:59:38,972 | INFO | root | engineering_ui_small_fixes_patch: layer icons installed version=ui-small-fixes-4
-2026-07-02 19:59:38,972 | INFO | root | engineering_ui_small_fixes_patch: empty right properties panel installed version=ui-small-fixes-4
-2026-07-02 19:59:38,972 | INFO | root | engineering_ui_small_fixes_patch: installed version=ui-small-fixes-4
-2026-07-02 19:59:38,972 | INFO | root | engineering_window_geometry_patch: F8 shortcut registered
-2026-07-02 19:59:38,972 | INFO | root | engineering_window_geometry_patch: installed version=window-geometry-3
-2026-07-02 19:59:38,972 | INFO | root | engineering_fixed_page_rotation_patch: installed version=fixed-page-resize-rotation-2
-2026-07-02 19:59:38,973 | INFO | root | engineering_fixed_viewport_patch: installed version=fixed-viewport-v5
-2026-07-02 19:59:38,973 | INFO | root | engineering_last_mile_patch: installed version=last-mile-2
-2026-07-02 19:59:38,973 | INFO | root | engineering_text_editor_patch: installed version=text-editor-priority-2
-2026-07-02 19:59:39,994 | INFO | root | Launcher shown.
-2026-07-02 19:59:42,125 | INFO | root | engineering_runtime_audit_final_patch: class patch installed version=engineering-runtime-audit-final-2026-07-01-e
-2026-07-02 19:59:42,229 | INFO | root | text_toolbar_final_event_safety_patch: safe shim installed version=engineering-text-toolbar-final-event-safety-safe-shim-2026-07-02-a
-2026-07-02 19:59:42,447 | INFO | root | engineering_properties_patch: shortcuts installed count=18
-2026-07-02 19:59:42,463 | INFO | root | engineering_properties_patch: shortcuts installed count=18
-2026-07-02 19:59:42,465 | INFO | root | engineering_properties_patch: startup settings loaded path=C:\Users\ATLAS\AppData\Local\EngineerTools\settings\engineer_tools_properties.etprops
-2026-07-02 19:59:42,473 | INFO | root | engineering_runtime_audit_final_patch: installed version=engineering-runtime-audit-final-2026-07-01-e
-2026-07-02 19:59:42,474 | INFO | root | text_toolbar_word_behavior_patch: installed version=engineering-text-toolbar-word-behavior-2026-07-02-a
-2026-07-02 19:59:42,474 | INFO | root | text_runtime_performance_editing_patch: installed version=engineering-text-runtime-performance-editing-2026-07-02-b
-2026-07-02 19:59:42,489 | INFO | root | final_focus_editing_icons_patch: installed version=engineering-final-focus-editing-icons-2026-07-02-b
-2026-07-02 19:59:42,490 | INFO | root | text_line_math_symbols_patch: installed version=engineering-text-line-math-symbols-2026-07-02-g
-2026-07-02 19:59:44,248 | INFO | root | text_lag_final_patch: installed version=engineering-text-lag-final-2026-07-02-d
-2026-07-02 20:00:12,734 | INFO | root | interaction_ui_patch: deleting engineering selection count=1
-2026-07-02 20:00:14,369 | INFO | root | interaction_ui_patch: deleting engineering selection count=1
-2026-07-02 20:00:21,608 | CRITICAL | root | Uncaught exception
+2026-07-02 20:08:43,305 | INFO | root | Runtime log started.
+2026-07-02 20:08:43,305 | INFO | root | Runtime log path: C:\Users\ATLAS\AppData\Local\EngineerTools\logs\runtime.log
+2026-07-02 20:08:43,306 | INFO | root | Engineer Tools startup requested.
+2026-07-02 20:08:43,306 | INFO | root | Python executable: C:\Users\ATLAS\AppData\Local\EngineerTools\.venv\Scripts\pythonw.exe
+2026-07-02 20:08:43,306 | INFO | root | Python argv: ['C:\\Users\\ATLAS\\AppData\\Local\\EngineerTools\\src\\engineers_tools\\main.py']
+2026-07-02 20:08:44,211 | INFO | root | interaction_ui_patch: shared icon and control patches installed
+2026-07-02 20:08:44,261 | INFO | root | interaction_ui_patch: engineering workspace patches installed
+2026-07-02 20:08:44,262 | INFO | root | engineering_export_patch: installed
+2026-07-02 20:08:44,262 | INFO | root | engineering_workspace_finalize_patch: installed
+2026-07-02 20:08:44,262 | INFO | root | engineering_zoom_print_patch: installed
+2026-07-02 20:08:44,262 | INFO | root | engineering_print_setup_hotfix: shared yellow arrow styles installed
+2026-07-02 20:08:44,263 | INFO | root | engineering_print_setup_hotfix: installed version=direct-print-14
+2026-07-02 20:08:44,263 | INFO | root | engineering_print_setup_final_patch: installed version=direct-print-final-2
+2026-07-02 20:08:44,263 | INFO | root | engineering_properties_patch: print setup Apply button disabled
+2026-07-02 20:08:44,263 | INFO | root | engineering_properties_patch: installed version=properties-settings-1
+2026-07-02 20:08:44,263 | INFO | root | engineering_ui_small_fixes_patch: unified grid/render pipeline installed version=ui-small-fixes-4
+2026-07-02 20:08:44,263 | INFO | root | engineering_ui_small_fixes_patch: compact cursor and startbar pointer installed version=ui-small-fixes-4
+2026-07-02 20:08:44,263 | INFO | root | engineering_ui_small_fixes_patch: layer icons installed version=ui-small-fixes-4
+2026-07-02 20:08:44,263 | INFO | root | engineering_ui_small_fixes_patch: empty right properties panel installed version=ui-small-fixes-4
+2026-07-02 20:08:44,264 | INFO | root | engineering_ui_small_fixes_patch: installed version=ui-small-fixes-4
+2026-07-02 20:08:44,264 | INFO | root | engineering_window_geometry_patch: F8 shortcut registered
+2026-07-02 20:08:44,264 | INFO | root | engineering_window_geometry_patch: installed version=window-geometry-3
+2026-07-02 20:08:44,264 | INFO | root | engineering_fixed_page_rotation_patch: installed version=fixed-page-resize-rotation-2
+2026-07-02 20:08:44,264 | INFO | root | engineering_fixed_viewport_patch: installed version=fixed-viewport-v5
+2026-07-02 20:08:44,265 | INFO | root | engineering_last_mile_patch: installed version=last-mile-2
+2026-07-02 20:08:44,265 | INFO | root | engineering_text_editor_patch: installed version=text-editor-priority-2
+2026-07-02 20:08:45,139 | INFO | root | Launcher shown.
+2026-07-02 20:08:46,854 | INFO | root | engineering_runtime_audit_final_patch: class patch installed version=engineering-runtime-audit-final-2026-07-01-e
+2026-07-02 20:08:46,950 | INFO | root | text_toolbar_final_event_safety_patch: text priority guard installed version=engineering-text-toolbar-final-event-safety-safe-shim-2026-07-02-b
+2026-07-02 20:08:47,181 | INFO | root | engineering_properties_patch: shortcuts installed count=18
+2026-07-02 20:08:47,198 | INFO | root | engineering_properties_patch: shortcuts installed count=18
+2026-07-02 20:08:47,201 | INFO | root | engineering_properties_patch: startup settings loaded path=C:\Users\ATLAS\AppData\Local\EngineerTools\settings\engineer_tools_properties.etprops
+2026-07-02 20:08:47,210 | INFO | root | engineering_runtime_audit_final_patch: installed version=engineering-runtime-audit-final-2026-07-01-e
+2026-07-02 20:08:47,211 | INFO | root | text_toolbar_word_behavior_patch: installed version=engineering-text-toolbar-word-behavior-2026-07-02-a
+2026-07-02 20:08:47,211 | INFO | root | text_runtime_performance_editing_patch: installed version=engineering-text-runtime-performance-editing-2026-07-02-b
+2026-07-02 20:08:47,228 | INFO | root | final_focus_editing_icons_patch: installed version=engineering-final-focus-editing-icons-2026-07-02-b
+2026-07-02 20:08:47,229 | INFO | root | text_line_math_symbols_patch: installed version=engineering-text-line-math-symbols-2026-07-02-g
+2026-07-02 20:08:49,050 | INFO | root | text_lag_final_patch: installed version=engineering-text-lag-final-2026-07-02-d
+2026-07-02 20:08:58,605 | CRITICAL | root | Uncaught exception
 Traceback (most recent call last):
   File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\engineering_text_editor_patch.py", line 199, in wrapper
     if _run_text_action(action):
@@ -50,7 +48,7 @@ Traceback (most recent call last):
     if _LAST_TEXT_EDITOR is not None and _LAST_TEXT_EDITOR.isVisible() and _LAST_TEXT_EDITOR.isEnabled() and _LAST_TEXT_EDITOR.hasFocus():
                                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 RuntimeError: libshiboken: Internal C++ object (PySide6.QtWidgets.QTextEdit) already deleted.
-2026-07-02 20:00:21,919 | CRITICAL | root | Uncaught exception
+2026-07-02 20:08:59,276 | CRITICAL | root | Uncaught exception
 Traceback (most recent call last):
   File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\engineering_text_editor_patch.py", line 199, in wrapper
     if _run_text_action(action):
@@ -62,7 +60,7 @@ Traceback (most recent call last):
     if _LAST_TEXT_EDITOR is not None and _LAST_TEXT_EDITOR.isVisible() and _LAST_TEXT_EDITOR.isEnabled() and _LAST_TEXT_EDITOR.hasFocus():
                                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 RuntimeError: libshiboken: Internal C++ object (PySide6.QtWidgets.QTextEdit) already deleted.
-2026-07-02 20:00:31,653 | CRITICAL | root | Uncaught exception
+2026-07-02 20:09:05,226 | CRITICAL | root | Uncaught exception
 Traceback (most recent call last):
   File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\module_window.py", line 444, in run
     handler()
@@ -76,10 +74,178 @@ Traceback (most recent call last):
     if _LAST_TEXT_EDITOR is not None and _LAST_TEXT_EDITOR.isVisible() and _LAST_TEXT_EDITOR.isEnabled() and _LAST_TEXT_EDITOR.hasFocus():
                                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 RuntimeError: libshiboken: Internal C++ object (PySide6.QtWidgets.QTextEdit) already deleted.
-2026-07-02 20:00:33,578 | CRITICAL | root | Uncaught exception
+2026-07-02 20:09:07,862 | CRITICAL | root | Uncaught exception
 Traceback (most recent call last):
   File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\module_window.py", line 444, in run
     handler()
+  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\engineering_text_editor_patch.py", line 199, in wrapper
+    if _run_text_action(action):
+       ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\engineering_text_editor_patch.py", line 175, in _run_text_action
+    editor = _active_editor()
+             ^^^^^^^^^^^^^^^^
+  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\engineering_text_editor_patch.py", line 41, in _active_editor
+    if _LAST_TEXT_EDITOR is not None and _LAST_TEXT_EDITOR.isVisible() and _LAST_TEXT_EDITOR.isEnabled() and _LAST_TEXT_EDITOR.hasFocus():
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: libshiboken: Internal C++ object (PySide6.QtWidgets.QTextEdit) already deleted.
+2026-07-02 20:09:09,040 | CRITICAL | root | Uncaught exception
+Traceback (most recent call last):
+  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\module_window.py", line 444, in run
+    handler()
+  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\engineering_text_editor_patch.py", line 199, in wrapper
+    if _run_text_action(action):
+       ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\engineering_text_editor_patch.py", line 175, in _run_text_action
+    editor = _active_editor()
+             ^^^^^^^^^^^^^^^^
+  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\engineering_text_editor_patch.py", line 41, in _active_editor
+    if _LAST_TEXT_EDITOR is not None and _LAST_TEXT_EDITOR.isVisible() and _LAST_TEXT_EDITOR.isEnabled() and _LAST_TEXT_EDITOR.hasFocus():
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: libshiboken: Internal C++ object (PySide6.QtWidgets.QTextEdit) already deleted.
+2026-07-02 20:09:09,628 | CRITICAL | root | Uncaught exception
+Traceback (most recent call last):
+  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\module_window.py", line 444, in run
+    handler()
+  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\engineering_text_editor_patch.py", line 199, in wrapper
+    if _run_text_action(action):
+       ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\engineering_text_editor_patch.py", line 175, in _run_text_action
+    editor = _active_editor()
+             ^^^^^^^^^^^^^^^^
+  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\engineering_text_editor_patch.py", line 41, in _active_editor
+    if _LAST_TEXT_EDITOR is not None and _LAST_TEXT_EDITOR.isVisible() and _LAST_TEXT_EDITOR.isEnabled() and _LAST_TEXT_EDITOR.hasFocus():
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: libshiboken: Internal C++ object (PySide6.QtWidgets.QTextEdit) already deleted.
+2026-07-02 20:09:09,828 | CRITICAL | root | Uncaught exception
+Traceback (most recent call last):
+  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\module_window.py", line 444, in run
+    handler()
+  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\engineering_text_editor_patch.py", line 199, in wrapper
+    if _run_text_action(action):
+       ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\engineering_text_editor_patch.py", line 175, in _run_text_action
+    editor = _active_editor()
+             ^^^^^^^^^^^^^^^^
+  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\engineering_text_editor_patch.py", line 41, in _active_editor
+    if _LAST_TEXT_EDITOR is not None and _LAST_TEXT_EDITOR.isVisible() and _LAST_TEXT_EDITOR.isEnabled() and _LAST_TEXT_EDITOR.hasFocus():
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: libshiboken: Internal C++ object (PySide6.QtWidgets.QTextEdit) already deleted.
+2026-07-02 20:09:09,996 | CRITICAL | root | Uncaught exception
+Traceback (most recent call last):
+  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\module_window.py", line 444, in run
+    handler()
+  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\engineering_text_editor_patch.py", line 199, in wrapper
+    if _run_text_action(action):
+       ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\engineering_text_editor_patch.py", line 175, in _run_text_action
+    editor = _active_editor()
+             ^^^^^^^^^^^^^^^^
+  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\engineering_text_editor_patch.py", line 41, in _active_editor
+    if _LAST_TEXT_EDITOR is not None and _LAST_TEXT_EDITOR.isVisible() and _LAST_TEXT_EDITOR.isEnabled() and _LAST_TEXT_EDITOR.hasFocus():
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: libshiboken: Internal C++ object (PySide6.QtWidgets.QTextEdit) already deleted.
+2026-07-02 20:09:10,179 | CRITICAL | root | Uncaught exception
+Traceback (most recent call last):
+  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\module_window.py", line 444, in run
+    handler()
+  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\engineering_text_editor_patch.py", line 199, in wrapper
+    if _run_text_action(action):
+       ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\engineering_text_editor_patch.py", line 175, in _run_text_action
+    editor = _active_editor()
+             ^^^^^^^^^^^^^^^^
+  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\engineering_text_editor_patch.py", line 41, in _active_editor
+    if _LAST_TEXT_EDITOR is not None and _LAST_TEXT_EDITOR.isVisible() and _LAST_TEXT_EDITOR.isEnabled() and _LAST_TEXT_EDITOR.hasFocus():
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: libshiboken: Internal C++ object (PySide6.QtWidgets.QTextEdit) already deleted.
+2026-07-02 20:09:10,363 | CRITICAL | root | Uncaught exception
+Traceback (most recent call last):
+  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\module_window.py", line 444, in run
+    handler()
+  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\engineering_text_editor_patch.py", line 199, in wrapper
+    if _run_text_action(action):
+       ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\engineering_text_editor_patch.py", line 175, in _run_text_action
+    editor = _active_editor()
+             ^^^^^^^^^^^^^^^^
+  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\engineering_text_editor_patch.py", line 41, in _active_editor
+    if _LAST_TEXT_EDITOR is not None and _LAST_TEXT_EDITOR.isVisible() and _LAST_TEXT_EDITOR.isEnabled() and _LAST_TEXT_EDITOR.hasFocus():
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: libshiboken: Internal C++ object (PySide6.QtWidgets.QTextEdit) already deleted.
+2026-07-02 20:09:17,324 | CRITICAL | root | Uncaught exception
+Traceback (most recent call last):
+  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\engineering_text_editor_patch.py", line 199, in wrapper
+    if _run_text_action(action):
+       ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\engineering_text_editor_patch.py", line 175, in _run_text_action
+    editor = _active_editor()
+             ^^^^^^^^^^^^^^^^
+  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\engineering_text_editor_patch.py", line 41, in _active_editor
+    if _LAST_TEXT_EDITOR is not None and _LAST_TEXT_EDITOR.isVisible() and _LAST_TEXT_EDITOR.isEnabled() and _LAST_TEXT_EDITOR.hasFocus():
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: libshiboken: Internal C++ object (PySide6.QtWidgets.QTextEdit) already deleted.
+2026-07-02 20:09:20,063 | CRITICAL | root | Uncaught exception
+Traceback (most recent call last):
+  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\engineering_text_editor_patch.py", line 199, in wrapper
+    if _run_text_action(action):
+       ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\engineering_text_editor_patch.py", line 175, in _run_text_action
+    editor = _active_editor()
+             ^^^^^^^^^^^^^^^^
+  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\engineering_text_editor_patch.py", line 41, in _active_editor
+    if _LAST_TEXT_EDITOR is not None and _LAST_TEXT_EDITOR.isVisible() and _LAST_TEXT_EDITOR.isEnabled() and _LAST_TEXT_EDITOR.hasFocus():
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: libshiboken: Internal C++ object (PySide6.QtWidgets.QTextEdit) already deleted.
+2026-07-02 20:09:20,386 | CRITICAL | root | Uncaught exception
+Traceback (most recent call last):
+  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\engineering_text_editor_patch.py", line 199, in wrapper
+    if _run_text_action(action):
+       ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\engineering_text_editor_patch.py", line 175, in _run_text_action
+    editor = _active_editor()
+             ^^^^^^^^^^^^^^^^
+  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\engineering_text_editor_patch.py", line 41, in _active_editor
+    if _LAST_TEXT_EDITOR is not None and _LAST_TEXT_EDITOR.isVisible() and _LAST_TEXT_EDITOR.isEnabled() and _LAST_TEXT_EDITOR.hasFocus():
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: libshiboken: Internal C++ object (PySide6.QtWidgets.QTextEdit) already deleted.
+2026-07-02 20:09:20,556 | CRITICAL | root | Uncaught exception
+Traceback (most recent call last):
+  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\engineering_text_editor_patch.py", line 199, in wrapper
+    if _run_text_action(action):
+       ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\engineering_text_editor_patch.py", line 175, in _run_text_action
+    editor = _active_editor()
+             ^^^^^^^^^^^^^^^^
+  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\engineering_text_editor_patch.py", line 41, in _active_editor
+    if _LAST_TEXT_EDITOR is not None and _LAST_TEXT_EDITOR.isVisible() and _LAST_TEXT_EDITOR.isEnabled() and _LAST_TEXT_EDITOR.hasFocus():
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: libshiboken: Internal C++ object (PySide6.QtWidgets.QTextEdit) already deleted.
+2026-07-02 20:09:20,706 | CRITICAL | root | Uncaught exception
+Traceback (most recent call last):
+  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\engineering_text_editor_patch.py", line 199, in wrapper
+    if _run_text_action(action):
+       ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\engineering_text_editor_patch.py", line 175, in _run_text_action
+    editor = _active_editor()
+             ^^^^^^^^^^^^^^^^
+  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\engineering_text_editor_patch.py", line 41, in _active_editor
+    if _LAST_TEXT_EDITOR is not None and _LAST_TEXT_EDITOR.isVisible() and _LAST_TEXT_EDITOR.isEnabled() and _LAST_TEXT_EDITOR.hasFocus():
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: libshiboken: Internal C++ object (PySide6.QtWidgets.QTextEdit) already deleted.
+2026-07-02 20:09:23,194 | CRITICAL | root | Uncaught exception
+Traceback (most recent call last):
+  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\engineering_text_editor_patch.py", line 199, in wrapper
+    if _run_text_action(action):
+       ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\engineering_text_editor_patch.py", line 175, in _run_text_action
+    editor = _active_editor()
+             ^^^^^^^^^^^^^^^^
+  File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\engineering_text_editor_patch.py", line 41, in _active_editor
+    if _LAST_TEXT_EDITOR is not None and _LAST_TEXT_EDITOR.isVisible() and _LAST_TEXT_EDITOR.isEnabled() and _LAST_TEXT_EDITOR.hasFocus():
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: libshiboken: Internal C++ object (PySide6.QtWidgets.QTextEdit) already deleted.
+2026-07-02 20:09:23,705 | CRITICAL | root | Uncaught exception
+Traceback (most recent call last):
   File "C:\Users\ATLAS\AppData\Local\EngineerTools\src\engineers_tools\app\engineering_text_editor_patch.py", line 199, in wrapper
     if _run_text_action(action):
        ^^^^^^^^^^^^^^^^^^^^^^^^
