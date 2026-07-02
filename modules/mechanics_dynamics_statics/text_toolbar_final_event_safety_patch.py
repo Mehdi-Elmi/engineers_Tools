@@ -1,21 +1,40 @@
-"""Safe final guard for Text editor keyboard priority.
+"""Safe final guard for Text editor keyboard priority and TextBox copying.
 
 This module runs near the end of the Engineering Design Tools patch chain. It
-must stay small: its job is only to protect live text editing from window/canvas
-shortcuts. It does not render math, does not repaint text objects, and does not
-replace the Text tool architecture.
+must stay small: it protects live text editing from window/canvas shortcuts and
+keeps TextBox metadata alive during canvas copy/paste. It does not render math,
+does not repaint text objects, and does not replace the Text tool architecture.
 """
 
 from __future__ import annotations
 
+import copy
 import logging
 
 from PySide6.QtCore import QEvent, QObject, Qt
 from PySide6.QtGui import QKeySequence
 from PySide6.QtWidgets import QApplication, QLineEdit, QPlainTextEdit, QTextEdit, QWidget
 
-PATCH_VERSION = "engineering-text-toolbar-final-event-safety-safe-shim-2026-07-02-b"
+PATCH_VERSION = "engineering-text-toolbar-final-event-safety-safe-shim-2026-07-02-c"
 _TEXT_PRIORITY_FILTER: QObject | None = None
+_TEXTBOX_EXTRA_FIELDS = (
+    "is_text_box",
+    "text",
+    "text_html",
+    "text_font",
+    "text_size",
+    "text_bold",
+    "text_italic",
+    "text_rtl",
+    "text_align",
+    "text_color",
+    "line_spacing",
+    "bullet_settings",
+    "numbering_settings",
+    "list_mode",
+    "list_prefix",
+)
+_CANVAS_BASE_FIELDS = {"path", "pixmap", "rect", "rotation", "name", "visible", "locked", "rotation_handle_visible", "group_id"}
 
 
 def _editor_from_widget(widget) -> QWidget | None:
@@ -119,8 +138,68 @@ def _patch_text_tool_handler() -> None:
         logging.exception("text final safety: failed to patch text tool key handler")
 
 
+def _copy_extra_metadata(source, target) -> None:
+    for key, value in getattr(source, "__dict__", {}).items():
+        if key in _CANVAS_BASE_FIELDS:
+            continue
+        try:
+            setattr(target, key, copy.deepcopy(value))
+        except Exception:
+            setattr(target, key, value)
+
+
+def _patch_canvas_clone(edw) -> None:
+    cls = getattr(edw, "CanvasObject", None)
+    if cls is None or getattr(cls, "_text_metadata_clone_patch", "") == PATCH_VERSION:
+        return
+    original_clone = cls.clone
+
+    def clone(self, offset=None):
+        copied = original_clone(self, offset)
+        _copy_extra_metadata(self, copied)
+        return copied
+
+    cls.clone = clone
+    cls._text_metadata_clone_patch = PATCH_VERSION
+
+
+def _patch_project_clipboard_metadata() -> None:
+    try:
+        from . import file_export_project_fixes as export_patch
+    except Exception:
+        return
+    if getattr(export_patch, "_text_metadata_clipboard_patch", "") == PATCH_VERSION:
+        return
+    original_to_data = export_patch._object_to_data
+    original_to_object = export_patch._data_to_object
+
+    def object_to_data(obj):
+        data = original_to_data(obj)
+        extras = {}
+        for field in _TEXTBOX_EXTRA_FIELDS:
+            if hasattr(obj, field):
+                value = getattr(obj, field)
+                if isinstance(value, (str, int, float, bool, type(None), list, tuple, dict)):
+                    extras[field] = value
+        if extras:
+            data["extras"] = extras
+        return data
+
+    def data_to_object(edw, item):
+        obj = original_to_object(edw, item)
+        extras = item.get("extras")
+        if isinstance(extras, dict):
+            for key, value in extras.items():
+                setattr(obj, str(key), value)
+        return obj
+
+    export_patch._object_to_data = object_to_data
+    export_patch._data_to_object = data_to_object
+    export_patch._text_metadata_clipboard_patch = PATCH_VERSION
+
+
 def apply_text_toolbar_final_event_safety_patch() -> None:
-    """Protect active text editing without changing rendering or math behavior."""
+    """Protect active text editing and preserve TextBox metadata on copy/paste."""
     try:
         from . import workspace as edw
     except Exception:
@@ -132,5 +211,7 @@ def apply_text_toolbar_final_event_safety_patch() -> None:
 
     _patch_text_tool_handler()
     _install_text_priority_filter()
+    _patch_canvas_clone(edw)
+    _patch_project_clipboard_metadata()
     edw.EngineeringDesignWorkspace._engineering_text_toolbar_final_event_safety_patch = PATCH_VERSION
-    logging.info("text_toolbar_final_event_safety_patch: text priority guard installed version=%s", PATCH_VERSION)
+    logging.info("text_toolbar_final_event_safety_patch: text priority and metadata guard installed version=%s", PATCH_VERSION)
