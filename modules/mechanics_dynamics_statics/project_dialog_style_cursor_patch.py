@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QTimer, Qt
+import tempfile
+from pathlib import Path
+
+from PySide6.QtCore import QPointF, QTimer, Qt
+from PySide6.QtGui import QColor, QPainter, QPixmap, QPolygonF
 from PySide6.QtWidgets import QComboBox, QLineEdit, QListWidget, QPushButton, QWidget
 
-PATCH_VERSION = "engineering-project-dialog-style-cursor-2026-07-01-a"
+PATCH_VERSION = "engineering-project-dialog-style-cursor-2026-07-02-b"
+_ARROW_CACHE: dict[str, str] = {}
 
 DIALOG_STYLE = (
     "QDialog#ProjectFileDialog{background:transparent;}"
@@ -37,6 +42,31 @@ DIALOG_STYLE = (
 )
 
 
+def _arrow_path(direction: str = "down") -> str:
+    cached = _ARROW_CACHE.get(direction)
+    if cached:
+        return cached
+    pixmap = QPixmap(18, 12)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+    painter.setPen(Qt.PenStyle.NoPen)
+    painter.setBrush(QColor("#102238"))
+    if direction == "up":
+        points = [QPointF(9, 2), QPointF(3, 9), QPointF(15, 9)]
+    else:
+        points = [QPointF(3, 3), QPointF(15, 3), QPointF(9, 10)]
+    painter.drawPolygon(QPolygonF(points))
+    painter.end()
+    icon_dir = Path(tempfile.gettempdir()) / "engineer_tools_project_arrows"
+    icon_dir.mkdir(parents=True, exist_ok=True)
+    path = icon_dir / f"project_arrow_{direction}.png"
+    pixmap.save(str(path), "PNG")
+    result = path.as_posix()
+    _ARROW_CACHE[direction] = result
+    return result
+
+
 def _apply_font(widget: QWidget, size: int = 10) -> None:
     font = widget.font()
     font.setFamily("Times New Roman")
@@ -44,6 +74,16 @@ def _apply_font(widget: QWidget, size: int = 10) -> None:
     font.setBold(True)
     font.setItalic(False)
     widget.setFont(font)
+
+
+def _style_combo(combo: QComboBox) -> None:
+    arrow = _arrow_path("down")
+    combo.setStyleSheet(
+        combo.styleSheet()
+        + "\nQComboBox#FileTypeCombo{padding-right:28px;}"
+        + "QComboBox#FileTypeCombo::drop-down{width:26px;border:0;background:transparent;subcontrol-origin:border;subcontrol-position:center right;}"
+        + f"QComboBox#FileTypeCombo::down-arrow{{image:url({arrow});width:14px;height:9px;}}"
+    )
 
 
 def _apply_project_cursor(root: QWidget, svg) -> None:
@@ -60,6 +100,8 @@ def _polish_dialog(dialog, svg) -> None:
     for widget in dialog.findChildren(QWidget):
         if isinstance(widget, (QPushButton, QLineEdit, QComboBox, QListWidget)):
             _apply_font(widget, 10)
+        if isinstance(widget, QComboBox):
+            _style_combo(widget)
     _apply_project_cursor(dialog, svg)
     for delay in (0, 80, 250, 700):
         QTimer.singleShot(delay, lambda d=dialog: _apply_project_cursor(d, svg))
