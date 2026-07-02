@@ -10,7 +10,7 @@ import copy
 import logging
 
 from PySide6.QtCore import QEvent, QObject, QTimer, Qt
-from PySide6.QtGui import QColor, QFont, QIcon, QKeySequence, QPainter, QPen, QPixmap, QTextCharFormat
+from PySide6.QtGui import QColor, QFont, QIcon, QKeySequence, QPainter, QPen, QPixmap, QTextCharFormat, QTextCursor
 from PySide6.QtWidgets import (
     QApplication,
     QAbstractButton,
@@ -68,6 +68,30 @@ def _canvas_for_editor(editor: QTextEdit):
     return None
 
 
+def _delete_previous_character(editor: QTextEdit) -> None:
+    cursor = editor.textCursor()
+    if cursor.hasSelection():
+        cursor.removeSelectedText()
+        editor.setTextCursor(cursor)
+        return
+    anchor = QTextCursor(cursor)
+    if anchor.movePosition(QTextCursor.MoveOperation.PreviousCharacter, QTextCursor.MoveMode.KeepAnchor):
+        anchor.removeSelectedText()
+        editor.setTextCursor(anchor)
+
+
+def _delete_next_character(editor: QTextEdit) -> None:
+    cursor = editor.textCursor()
+    if cursor.hasSelection():
+        cursor.removeSelectedText()
+        editor.setTextCursor(cursor)
+        return
+    anchor = QTextCursor(cursor)
+    if anchor.movePosition(QTextCursor.MoveOperation.NextCharacter, QTextCursor.MoveMode.KeepAnchor):
+        anchor.removeSelectedText()
+        editor.setTextCursor(anchor)
+
+
 def _handle_editor_key(editor: QTextEdit, event) -> bool:
     canvas = _canvas_for_editor(editor)
     if event.matches(QKeySequence.StandardKey.Copy):
@@ -85,17 +109,12 @@ def _handle_editor_key(editor: QTextEdit, event) -> bool:
     if event.matches(QKeySequence.StandardKey.SelectAll):
         editor.selectAll(); event.accept(); return True
     if event.key() == Qt.Key.Key_Delete:
-        _delete_editor_selection(editor)
+        _delete_next_character(editor)
         if canvas is not None:
             _save_editor(canvas)
         event.accept(); return True
     if event.key() == Qt.Key.Key_Backspace:
-        cursor = editor.textCursor()
-        if cursor.hasSelection():
-            cursor.removeSelectedText()
-        else:
-            cursor.deletePreviousChar()
-        editor.setTextCursor(cursor)
+        _delete_previous_character(editor)
         if canvas is not None:
             _save_editor(canvas)
         event.accept(); return True
@@ -262,12 +281,7 @@ def _save_editor(canvas) -> None:
 
 
 def _delete_editor_selection(editor: QTextEdit) -> None:
-    cursor = editor.textCursor()
-    if cursor.hasSelection():
-        cursor.removeSelectedText()
-    else:
-        cursor.deleteChar()
-    editor.setTextCursor(cursor)
+    _delete_next_character(editor)
 
 
 def _copy_canvas_selection(canvas) -> bool:
