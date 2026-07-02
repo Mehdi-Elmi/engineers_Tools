@@ -1,124 +1,163 @@
-"""Project window styling and cursor guard for Open/Save/Import/Export dialogs."""
+"""Project dialog and shared control styling for the engineering UI.
+
+This patch is also the last shared owner for ComboBox and SpinBox arrow styling.
+The arrows intentionally use generated dark-blue PNG assets instead of Qt CSS
+triangles, because the triangle fallback was rendering as square blocks on the
+Windows runtime.
+"""
 
 from __future__ import annotations
 
+import importlib
 import tempfile
 from pathlib import Path
 
 from PySide6.QtCore import QPointF, QTimer, Qt
 from PySide6.QtGui import QColor, QPainter, QPixmap, QPolygonF
-from PySide6.QtWidgets import QComboBox, QLineEdit, QListWidget, QPushButton, QWidget
+from PySide6.QtWidgets import QComboBox, QDoubleSpinBox, QLineEdit, QListWidget, QPushButton, QSpinBox, QWidget
 
-PATCH_VERSION = "engineering-project-dialog-style-cursor-2026-07-02-b"
+PATCH_VERSION = "engineering-project-dialog-style-cursor-2026-07-02-d"
 _ARROW_CACHE: dict[str, str] = {}
-
-DIALOG_STYLE = (
-    "QDialog#ProjectFileDialog{background:transparent;}"
-    "QWidget#ProjectFileShell{background:qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #f8fcff,stop:.52 #eaf4ff,stop:1 #fff0c8);"
-    "border:1px solid #6f91b2;border-radius:16px;}"
-    "QWidget#FileDialogHeader{background:#102238;border-top-left-radius:16px;border-top-right-radius:16px;min-height:44px;}"
-    "QLabel#FileDialogTitle{color:#ffffff;font-family:'Times New Roman';font-size:14px;font-weight:900;font-style:normal;}"
-    "QPushButton#CloseButton{background:transparent;border:0;color:#ffffff;font-size:18px;font-weight:900;border-radius:8px;}"
-    "QPushButton#CloseButton:hover{background:#d84a4a;}"
-    "QWidget#FileDialogNavBar{background:#dce9f7;border-bottom:1px solid #b7c9dc;}"
-    "QPushButton#FileNavButton{background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #ffffff,stop:.48 #eaf7ff,stop:1 #b6d4f0);"
-    "border:1px solid #7fa6ca;border-radius:9px;}"
-    "QPushButton#FileNavButton:hover{background:#fff4cf;border-color:#ff8a35;}"
-    "QLabel#FilePathLabel{color:#173454;font-family:'Times New Roman';font-weight:800;font-style:normal;}"
-    "QWidget#FileDialogBody{background:rgba(255,255,255,120);}"
-    "QListWidget#PlacesList,QListWidget#FilesList{background:rgba(255,255,255,185);border:1px solid #b8c5d4;border-radius:10px;color:#173454;"
-    "font-family:'Times New Roman';font-weight:800;font-style:normal;}"
-    "QWidget#FileDialogFooter{background:#dce9f7;border-bottom-left-radius:16px;border-bottom-right-radius:16px;}"
-    "QLabel#FileFieldLabel{color:#173454;font-family:'Times New Roman';font-weight:900;font-style:normal;}"
-    "QLineEdit#FileNameInput,QComboBox#FileTypeCombo{background:#fffefa;border:1px solid #b98920;border-radius:9px;color:#123d6f;"
-    "font-family:'Times New Roman';font-weight:800;font-style:normal;padding:4px 8px;}"
-    "QPushButton#PrimaryDialogButton{background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #ffc35a,stop:1 #f18a2a);"
-    "border:1px solid #7e5b10;border-radius:9px;color:#102238;font-family:'Times New Roman';font-weight:900;font-style:normal;padding:5px 16px;}"
-    "QPushButton#SecondaryDialogButton{background:#ffffff;border:1px solid #7fa6ca;border-radius:9px;color:#123d6f;"
-    "font-family:'Times New Roman';font-weight:900;font-style:normal;padding:5px 16px;}"
-    "QPushButton#SaveOptionButton{background:#ffffff;border:1px solid #7fa6ca;border-radius:9px;color:#123d6f;"
-    "font-family:'Times New Roman';font-weight:900;font-style:normal;padding:3px 8px;}"
-    "QPushButton#SaveOptionButton:checked{background:#fff4cf;border-color:#ff8a35;}"
-)
 
 
 def _arrow_path(direction: str = "down") -> str:
     cached = _ARROW_CACHE.get(direction)
     if cached:
         return cached
-    pixmap = QPixmap(18, 12)
+    size = 18
+    pixmap = QPixmap(size, size)
     pixmap.fill(Qt.GlobalColor.transparent)
     painter = QPainter(pixmap)
     painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+    painter.setBrush(QColor("#173454"))
     painter.setPen(Qt.PenStyle.NoPen)
-    painter.setBrush(QColor("#102238"))
     if direction == "up":
-        points = [QPointF(9, 2), QPointF(3, 9), QPointF(15, 9)]
+        points = [QPointF(9, 4), QPointF(14, 12), QPointF(4, 12)]
+    elif direction == "down":
+        points = [QPointF(4, 6), QPointF(14, 6), QPointF(9, 14)]
+    elif direction == "left":
+        points = [QPointF(5, 9), QPointF(13, 4), QPointF(13, 14)]
     else:
-        points = [QPointF(3, 3), QPointF(15, 3), QPointF(9, 10)]
+        points = [QPointF(13, 9), QPointF(5, 4), QPointF(5, 14)]
     painter.drawPolygon(QPolygonF(points))
     painter.end()
-    icon_dir = Path(tempfile.gettempdir()) / "engineer_tools_project_arrows"
-    icon_dir.mkdir(parents=True, exist_ok=True)
-    path = icon_dir / f"project_arrow_{direction}.png"
-    pixmap.save(str(path), "PNG")
-    result = path.as_posix()
-    _ARROW_CACHE[direction] = result
-    return result
+    path = Path(tempfile.gettempdir()) / f"engineering_shared_arrow_{direction}_20260702d.png"
+    pixmap.save(path.as_posix(), "PNG")
+    _ARROW_CACHE[direction] = path.as_posix()
+    return path.as_posix()
 
 
-def _apply_font(widget: QWidget, size: int = 10) -> None:
-    font = widget.font()
-    font.setFamily("Times New Roman")
-    font.setPointSize(size)
-    font.setBold(True)
-    font.setItalic(False)
-    widget.setFont(font)
-
-
-def _style_combo(combo: QComboBox) -> None:
-    arrow = _arrow_path("down")
+def _style_combo_arrow(combo: QComboBox) -> None:
+    combo.setFocusPolicy(Qt.FocusPolicy.NoFocus)
     combo.setStyleSheet(
-        combo.styleSheet()
-        + "\nQComboBox#FileTypeCombo{padding-right:28px;}"
-        + "QComboBox#FileTypeCombo::drop-down{width:26px;border:0;background:transparent;subcontrol-origin:border;subcontrol-position:center right;}"
-        + f"QComboBox#FileTypeCombo::down-arrow{{image:url({arrow});width:14px;height:9px;}}"
+        "QComboBox{background:#fffefa;border:1px solid #b88718;border-radius:8px;color:#173454;"
+        "font-family:'Times New Roman';font-size:12px;font-weight:900;font-style:normal;padding:2px 28px 2px 8px;outline:0;}"
+        "QComboBox:hover{border-color:#173454;background:#ffffff;}"
+        "QComboBox:focus{outline:0;border:1px solid #b88718;}"
+        "QComboBox::drop-down{subcontrol-origin:padding;subcontrol-position:top right;width:24px;"
+        "border-left:1px solid #b88718;border-top-right-radius:7px;border-bottom-right-radius:7px;"
+        "background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #ffe8a8,stop:1 #f1b33d);}"
+        f"QComboBox::down-arrow{{image:url({_arrow_path('down')});width:16px;height:16px;}}"
+        "QComboBox QAbstractItemView{background:#ffffff;border:1px solid #9fb1c7;border-radius:8px;"
+        "selection-background-color:#e7f1ff;selection-color:#173454;outline:0;}"
     )
 
 
-def _apply_project_cursor(root: QWidget, svg) -> None:
-    cursor = svg.project_cursor("default")
-    for widget in [root, *root.findChildren(QWidget)]:
+def _style_numeric_spin(spin: QSpinBox | QDoubleSpinBox) -> None:
+    spin.setButtonSymbols(QSpinBox.ButtonSymbols.UpDownArrows)
+    spin.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+    spin.setStyleSheet(
+        "QSpinBox,QDoubleSpinBox{background:#fffefa;border:1px solid #b88718;border-radius:8px;color:#173454;"
+        "font-family:'Times New Roman';font-size:12px;font-weight:900;font-style:normal;padding:2px 26px 2px 8px;outline:0;}"
+        "QSpinBox:focus,QDoubleSpinBox:focus{border:1px solid #173454;outline:0;}"
+        "QSpinBox::up-button,QDoubleSpinBox::up-button{subcontrol-origin:border;subcontrol-position:top right;width:23px;"
+        "border-left:1px solid #b88718;border-top-right-radius:7px;"
+        "background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #ffe8a8,stop:1 #f1b33d);}"
+        "QSpinBox::down-button,QDoubleSpinBox::down-button{subcontrol-origin:border;subcontrol-position:bottom right;width:23px;"
+        "border-left:1px solid #b88718;border-bottom-right-radius:7px;"
+        "background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #ffe8a8,stop:1 #f1b33d);}"
+        f"QSpinBox::up-arrow,QDoubleSpinBox::up-arrow{{image:url({_arrow_path('up')});width:14px;height:14px;}}"
+        f"QSpinBox::down-arrow,QDoubleSpinBox::down-arrow{{image:url({_arrow_path('down')});width:14px;height:14px;}}"
+    )
+
+
+def _polish_dialog(root: QWidget | None) -> None:
+    if root is None:
+        return
+    for combo in root.findChildren(QComboBox):
+        _style_combo_arrow(combo)
+    for spin in root.findChildren(QSpinBox):
+        _style_numeric_spin(spin)
+    for spin in root.findChildren(QDoubleSpinBox):
+        _style_numeric_spin(spin)
+    for edit in root.findChildren(QLineEdit):
+        edit.setStyleSheet(
+            "QLineEdit{background:#fffefa;border:1px solid #b88718;border-radius:8px;color:#173454;"
+            "font-family:'Times New Roman';font-size:12px;font-weight:900;font-style:normal;padding:3px 7px;outline:0;}"
+            "QLineEdit:focus{border:1px solid #173454;}"
+        )
+    for view in root.findChildren(QListWidget):
+        view.setStyleSheet(
+            "QListWidget{background:#ffffff;border:1px solid #9fb1c7;border-radius:8px;color:#173454;"
+            "font-family:'Times New Roman';font-weight:900;font-style:italic;outline:0;}"
+            "QListWidget::item{padding:4px 6px;border-radius:5px;}"
+            "QListWidget::item:selected{background:#e7f1ff;color:#173454;}"
+        )
+    for button in root.findChildren(QPushButton):
+        button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+
+
+def _install_shared_arrow_styles() -> None:
+    try:
+        from src.engineers_tools.app import interaction_ui_patch as interaction
+    except Exception:
+        return
+    interaction._control_arrow_path = _arrow_path
+    interaction._style_numeric_spin = _style_numeric_spin
+    interaction._style_combo_arrow = _style_combo_arrow
+
+
+def _patch_dialog_class(cls) -> None:
+    if getattr(cls, "_engineering_shared_arrow_patch", "") == PATCH_VERSION:
+        return
+    old_init = cls.__init__
+
+    def dialog_init(self, *args, **kwargs):
+        old_init(self, *args, **kwargs)
+        _polish_dialog(self)
+        QTimer.singleShot(0, lambda root=self: _polish_dialog(root))
+        QTimer.singleShot(120, lambda root=self: _polish_dialog(root))
+
+    cls.__init__ = dialog_init
+    cls._engineering_shared_arrow_patch = PATCH_VERSION
+
+
+def _patch_known_dialogs() -> None:
+    module_names = (
+        "modules.mechanics_dynamics_statics.project_file_dialog",
+        "modules.mechanics_dynamics_statics.project_dialogs_patch",
+        "modules.mechanics_dynamics_statics.file_dialog_patch",
+        "src.engineers_tools.app.engineering_properties_patch",
+    )
+    class_names = (
+        "ProjectFileDialog",
+        "EngineeringFileDialog",
+        "FilePropertiesDialog",
+        "PropertiesDialog",
+        "PageSetupDialog",
+        "PrintSetupDialog",
+    )
+    for module_name in module_names:
         try:
-            widget.setCursor(cursor)
+            module = importlib.import_module(module_name)
         except Exception:
-            pass
-
-
-def _polish_dialog(dialog, svg) -> None:
-    dialog.setStyleSheet(dialog.styleSheet() + "\n" + DIALOG_STYLE)
-    for widget in dialog.findChildren(QWidget):
-        if isinstance(widget, (QPushButton, QLineEdit, QComboBox, QListWidget)):
-            _apply_font(widget, 10)
-        if isinstance(widget, QComboBox):
-            _style_combo(widget)
-    _apply_project_cursor(dialog, svg)
-    for delay in (0, 80, 250, 700):
-        QTimer.singleShot(delay, lambda d=dialog: _apply_project_cursor(d, svg))
+            continue
+        for class_name in class_names:
+            cls = getattr(module, class_name, None)
+            if cls is not None:
+                _patch_dialog_class(cls)
 
 
 def apply_project_dialog_style_cursor_patch() -> None:
-    from . import svg_cursor_assets_activation_patch as svg
-    from src.engineers_tools.app.project_file_dialog import ProjectFileDialog
-
-    if getattr(ProjectFileDialog, "_engineering_project_dialog_style_cursor_patch", "") == PATCH_VERSION:
-        return
-
-    old_init = ProjectFileDialog.__init__
-
-    def init(self, *args, **kwargs) -> None:
-        old_init(self, *args, **kwargs)
-        _polish_dialog(self, svg)
-
-    ProjectFileDialog.__init__ = init
-    ProjectFileDialog._engineering_project_dialog_style_cursor_patch = PATCH_VERSION
+    _install_shared_arrow_styles()
+    _patch_known_dialogs()
