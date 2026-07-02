@@ -6,8 +6,8 @@ import logging
 import re
 from pathlib import Path
 
-from PySide6.QtCore import QPoint, QTimer, Qt
-from PySide6.QtGui import QColor, QFont, QPixmap, QTextBlockFormat, QTextCharFormat
+from PySide6.QtCore import QPoint, QRectF, QTimer, Qt
+from PySide6.QtGui import QColor, QFont, QKeySequence, QPainterPath, QPixmap, QRegion, QTextBlockFormat, QTextCharFormat
 from PySide6.QtWidgets import (
     QApplication,
     QColorDialog,
@@ -24,10 +24,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-PATCH_VERSION = "engineering-text-line-math-symbols-2026-07-02-c"
+PATCH_VERSION = "engineering-text-line-math-symbols-2026-07-02-d"
 
-PALETTE = ["#132238", "#2f7df6", "#36a9e1", "#f18a2a", "#ffbf36", "#c9342b", "#168a50", "#6e4ad6"]
+PALETTE = ["#000000", "#132238", "#2f7df6", "#36a9e1", "#f18a2a", "#ffbf36", "#c9342b", "#168a50"]
 COLOR_NAMES = {
+    "#000000": "Black",
     "#132238": "Navy",
     "#2f7df6": "Blue",
     "#36a9e1": "Sky blue",
@@ -35,7 +36,6 @@ COLOR_NAMES = {
     "#ffbf36": "Yellow",
     "#c9342b": "Red",
     "#168a50": "Green",
-    "#6e4ad6": "Purple",
 }
 GREEK = ("α", "β", "γ", "δ", "ε", "ζ", "η", "θ", "λ", "μ", "π", "ρ", "σ", "τ", "φ", "ω", "Γ", "Δ", "Θ", "Λ", "Π", "Σ", "Φ", "Ω")
 OPERATORS = ("±", "×", "÷", "=", "≠", "≤", "≥", "≈", "≡", "∞", "√", "∛", "∑", "∏", "∫", "∂", "∇", "∈", "∉", "∩", "∪", "⊂", "⊆")
@@ -90,8 +90,8 @@ def _close_button_style() -> str:
     return (
         "QPushButton{background:#f8fbff;border:1px solid #7fa6ca;border-radius:9px;color:#102238;"
         "font-family:'Times New Roman';font-size:14px;font-weight:900;font-style:normal;padding:0;outline:0;}"
-        "QPushButton:hover{background:#fff4cf;border-color:#ff8a35;}"
-        "QPushButton:pressed{background:#f18a2a;color:#ffffff;}"
+        "QPushButton:hover{background:#c9342b;border-color:#9d241f;color:#ffffff;}"
+        "QPushButton:pressed{background:#8f1f1a;color:#ffffff;}"
         "QPushButton:focus{outline:0;border:1px solid #7fa6ca;}"
     )
 
@@ -107,8 +107,23 @@ def _add_color_button_style() -> str:
     )
 
 
+def _apply_rounded_mask(widget: QWidget | None, radius: int = 12) -> None:
+    if widget is None or widget.width() <= 0 or widget.height() <= 0:
+        return
+    path = QPainterPath()
+    path.addRoundedRect(QRectF(widget.rect()), radius, radius)
+    widget.setMask(QRegion(path.toFillPolygon().toPolygon()))
+
+
+def _prepare_dialog_masks(dialog: QDialog, radius: int = 16) -> None:
+    dialog.adjustSize()
+    _apply_rounded_mask(dialog, radius)
+    root = dialog.findChild(QWidget, "DialogRoot")
+    _apply_rounded_mask(root, radius)
+
+
 def _combo_style(combo: QComboBox) -> None:
-    combo.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+    combo.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
     combo.setFixedHeight(30)
     combo.setStyleSheet(
         "QComboBox{background:#fffefa;border:1px solid #b98920;border-radius:9px;color:#132238;"
@@ -121,17 +136,28 @@ def _combo_style(combo: QComboBox) -> None:
 
 
 def _spin_style(spin) -> None:
-    spin.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+    spin.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+    spin.setKeyboardTracking(True)
     spin.setFixedHeight(30)
+    try:
+        edit = spin.lineEdit()
+        edit.setReadOnly(False)
+        edit.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        edit.setStyleSheet(
+            "QLineEdit{background:transparent;border:0;color:#132238;font-family:'Times New Roman';"
+            "font-size:11px;font-weight:500;font-style:normal;padding:0;}"
+        )
+    except Exception:
+        pass
     spin.setStyleSheet(
         "QSpinBox,QDoubleSpinBox{background:#fffefa;border:1px solid #b98920;border-radius:9px;color:#132238;"
-        "font-family:'Times New Roman';font-size:11px;font-weight:800;font-style:normal;padding:1px 34px 1px 8px;outline:0;}"
+        "font-family:'Times New Roman';font-size:11px;font-weight:500;font-style:normal;padding:1px 34px 1px 8px;outline:0;}"
         "QSpinBox::up-button,QDoubleSpinBox::up-button{width:31px;border:0;subcontrol-position:top right;background:#fff0a8;border-top-right-radius:8px;}"
         "QSpinBox::down-button,QDoubleSpinBox::down-button{width:31px;border:0;subcontrol-position:bottom right;background:#fff0a8;border-bottom-right-radius:8px;}"
         "QSpinBox::up-arrow,QDoubleSpinBox::up-arrow{width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-bottom:7px solid #102238;}"
         "QSpinBox::down-arrow,QDoubleSpinBox::down-arrow{width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid #102238;}"
     )
-    _font(spin, 10)
+    _font(spin, 10, bold=False, italic=False)
 
 
 def _logo_pixmap_from_app() -> QPixmap:
@@ -199,6 +225,60 @@ def _save(root: QWidget | None) -> None:
     try:
         from . import text_toolbar_word_behavior_patch as word
         word._save_active_editor(canvas)
+    except Exception:
+        pass
+
+
+def _patch_text_edit_key_handlers() -> None:
+    def _matches(event, standard) -> bool:
+        try:
+            return bool(event.matches(standard))
+        except Exception:
+            return False
+
+    def _save_editor(editor) -> None:
+        canvas = getattr(editor, "_canvas_owner", None)
+        if canvas is None:
+            return
+        try:
+            from . import ui_text_tool_final_patch as text_final
+            text_final._save_editor_text(canvas, editor)
+        except Exception:
+            pass
+
+    def _text_edit_handler(editor, event) -> bool:
+        if _matches(event, QKeySequence.StandardKey.Copy):
+            editor.copy(); event.accept(); return True
+        if _matches(event, QKeySequence.StandardKey.Cut):
+            editor.cut(); _save_editor(editor); event.accept(); return True
+        if _matches(event, QKeySequence.StandardKey.Paste):
+            editor.paste(); _save_editor(editor); event.accept(); return True
+        if _matches(event, QKeySequence.StandardKey.SelectAll):
+            editor.selectAll(); event.accept(); return True
+        if event.key() in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace):
+            return False
+        return False
+
+    def _is_text_shortcut(event) -> bool:
+        return any(
+            _matches(event, key)
+            for key in (
+                QKeySequence.StandardKey.Copy,
+                QKeySequence.StandardKey.Cut,
+                QKeySequence.StandardKey.Paste,
+                QKeySequence.StandardKey.SelectAll,
+            )
+        )
+
+    try:
+        from . import ui_text_tool_final_patch as text_final
+        text_final._handle_editor_key = _text_edit_handler
+    except Exception:
+        pass
+    try:
+        from . import final_focus_editing_icons_patch as focus_patch
+        focus_patch._handle_editor_key = _text_edit_handler
+        focus_patch._is_text_shortcut = _is_text_shortcut
     except Exception:
         pass
 
@@ -279,18 +359,70 @@ def _insert_list_prefix(root: QWidget | None, prefix: str) -> None:
     _save(root)
 
 
+def _roman(value: int, lower: bool = False) -> str:
+    pairs = ((1000, "M"), (900, "CM"), (500, "D"), (400, "CD"), (100, "C"), (90, "XC"), (50, "L"), (40, "XL"), (10, "X"), (9, "IX"), (5, "V"), (4, "IV"), (1, "I"))
+    number = max(1, min(int(value), 3999))
+    result = ""
+    for amount, symbol in pairs:
+        while number >= amount:
+            result += symbol
+            number -= amount
+    return result.lower() if lower else result
+
+
+def _alpha(value: int, lower: bool = False) -> str:
+    number = max(1, int(value))
+    chars: list[str] = []
+    while number:
+        number -= 1
+        chars.append(chr(ord("A") + number % 26))
+        number //= 26
+    text = "".join(reversed(chars))
+    return text.lower() if lower else text
+
+
+def _format_numbering_prefix(style: str, start: int) -> str:
+    if style == "1.":
+        return f"{start}."
+    if style == "1)":
+        return f"{start})"
+    if style == "I.":
+        return _roman(start) + "."
+    if style == "i.":
+        return _roman(start, lower=True) + "."
+    if style == "A.":
+        return _alpha(start) + "."
+    if style == "a.":
+        return _alpha(start, lower=True) + "."
+    return style
+
+
+def _points_from_mm(value: object) -> float:
+    try:
+        return max(0.0, float(value)) * 72.0 / 25.4
+    except Exception:
+        return 0.0
+
+
 def _apply_custom_list_style(root: QWidget | None, settings: dict[str, object]) -> None:
     _canvas, editor = _root_editor(root)
     if editor is None:
         return
     cursor = editor.textCursor()
+    block = QTextBlockFormat(cursor.blockFormat())
+    block.setLeftMargin(_points_from_mm(settings.get("indent_mm", 0)))
+    block.setTextIndent(_points_from_mm(settings.get("gap_mm", 0)))
+    cursor.mergeBlockFormat(block)
     fmt = QTextCharFormat(editor.currentCharFormat())
     fmt.setFontFamily(str(settings.get("font", "Times New Roman")))
     fmt.setFontPointSize(float(settings.get("size", 12)))
-    fmt.setForeground(QColor(str(settings.get("color", "#132238"))))
+    fmt.setForeground(QColor(str(settings.get("color", "#000000"))))
     fmt.setFontItalic(False)
     fmt.setFontWeight(QFont.Weight.Normal)
-    cursor.insertText(str(settings.get("style", "•")) + " ", fmt)
+    mode = str(settings.get("mode", "bullet"))
+    style = str(settings.get("style", "•"))
+    prefix = _format_numbering_prefix(style, int(settings.get("start_numbering", 1))) if mode == "numbering" else style
+    cursor.insertText(prefix + " ", fmt)
     editor.setTextCursor(cursor)
     editor.setFocus()
     _save(root)
@@ -302,9 +434,11 @@ def _popup_shell(parent: QWidget | None, width: int) -> tuple[QDialog, QWidget, 
     popup.setWindowFlags(Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint)
     popup.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
     popup.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
-    popup.setStyleSheet("QDialog#TextStandardMenuPopup{background:transparent;border:0;} QWidget{background:transparent;}")
+    popup.setAutoFillBackground(False)
+    popup.setStyleSheet("QDialog#TextStandardMenuPopup{background:transparent;border:0;}")
     shell = QWidget(popup)
     shell.setObjectName("TextStandardMenuShell")
+    shell.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
     shell.setMinimumWidth(width)
     shell.setStyleSheet(
         "QWidget#TextStandardMenuShell{background:qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #ffffff,stop:0.55 #edf8ff,stop:1 #fff1d3);"
@@ -327,6 +461,9 @@ def _show_popup_near(root: QWidget | None, button: QPushButton, popup: QDialog) 
             old.close()
         setattr(root, "_text_standard_popup", popup)
     popup.adjustSize()
+    shell = popup.findChild(QWidget, "TextStandardMenuShell")
+    _apply_rounded_mask(shell, 12)
+    _apply_rounded_mask(popup, 12)
     position = button.mapToGlobal(QPoint(0, button.height() + 3))
     popup.move(position)
     popup.exec()
@@ -415,12 +552,14 @@ def _dialog_shell(parent: QWidget | None, title: str, minimum: tuple[int, int]) 
     outer.setContentsMargins(0, 0, 0, 0)
     shell = QWidget(dialog)
     shell.setObjectName("DialogRoot")
+    shell.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
     outer.addWidget(shell)
     root_layout = QVBoxLayout(shell)
     root_layout.setContentsMargins(0, 0, 0, 0)
     root_layout.setSpacing(0)
     header = QWidget(shell)
     header.setObjectName("DialogHeader")
+    header.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
     header.setFixedHeight(42)
     header_row = QHBoxLayout(header)
     header_row.setContentsMargins(12, 4, 10, 4)
@@ -438,6 +577,7 @@ def _dialog_shell(parent: QWidget | None, title: str, minimum: tuple[int, int]) 
     root_layout.addWidget(header)
     body = QWidget(shell)
     body.setObjectName("DialogBody")
+    body.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
     body_layout = QVBoxLayout(body)
     body_layout.setContentsMargins(16, 14, 16, 14)
     body_layout.setSpacing(9)
@@ -464,6 +604,7 @@ def _open_custom_color_dialog(parent: QWidget | None, initial: str) -> str | Non
     actions.addWidget(ok)
     actions.addWidget(cancel)
     body_layout.addLayout(actions)
+    _prepare_dialog_masks(dialog)
     if dialog.exec() == QDialog.DialogCode.Accepted and picker.currentColor().isValid():
         return picker.currentColor().name()
     return None
@@ -492,6 +633,7 @@ def _open_line_spacing_settings(root: QWidget | None) -> None:
     actions.addWidget(ok)
     actions.addWidget(cancel)
     body_layout.addLayout(actions)
+    _prepare_dialog_masks(dialog)
     if dialog.exec() == QDialog.DialogCode.Accepted:
         _apply_line_spacing(root, value.value())
 
@@ -514,13 +656,14 @@ def _open_list_settings(root: QWidget | None, mode: str) -> None:
     indent = QDoubleSpinBox(); indent.setRange(0, 100); indent.setDecimals(2); indent.setValue(7.0); indent.setSuffix(" mm"); _spin_style(indent)
     gap = QDoubleSpinBox(); gap.setRange(0, 80); gap.setDecimals(2); gap.setValue(4.0); gap.setSuffix(" mm"); _spin_style(gap)
     font_box = QComboBox(); font_box.addItems(font_choices); _combo_style(font_box)
-    selected = {"color": "#132238"}
+    selected = {"color": "#000000"}
     preview = QLabel(body)
     preview.setFixedHeight(32)
     preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
     def update_preview() -> None:
-        preview.setText(style.currentText() + "  Sample text")
+        prefix = _format_numbering_prefix(style.currentText(), start.value()) if mode == "numbering" else style.currentText()
+        preview.setText(prefix + "  Sample text")
         preview_font = QFont(font_box.currentText() or "Times New Roman", size.value(), QFont.Weight.Normal)
         preview_font.setItalic(False)
         preview.setFont(preview_font)
@@ -589,6 +732,9 @@ def _open_list_settings(root: QWidget | None, mode: str) -> None:
 
     style.currentTextChanged.connect(lambda _value: update_preview())
     size.valueChanged.connect(lambda _value: update_preview())
+    start.valueChanged.connect(lambda _value: update_preview())
+    indent.valueChanged.connect(lambda _value: update_preview())
+    gap.valueChanged.connect(lambda _value: update_preview())
     font_box.currentTextChanged.connect(lambda _value: update_preview())
     update_preview()
     rebuild_colors()
@@ -605,6 +751,7 @@ def _open_list_settings(root: QWidget | None, mode: str) -> None:
     actions.addWidget(ok)
     actions.addWidget(cancel)
     body_layout.addLayout(actions)
+    _prepare_dialog_masks(dialog)
     if dialog.exec() == QDialog.DialogCode.Accepted and root is not None:
         settings = {
             "mode": mode,
@@ -672,6 +819,7 @@ def apply_text_line_math_symbols_patch() -> None:
     if getattr(edw.EngineeringDesignWorkspace, "_engineering_text_line_math_symbols_patch", "") == PATCH_VERSION:
         return
 
+    _patch_text_edit_key_handlers()
     inline_palette._open_settings = _open_list_settings
     swatch._open_settings = _open_list_settings
     list_final._open_settings = _open_list_settings
@@ -680,9 +828,10 @@ def apply_text_line_math_symbols_patch() -> None:
 
     def workspace_init(self, module) -> None:
         old_init(self, module)
+        _patch_text_edit_key_handlers()
         _apply_text_menus(self)
         for delay in (0, 180, 600):
-            QTimer.singleShot(delay, lambda root=self: _apply_text_menus(root))
+            QTimer.singleShot(delay, lambda root=self: (_patch_text_edit_key_handlers(), _apply_text_menus(root)))
         logging.info("text_line_math_symbols_patch: installed version=%s", PATCH_VERSION)
 
     edw.EngineeringDesignWorkspace.__init__ = workspace_init
