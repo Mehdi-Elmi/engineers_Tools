@@ -78,7 +78,7 @@ def create_window(module: LauncherModule) -> ModuleWindow:
     apply_text_toolbar_word_behavior_patch()
     apply_text_toolbar_final_event_safety_patch()
     apply_text_runtime_performance_editing_patch()
-    apply_text_lag_final_patch()
     apply_final_focus_editing_icons_patch()
     apply_text_line_math_symbols_patch()
+    apply_text_lag_final_patch()
     return EngineeringDesignWorkspace(module)
