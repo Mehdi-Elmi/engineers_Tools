@@ -1,4 +1,4 @@
-"""Final runtime owner for Text editor keyboard, numbering, color and toolbar controls."""
+"""Final runtime owner for Text editor keyboard, color and line-spacing controls."""
 
 from __future__ import annotations
 
@@ -9,21 +9,11 @@ from pathlib import Path
 
 from PySide6.QtCore import QObject, QEvent, QPointF, QTimer, Qt
 from PySide6.QtGui import QColor, QFont, QKeySequence, QPainter, QPixmap, QPolygonF, QTextBlockFormat, QTextCursor
-from PySide6.QtWidgets import (
-    QApplication,
-    QCheckBox,
-    QComboBox,
-    QDoubleSpinBox,
-    QHBoxLayout,
-    QLabel,
-    QPushButton,
-    QSpinBox,
-    QTextEdit,
-    QWidget,
-)
+from PySide6.QtWidgets import QApplication, QCheckBox, QComboBox, QDoubleSpinBox, QHBoxLayout, QPushButton, QSpinBox, QTextEdit, QWidget
 
-PATCH_VERSION = "engineering-text-toolbar-final-event-safety-2026-07-02-l"
+PATCH_VERSION = "engineering-text-toolbar-final-event-safety-2026-07-02-m"
 _ARROW_CACHE: dict[str, str] = {}
+_MATH_TOKEN_RE = re.compile(r"([A-Za-z0-9]+)([\^_/])([A-Za-z0-9]+)$")
 
 
 def _workspace_from_widget(widget: QWidget | None) -> QWidget | None:
@@ -43,13 +33,6 @@ def _workspace_from_editor(editor: QTextEdit) -> QWidget | None:
     root = _workspace_from_widget(owner) if owner is not None else None
     if root is not None:
         return root
-    item = getattr(editor, "_engineering_text_item", None) or getattr(editor, "_text_item", None)
-    scene = item.scene() if item is not None and hasattr(item, "scene") else None
-    views = scene.views() if scene is not None and hasattr(scene, "views") else []
-    for view in views:
-        root = _workspace_from_widget(view)
-        if root is not None:
-            return root
     app = QApplication.instance()
     if app is not None:
         for widget in app.topLevelWidgets():
@@ -95,6 +78,8 @@ def _reset_style_buttons(root: QWidget | None) -> None:
         if not italic.property("userChangedTextStyle"):
             italic.setChecked(False)
         font = italic.font()
+        font.setFamily("Times New Roman")
+        font.setBold(True)
         font.setItalic(True)
         italic.setFont(font)
         italic.setText("I")
@@ -112,142 +97,21 @@ def _save_editor(editor: QTextEdit) -> None:
             except Exception:
                 logging.exception("text final safety: editor save callback failed")
                 return
-    item = getattr(editor, "_engineering_text_item", None) or getattr(editor, "_text_item", None)
-    if item is not None:
+    root = _workspace_from_editor(editor)
+    canvas = getattr(root, "_canvas", None) if root is not None else None
+    if canvas is not None:
         try:
-            if hasattr(item, "setPlainText"):
-                item.setPlainText(editor.toPlainText())
+            from . import ui_text_tool_final_patch as text_final
+            text_final._save_editor_text(canvas, editor)
         except Exception:
-            logging.exception("text final safety: direct item save failed")
+            pass
 
 
 def _matches(event, standard_key: QKeySequence.StandardKey) -> bool:
     try:
-        return event.matches(standard_key)
+        return bool(event.matches(standard_key))
     except Exception:
         return False
-
-
-def _roman_to_int(text: str) -> int | None:
-    values = {"I": 1, "V": 5, "X": 10, "L": 50, "C": 100, "D": 500, "M": 1000}
-    total = 0
-    previous = 0
-    if not text:
-        return None
-    for char in reversed(text.upper()):
-        value = values.get(char)
-        if value is None:
-            return None
-        if value < previous:
-            total -= value
-        else:
-            total += value
-            previous = value
-    return total if total > 0 else None
-
-
-def _alpha_to_int(text: str) -> int | None:
-    if not text or not text.isalpha():
-        return None
-    total = 0
-    for char in text.upper():
-        total = total * 26 + (ord(char) - ord("A") + 1)
-    return total if total > 0 else None
-
-
-def _next_number_from_line(settings: dict, text: str) -> int | None:
-    style = str(settings.get("style", "1."))
-    if style in {"1.", "1)"}:
-        match = re.match(r"^\s*(\d+)\s*[\.)]\s*", text or "")
-        return int(match.group(1)) + 1 if match else None
-    if style in {"I.", "i."}:
-        match = re.match(r"^\s*([ivxlcdmIVXLCDM]+)\s*[\.)]\s*", text or "")
-        value = _roman_to_int(match.group(1)) if match else None
-        return value + 1 if value is not None else None
-    if style in {"A.", "a."}:
-        match = re.match(r"^\s*([A-Za-z]+)\s*[\.)]\s*", text or "")
-        value = _alpha_to_int(match.group(1)) if match else None
-        return value + 1 if value is not None else None
-    match = re.match(r"^\s*(\d+)\s*[\.)]\s*", text or "")
-    return int(match.group(1)) + 1 if match else None
-
-
-def _sync_numbering_next_from_current_line(root: QWidget | None, editor: QTextEdit, settings: dict) -> None:
-    if root is None or settings.get("mode") != "numbering":
-        return
-    next_value = _next_number_from_line(settings, editor.textCursor().block().text())
-    if next_value is not None:
-        setattr(root, "_text_numbering_next", next_value)
-        return
-    if not hasattr(root, "_text_numbering_next"):
-        try:
-            setattr(root, "_text_numbering_next", int(settings.get("start_numbering", 1)))
-        except Exception:
-            setattr(root, "_text_numbering_next", 1)
-
-
-def _activate_list_mode(root: QWidget | None, mode: str, style: str | None = None) -> None:
-    if root is None:
-        return
-    try:
-        from . import text_line_math_symbols_patch as line_patch
-    except Exception:
-        return
-    _patch_line_module_controls()
-    settings = dict(getattr(root, "_last_text_list_settings", {}) or line_patch._default_list_settings(mode, style))
-    if settings.get("mode") != mode:
-        settings = line_patch._default_list_settings(mode, style)
-    settings.update({"mode": mode, "style": style or settings.get("style")})
-    settings["bold"] = bool(settings.get("bold", True))
-    settings["italic"] = bool(settings.get("italic", False))
-    if mode == "numbering":
-        try:
-            setattr(root, "_text_numbering_next", int(settings.get("start_numbering", 1)))
-        except Exception:
-            setattr(root, "_text_numbering_next", 1)
-    setattr(root, "_last_text_list_settings", settings)
-    try:
-        line_patch._set_list_button_state(root, mode)
-    except Exception:
-        pass
-
-
-def _wire_list_buttons(root: QWidget | None) -> None:
-    buttons = _buttons(root)
-    for name, mode, style in (("Bullet", "bullet", "●"), ("Numbering", "numbering", "1.")):
-        button = buttons.get(name) or buttons.get(name.lower())
-        if button is None:
-            continue
-        button.setCheckable(True)
-        if button.property("lineMenuVersion") or button.property("bulletMenuVersion") or button.property("numberingMenuVersion"):
-            continue
-        if button.property("finalEventListWire") == PATCH_VERSION:
-            continue
-        try:
-            button.clicked.connect(lambda checked=False, w=root, m=mode, s=style: _activate_list_mode(w, m, s))
-            button.setProperty("finalEventListWire", PATCH_VERSION)
-        except Exception:
-            logging.exception("text final safety: list button wire failed")
-
-
-def _insert_active_list_after_enter(editor: QTextEdit) -> bool:
-    root = _workspace_from_editor(editor)
-    if root is None:
-        return False
-    try:
-        from . import text_line_math_symbols_patch as line_patch
-    except Exception:
-        return False
-    settings = line_patch._text_settings_for_active_list(root)
-    if settings is None:
-        return False
-    _sync_numbering_next_from_current_line(root, editor, settings)
-    cursor = editor.textCursor()
-    cursor.insertBlock()
-    line_patch._insert_list_prefix_with_cursor(root, cursor, settings, advance_number=True)
-    editor.setTextCursor(cursor)
-    _save_editor(editor)
-    return True
 
 
 def _delete_previous_char(editor: QTextEdit) -> None:
@@ -270,18 +134,59 @@ def _delete_next_char(editor: QTextEdit) -> None:
     _save_editor(editor)
 
 
+def _escape_html(text: str) -> str:
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def _auto_convert_math_token(editor: QTextEdit) -> bool:
+    cursor = editor.textCursor()
+    block = cursor.block()
+    block_start = block.position()
+    rel_pos = max(0, cursor.position() - block_start)
+    prefix = (block.text() or "")[:rel_pos].rstrip()
+    match = _MATH_TOKEN_RE.search(prefix)
+    if match is None:
+        return False
+    left = _escape_html(match.group(1))
+    right = _escape_html(match.group(3))
+    operator = match.group(2)
+    html = {"^": f"{left}<sup>{right}</sup>", "_": f"{left}<sub>{right}</sub>", "/": f"{left}&divide;{right}"}.get(operator)
+    if not html:
+        return False
+    replace = editor.textCursor()
+    replace.setPosition(block_start + match.start())
+    replace.setPosition(block_start + match.end(), QTextCursor.MoveMode.KeepAnchor)
+    replace.insertHtml(html)
+    editor.setTextCursor(replace)
+    return True
+
+
+def _insert_active_list_after_enter(editor: QTextEdit) -> bool:
+    root = _workspace_from_editor(editor)
+    if root is None:
+        return False
+    try:
+        from . import text_line_math_symbols_patch as line_patch
+    except Exception:
+        return False
+    settings = line_patch._text_settings_for_active_list(root)
+    if settings is None:
+        return False
+    cursor = editor.textCursor()
+    cursor.insertBlock()
+    line_patch._insert_list_prefix_with_cursor(root, cursor, settings, advance_number=True)
+    editor.setTextCursor(cursor)
+    _save_editor(editor)
+    return True
+
+
 def _handle_editor_event(editor: QTextEdit, event) -> bool:
-    if event.type() == QEvent.Type.ShortcutOverride and any(
-        _matches(event, key)
-        for key in (
-            QKeySequence.StandardKey.Copy,
-            QKeySequence.StandardKey.Cut,
-            QKeySequence.StandardKey.Paste,
-            QKeySequence.StandardKey.SelectAll,
-        )
-    ):
-        event.accept()
-        return True
+    if event.type() == QEvent.Type.ShortcutOverride:
+        if event.key() in (Qt.Key.Key_Backspace, Qt.Key.Key_Delete):
+            event.accept(); return True
+        if any(_matches(event, key) for key in (QKeySequence.StandardKey.Copy, QKeySequence.StandardKey.Cut, QKeySequence.StandardKey.Paste, QKeySequence.StandardKey.SelectAll)):
+            event.accept(); return True
+        return False
     if event.type() != QEvent.Type.KeyPress:
         return False
     if _matches(event, QKeySequence.StandardKey.Copy):
@@ -296,9 +201,18 @@ def _handle_editor_event(editor: QTextEdit, event) -> bool:
         _delete_previous_char(editor); event.accept(); return True
     if event.key() == Qt.Key.Key_Delete:
         _delete_next_char(editor); event.accept(); return True
+    if event.key() == Qt.Key.Key_Space:
+        QTextEdit.keyPressEvent(editor, event)
+        _auto_convert_math_token(editor)
+        _save_editor(editor)
+        event.accept(); return True
     if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
         if _insert_active_list_after_enter(editor):
             event.accept(); return True
+        _auto_convert_math_token(editor)
+        QTextEdit.keyPressEvent(editor, event)
+        _save_editor(editor)
+        event.accept(); return True
     return False
 
 
@@ -336,8 +250,7 @@ def _arrow_url(direction: str) -> str:
     cached = _ARROW_CACHE.get(direction)
     if cached:
         return cached
-    size = 18
-    pixmap = QPixmap(size, size)
+    pixmap = QPixmap(18, 18)
     pixmap.fill(Qt.GlobalColor.transparent)
     painter = QPainter(pixmap)
     painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
@@ -346,7 +259,7 @@ def _arrow_url(direction: str) -> str:
     points = [QPointF(9, 4), QPointF(14, 12), QPointF(4, 12)] if direction == "up" else [QPointF(4, 6), QPointF(14, 6), QPointF(9, 14)]
     painter.drawPolygon(QPolygonF(points))
     painter.end()
-    path = Path(tempfile.gettempdir()) / f"engineering_arrow_{direction}_20260702l.png"
+    path = Path(tempfile.gettempdir()) / f"engineering_arrow_{direction}_20260702m.png"
     pixmap.save(path.as_posix(), "PNG")
     _ARROW_CACHE[direction] = path.as_posix()
     return path.as_posix()
@@ -367,6 +280,11 @@ def _style_toolbar_combo(combo: QComboBox) -> None:
 
 def _style_toolbar_spin(spin: QSpinBox | QDoubleSpinBox) -> None:
     spin.setButtonSymbols(QSpinBox.ButtonSymbols.UpDownArrows)
+    spin.setKeyboardTracking(True)
+    try:
+        spin.lineEdit().setReadOnly(False)
+    except Exception:
+        pass
     spin.setStyleSheet(
         "QSpinBox,QDoubleSpinBox{background:#fffefa;border:1px solid #b88718;border-radius:8px;color:#173454;"
         "font-family:'Times New Roman';font-size:12px;font-weight:900;font-style:normal;padding:2px 26px 2px 8px;outline:0;}"
@@ -490,19 +408,6 @@ def _patch_line_module_controls() -> None:
         return
     line_patch._combo_style = _style_toolbar_combo
     line_patch._spin_style = _style_toolbar_spin
-    if getattr(line_patch, "_final_exact_start_number_patch", "") != PATCH_VERSION:
-        old_format_prefix = line_patch._format_prefix
-
-        def format_prefix(settings, root=None, advance_number=False):
-            if isinstance(settings, dict) and settings.get("mode") == "numbering" and root is not None and not advance_number:
-                try:
-                    setattr(root, "_text_numbering_next", int(settings.get("start_numbering", 1)))
-                except Exception:
-                    setattr(root, "_text_numbering_next", 1)
-            return old_format_prefix(settings, root, advance_number)
-
-        line_patch._format_prefix = format_prefix
-        line_patch._final_exact_start_number_patch = PATCH_VERSION
 
 
 def _patch_line_spacing_dialog() -> None:
@@ -513,14 +418,14 @@ def _patch_line_spacing_dialog() -> None:
     _patch_line_module_controls()
 
     def show_line_popup(root: QWidget | None, anchor: QPushButton) -> None:
-        popup, _shell, layout = line_patch._popup_shell(anchor, 236)
+        popup, _shell, layout = line_patch._popup_shell(anchor, 270)
         for label, value in (("1.0", 1.0), ("1.15", 1.15), ("1.5", 1.5), ("2.0", 2.0)):
             line_patch._add_menu_row(layout, label, lambda checked=False, v=value, p=popup, w=root: (p.accept(), line_patch._apply_line_spacing(w, v)))
-
         custom_holder = QWidget(popup)
+        custom_holder.setMinimumHeight(40)
         row = QHBoxLayout(custom_holder)
-        row.setContentsMargins(4, 3, 4, 3)
-        row.setSpacing(6)
+        row.setContentsMargins(6, 4, 6, 4)
+        row.setSpacing(7)
         custom = QCheckBox("Custom", custom_holder)
         custom.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         custom.setStyleSheet(line_patch._choice_toggle_style())
@@ -531,12 +436,13 @@ def _patch_line_spacing_dialog() -> None:
         value.setSingleStep(0.5)
         value.setValue(float(getattr(root, "_text_line_spacing", 4.0) or 4.0))
         value.setSuffix(f" {unit}")
-        value.setFixedWidth(118)
+        value.setFixedWidth(132)
         _style_toolbar_spin(value)
         apply = QPushButton("Apply", custom_holder)
         apply.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        apply.setFixedHeight(30)
+        apply.setFixedWidth(58)
         apply.setStyleSheet(line_patch._button_style("QPushButton"))
-        apply.setFixedHeight(28)
         value.setEnabled(False)
         apply.setEnabled(False)
         custom.toggled.connect(lambda checked: (value.setEnabled(checked), apply.setEnabled(checked)))
@@ -544,7 +450,6 @@ def _patch_line_spacing_dialog() -> None:
         row.addWidget(custom)
         row.addWidget(value)
         row.addWidget(apply)
-        row.addStretch(1)
         layout.addWidget(custom_holder)
         line_patch._show_popup_near(root, anchor, popup)
 
@@ -558,6 +463,7 @@ def _patch_key_handlers() -> None:
             module = __import__(f"modules.mechanics_dynamics_statics.{module_name}", fromlist=[module_name])
             module._handle_text_editor_key = _handle_editor_event
             module._handle_editor_key = _handle_editor_event
+            module._handle_editor_event = _handle_editor_event
         except Exception:
             pass
 
@@ -575,6 +481,15 @@ def _install_existing_editors(root: QWidget | None) -> None:
         if getattr(editor, "_canvas_owner", None) is None and canvas is not None:
             editor._canvas_owner = canvas
         _install_editor_filter(editor)
+
+
+def _wire_list_buttons(root: QWidget | None) -> None:
+    buttons = _buttons(root)
+    for name, mode, style in (("Bullet", "bullet", "●"), ("Numbering", "numbering", "1.")):
+        button = buttons.get(name) or buttons.get(name.lower())
+        if button is None:
+            continue
+        button.setCheckable(True)
 
 
 def _patch_canvas_key_handler(edw) -> None:
